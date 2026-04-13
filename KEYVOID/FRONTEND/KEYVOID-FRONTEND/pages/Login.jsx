@@ -52,9 +52,13 @@ export default function Login() {
     <section className="auth-page">
       <div className="auth-panel">
         <div className="auth-copy">
-          <p className="auth-kicker">Welcome back</p>
-          <h1>Sign in to continue your KeyVoid journey.</h1>
-          <p>
+          <p className="auth-kicker text-xs uppercase tracking-[0.18em] text-blue-300/90">
+            Welcome back
+          </p>
+          <h1 className="font-['Michroma'] text-[clamp(2rem,4vw,3.4rem)] leading-tight text-slate-50">
+            Sign in to continue your KeyVoid journey.
+          </h1>
+          <p className="text-slate-300/80">
             Log in to access your profile, future discovery sessions, and the
             community features we are wiring up next.
           </p>
@@ -62,7 +66,7 @@ export default function Login() {
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <label className="auth-field">
-            <span>Email</span>
+            <span className="text-sm text-slate-300/80">Email</span>
             <input
               autoComplete="email"
               name="email"
@@ -74,7 +78,7 @@ export default function Login() {
           </label>
 
           <label className="auth-field">
-            <span>Password</span>
+            <span className="text-sm text-slate-300/80">Password</span>
             <input
               autoComplete="current-password"
               minLength="8"

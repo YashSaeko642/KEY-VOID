@@ -10,13 +10,21 @@ export default function Navbar() {
 
   return (
     <header className="site-header">
-      <Link className="brand" to="/">
+      <Link className="brand text-sm tracking-[0.2em] text-slate-100" to="/">
         KeyVoid
       </Link>
-      <nav className="site-nav" aria-label="Primary">
-        <Link to="/">Home</Link>
-        <a href="#vision">Vision</a>
-        {isAuthenticated ? <Link to="/dashboard">{user?.username || "Dashboard"}</Link> : null}
+      <nav className="site-nav items-center" aria-label="Primary">
+        <Link className="text-sm text-slate-300" to="/">
+          Home
+        </Link>
+        <a className="text-sm text-slate-300" href="#vision">
+          Vision
+        </a>
+        {isAuthenticated ? (
+          <Link className="text-sm text-slate-300" to="/dashboard">
+            {user?.username || "Dashboard"}
+          </Link>
+        ) : null}
       </nav>
       <div className="nav-actions">
         {isAuthenticated ? (
