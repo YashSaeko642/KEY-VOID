@@ -42,7 +42,7 @@ const hoverCards = [
 
 export default function Home() {
   return (
-    <section className="home-hero">
+    <section className="home-hero overflow-hidden">
       <div className="rain-layer" aria-hidden="true">
         {rainDrops.map((drop) => (
           <span key={drop.id} className="rain-drop" style={drop.style} />
@@ -65,13 +65,17 @@ export default function Home() {
           <span className="core-dot" />
         </div>
 
-        <div className="hero-copy">
-          <p className="eyebrow">Rain-soaked discovery for emerging artists</p>
-          <h1>
+        <div className="hero-copy px-4">
+          <p className="eyebrow text-[11px] uppercase tracking-[0.24em] text-blue-300/90">
+            Rain-soaked discovery for emerging artists
+          </p>
+          <h1 className="font-['Michroma'] text-balance text-[clamp(3rem,7vw,5.3rem)] leading-none text-slate-50">
             Meet <span>KeyVoid</span>
           </h1>
-          <p className="hero-subtitle">A quieter kind of music discovery.</p>
-          <p className="hero-text">
+          <p className="hero-subtitle text-xs tracking-[0.28em] text-slate-300/70">
+            A quieter kind of music discovery.
+          </p>
+          <p className="hero-text max-w-4xl text-pretty text-base leading-8 text-slate-300/80">
             KeyVoid is a music-focused social platform where listeners find
             unfamiliar sounds, artists share their progress, and discovery feels
             intentional instead of algorithmically repetitive.
@@ -117,12 +121,17 @@ export default function Home() {
 
       <div className="info-grid" id="vision">
         {hoverCards.map((card) => (
-          <article key={card.title} className="info-card">
-            <p className="card-eyebrow">{card.eyebrow}</p>
-            <h3>{card.title}</h3>
-            <p className="card-summary">{card.summary}</p>
+          <article
+            key={card.title}
+            className="info-card bg-slate-950/40 text-slate-50 backdrop-blur-xl"
+          >
+            <p className="card-eyebrow text-[11px] uppercase tracking-[0.18em] text-cyan-300/90">
+              {card.eyebrow}
+            </p>
+            <h3 className="font-['Michroma'] text-xl leading-tight">{card.title}</h3>
+            <p className="card-summary text-sm leading-7 text-slate-300/80">{card.summary}</p>
             <div className="card-popup">
-              <p>{card.detail}</p>
+              <p className="text-sm leading-7 text-slate-100/90">{card.detail}</p>
             </div>
           </article>
         ))}

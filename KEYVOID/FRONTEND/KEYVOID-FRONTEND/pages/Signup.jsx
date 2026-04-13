@@ -55,9 +55,13 @@ export default function Signup() {
     <section className="auth-page">
       <div className="auth-panel">
         <div className="auth-copy">
-          <p className="auth-kicker">Join KeyVoid</p>
-          <h1>Create your account and start shaping your music world.</h1>
-          <p>
+          <p className="auth-kicker text-xs uppercase tracking-[0.18em] text-blue-300/90">
+            Join KeyVoid
+          </p>
+          <h1 className="font-['Michroma'] text-[clamp(2rem,4vw,3.4rem)] leading-tight text-slate-50">
+            Create your account and start shaping your music world.
+          </h1>
+          <p className="text-slate-300/80">
             This is the first functional step into KeyVoid. We'll build feeds,
             profiles, and creator tools on top of this foundation next.
           </p>
@@ -65,7 +69,7 @@ export default function Signup() {
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <label className="auth-field">
-            <span>Username</span>
+            <span className="text-sm text-slate-300/80">Username</span>
             <input
               autoComplete="username"
               maxLength="24"
@@ -80,7 +84,7 @@ export default function Signup() {
           </label>
 
           <label className="auth-field">
-            <span>Email</span>
+            <span className="text-sm text-slate-300/80">Email</span>
             <input
               autoComplete="email"
               name="email"
@@ -92,7 +96,7 @@ export default function Signup() {
           </label>
 
           <label className="auth-field">
-            <span>Password</span>
+            <span className="text-sm text-slate-300/80">Password</span>
             <input
               autoComplete="new-password"
               minLength="8"
@@ -105,7 +109,7 @@ export default function Signup() {
           </label>
 
           <label className="auth-field">
-            <span>Confirm password</span>
+            <span className="text-sm text-slate-300/80">Confirm password</span>
             <input
               autoComplete="new-password"
               minLength="8"

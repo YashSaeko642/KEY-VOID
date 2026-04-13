@@ -6,9 +6,13 @@ export default function Dashboard() {
   return (
     <section className="dashboard-page">
       <div className="dashboard-panel">
-        <p className="dashboard-kicker">Authenticated</p>
-        <h1>Welcome, {user?.username || "listener"}.</h1>
-        <p>
+        <p className="dashboard-kicker text-xs uppercase tracking-[0.18em] text-blue-300/90">
+          Authenticated
+        </p>
+        <h1 className="font-['Michroma'] text-[clamp(2rem,4vw,3.4rem)] leading-tight text-slate-50">
+          Welcome, {user?.username || "listener"}.
+        </h1>
+        <p className="text-slate-300/80">
           Your auth flow is connected. This protected page is the starting point
           for profiles, feeds, creator tools, and the Key Void experience.
         </p>

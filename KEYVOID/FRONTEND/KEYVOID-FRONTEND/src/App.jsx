@@ -15,9 +15,9 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <div className="app-shell">
+        <div className="app-shell bg-transparent text-slate-50">
           <Navbar />
-          <main className="app-main">
+          <main className="app-main relative">
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/login" element={<Login />} />
