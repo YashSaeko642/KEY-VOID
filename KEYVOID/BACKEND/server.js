@@ -8,9 +8,15 @@ const authRoutes = require("./src/routers/authRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:5173";
 
 // Middleware
-app.use(cors());
+app.use(
+  cors({
+    origin: CLIENT_ORIGIN,
+    credentials: true
+  })
+);
 app.use(express.json());
 
 // Routes
