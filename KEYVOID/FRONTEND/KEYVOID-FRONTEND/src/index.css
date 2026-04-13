@@ -1,11 +1,14 @@
+@import url("https://fonts.googleapis.com/css2?family=Michroma&family=Outfit:wght@300;400;500;600;700&display=swap");
+
 :root {
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-family: "Michroma", "Trebuchet MS", sans-serif;
   line-height: 1.5;
   font-weight: 400;
   color: #f5f7fb;
   background:
-    radial-gradient(circle at top, rgba(76, 107, 255, 0.24), transparent 30%),
-    linear-gradient(160deg, #07111f 0%, #0d1b2f 48%, #132740 100%);
+    radial-gradient(circle at 20% 0%, rgba(116, 74, 255, 0.2), transparent 26%),
+    radial-gradient(circle at 85% 15%, rgba(47, 112, 255, 0.14), transparent 24%),
+    linear-gradient(180deg, #040812 0%, #060a16 28%, #091122 54%, #0d1731 100%);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -24,6 +27,9 @@ body,
 
 body {
   margin: 0;
+  background:
+    radial-gradient(circle at top, rgba(54, 72, 130, 0.2), transparent 24%),
+    linear-gradient(180deg, #03060d 0%, #060a15 42%, #0b1326 100%);
 }
 
 a {
@@ -36,4 +42,24 @@ input,
 textarea,
 select {
   font: inherit;
+}
+
+body,
+p,
+button,
+input,
+textarea,
+select {
+  font-family: "Outfit", "Segoe UI", sans-serif;
+}
+
+h1,
+h2,
+h3,
+.brand,
+.eyebrow,
+.vision-label,
+.card-eyebrow,
+.stat-value {
+  font-family: "Michroma", "Trebuchet MS", sans-serif;
 }
