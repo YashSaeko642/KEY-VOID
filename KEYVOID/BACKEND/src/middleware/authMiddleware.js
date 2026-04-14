@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const { roleAllows, syncSystemRole } = require("../utils/roleUtils");
 
 async function protect(req, res, next) {
   try {
@@ -22,11 +23,27 @@ async function protect(req, res, next) {
       return res.status(401).json({ msg: "User no longer exists" });
     }
 
-    req.user = user;
+    req.user = await syncSystemRole(user);
     next();
   } catch (error) {
     return res.status(401).json({ msg: "Invalid or expired token" });
   }
 }
 
-module.exports = { protect };
+function authorizeRoles(...allowedRoles) {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ msg: "Authentication required" });
+    }
+
+    const hasAccess = allowedRoles.some((role) => roleAllows(role, req.user.role));
+
+    if (!hasAccess) {
+      return res.status(403).json({ msg: "You do not have permission to access this resource" });
+    }
+
+    next();
+  };
+}
+
+module.exports = { protect, authorizeRoles };

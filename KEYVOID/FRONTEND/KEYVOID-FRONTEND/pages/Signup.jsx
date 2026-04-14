@@ -8,7 +8,8 @@ export default function Signup() {
     username: "",
     email: "",
     password: "",
-    confirmPassword: ""
+    confirmPassword: "",
+    role: "user"
   });
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -28,7 +29,8 @@ export default function Signup() {
     const result = await signup({
       username: formData.username,
       email: formData.email,
-      password: formData.password
+      password: formData.password,
+      role: formData.role
     });
 
     if (!result.success) {
@@ -42,7 +44,8 @@ export default function Signup() {
       username: "",
       email: "",
       password: "",
-      confirmPassword: ""
+      confirmPassword: "",
+      role: "user"
     });
   }
 
@@ -121,6 +124,14 @@ export default function Signup() {
             />
           </label>
 
+          <label className="auth-field">
+            <span className="text-sm text-slate-300/80">Account type</span>
+            <select name="role" onChange={handleChange} value={formData.role}>
+              <option value="user">Normal user</option>
+              <option value="creator">Creator</option>
+            </select>
+          </label>
+
           {error ? <p className="auth-error">{error}</p> : null}
           {successMessage ? <p className="auth-success">{successMessage}</p> : null}
           {verificationPreviewUrl ? (
@@ -132,7 +143,8 @@ export default function Signup() {
             </p>
           ) : null}
           <p className="auth-hint">
-            Usernames can use letters, numbers, dots, underscores, and hyphens.
+            Usernames can use letters, numbers, dots, underscores, and hyphens. Choose creator if
+            this account should access creator tools.
           </p>
 
           <button className="auth-submit" disabled={loading} type="submit">
