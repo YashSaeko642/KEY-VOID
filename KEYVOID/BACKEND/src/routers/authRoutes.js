@@ -10,10 +10,12 @@ const {
   logout,
   forgotPassword,
   resetPassword,
-  getCurrentUser
+  getCurrentUser,
+  getCreatorAccess,
+  getAdminAccess
 } = require("../controllers/auth-controller");
 const { authRateLimiter } = require("../middleware/authRateLimiter");
-const { protect } = require("../middleware/authMiddleware");
+const { protect, authorizeRoles } = require("../middleware/authMiddleware");
 
 router.post("/signup", authRateLimiter, signup);
 router.get("/verify-email", verifyEmail);
@@ -24,5 +26,7 @@ router.post("/logout", logout);
 router.post("/forgot-password", authRateLimiter, forgotPassword);
 router.post("/reset-password", authRateLimiter, resetPassword);
 router.get("/me", protect, getCurrentUser);
+router.get("/creator-access", protect, authorizeRoles("creator"), getCreatorAccess);
+router.get("/admin-access", protect, authorizeRoles("admin"), getAdminAccess);
 
 module.exports = router;

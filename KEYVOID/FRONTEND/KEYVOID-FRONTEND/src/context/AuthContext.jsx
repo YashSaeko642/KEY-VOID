@@ -238,8 +238,20 @@ export function AuthProvider({ children }) {
       token,
       user,
       isAuthenticated: Boolean(token && user),
+      role: user?.role || "user",
+      isCreator: user?.role === "creator",
+      isUser: user?.role === "user",
+      isAdmin: user?.role === "admin",
       loading,
       isBootstrapping,
+      hasRole(roles) {
+        if (!user?.role) {
+          return false;
+        }
+
+        const allowedRoles = Array.isArray(roles) ? roles : [roles];
+        return allowedRoles.includes(user.role);
+      },
       login,
       signup,
       resendVerificationEmail,

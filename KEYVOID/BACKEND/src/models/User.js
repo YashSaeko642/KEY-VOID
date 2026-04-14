@@ -1,5 +1,7 @@
 const mongoose = require("mongoose");
 
+const USER_ROLES = ["user", "creator", "admin"];
+
 const userSchema = new mongoose.Schema(
   {
     username: {
@@ -41,14 +43,34 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null
     },
+    role: {
+      type: String,
+      enum: USER_ROLES,
+      default: "user"
+    },
     isCreator: {
       type: Boolean,
-      default: false
+      default: undefined
     }
   },
   {
     timestamps: true
   }
 );
+
+userSchema.pre("validate", function syncRoleFields(next) {
+  if (!this.role) {
+    this.role = this.isCreator ? "creator" : "user";
+  }
+
+  this.isCreator = this.role === "creator";
+  next();
+});
+
+userSchema.methods.hasRole = function hasRole(role) {
+  return this.role === role;
+};
+
+userSchema.statics.USER_ROLES = USER_ROLES;
 
 module.exports = mongoose.model("User", userSchema);

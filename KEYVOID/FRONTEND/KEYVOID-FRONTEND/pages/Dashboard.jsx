@@ -1,7 +1,7 @@
 import { useAuth } from "../src/context/useAuth";
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { isAdmin, isCreator, user } = useAuth();
 
   return (
     <section className="dashboard-page">
@@ -24,7 +24,9 @@ export default function Dashboard() {
           </div>
           <div className="dashboard-card">
             <span className="dashboard-label">Role</span>
-            <strong>{user?.isCreator ? "Creator" : "Listener"}</strong>
+            <strong>
+              {isAdmin ? "Admin" : user?.role === "creator" ? "Creator" : "Normal user"}
+            </strong>
           </div>
           <div className="dashboard-card">
             <span className="dashboard-label">Email status</span>
@@ -32,7 +34,7 @@ export default function Dashboard() {
           </div>
           <div className="dashboard-card">
             <span className="dashboard-label">Next milestone</span>
-            <strong>Profiles and posts</strong>
+            <strong>{isAdmin ? "Admin controls" : isCreator ? "Creator studio" : "Profiles and posts"}</strong>
           </div>
         </div>
       </div>

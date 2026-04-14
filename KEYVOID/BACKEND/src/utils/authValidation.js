@@ -1,5 +1,6 @@
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const USERNAME_REGEX = /^[a-zA-Z0-9_.-]+$/;
+const PUBLIC_SIGNUP_ROLES = ["user", "creator"];
 
 function normalizeEmail(email = "") {
   return email.toLowerCase().trim();
@@ -42,10 +43,26 @@ function validateEmailInput(email = "") {
   };
 }
 
-function validateSignupInput({ username = "", email = "", password = "" }) {
+function normalizeRole(role = "") {
+  const normalizedRole = String(role || "user")
+    .trim()
+    .toLowerCase();
+
+  if (!PUBLIC_SIGNUP_ROLES.includes(normalizedRole)) {
+    return { valid: false, msg: "Role must be either user or creator" };
+  }
+
+  return {
+    valid: true,
+    value: normalizedRole
+  };
+}
+
+function validateSignupInput({ username = "", email = "", password = "", role = "user" }) {
   const trimmedUsername = username.trim();
   const rawPassword = String(password);
   const emailValidation = validateEmailInput(email);
+  const roleValidation = normalizeRole(role);
 
   if (!trimmedUsername || !emailValidation.valid || !rawPassword) {
     if (!trimmedUsername || !String(email).trim() || !rawPassword) {
@@ -72,6 +89,10 @@ function validateSignupInput({ username = "", email = "", password = "" }) {
     return { valid: false, msg: emailValidation.msg };
   }
 
+  if (!roleValidation.valid) {
+    return { valid: false, msg: roleValidation.msg };
+  }
+
   const passwordValidation = validatePassword(rawPassword);
   if (!passwordValidation.valid) {
     return { valid: false, msg: passwordValidation.msg };
@@ -82,7 +103,8 @@ function validateSignupInput({ username = "", email = "", password = "" }) {
     value: {
       username: trimmedUsername,
       email: emailValidation.value,
-      password: rawPassword
+      password: rawPassword,
+      role: roleValidation.value
     }
   };
 }
@@ -109,8 +131,10 @@ function validateLoginInput({ email = "", password = "" }) {
 }
 
 module.exports = {
+  PUBLIC_SIGNUP_ROLES,
   normalizeEmail,
   validateEmailInput,
+  normalizeRole,
   validatePassword,
   validateSignupInput,
   validateLoginInput

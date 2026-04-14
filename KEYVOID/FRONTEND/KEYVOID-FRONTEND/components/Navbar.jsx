@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../src/context/useAuth";
 
 export default function Navbar() {
-  const { isAuthenticated, logout, user } = useAuth();
+  const { hasRole, isAdmin, isAuthenticated, logout, user } = useAuth();
 
   async function handleLogout() {
     await logout();
@@ -23,6 +23,16 @@ export default function Navbar() {
         {isAuthenticated ? (
           <Link className="text-sm text-slate-300" to="/dashboard">
             {user?.username || "Dashboard"}
+          </Link>
+        ) : null}
+        {isAuthenticated && hasRole(["creator", "admin"]) ? (
+          <Link className="text-sm text-slate-300" to="/creator">
+            Creator Hub
+          </Link>
+        ) : null}
+        {isAuthenticated && isAdmin ? (
+          <Link className="text-sm text-slate-300" to="/admin">
+            Admin
           </Link>
         ) : null}
       </nav>

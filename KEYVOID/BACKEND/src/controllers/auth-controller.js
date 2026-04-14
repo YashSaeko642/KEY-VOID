@@ -18,6 +18,7 @@ const {
   getExpiryDateFromNow,
   getRefreshTokenExpiryDate
 } = require("../utils/tokenUtils");
+const { syncSystemRole } = require("../utils/roleUtils");
 const {
   REFRESH_COOKIE_NAME,
   setRefreshTokenCookie,
@@ -30,11 +31,15 @@ function getBaseUrl() {
 }
 
 function buildUserPayload(user) {
+  const role = user.role || (user.isCreator ? "creator" : "user");
+
   return {
     id: user._id,
     username: user.username,
     email: user.email,
-    isCreator: user.isCreator,
+    role,
+    isCreator: role === "creator",
+    isAdmin: role === "admin",
     emailVerified: user.emailVerified
   };
 }
@@ -64,12 +69,13 @@ async function createRefreshSession(user, req, res) {
 }
 
 async function issueSession(user, req, res) {
+  const sessionUser = await syncSystemRole(user);
   await createRefreshSession(user, req, res);
 
   return {
-    token: createAccessToken(user),
+    token: createAccessToken(sessionUser),
     accessTokenExpiresIn: ACCESS_TOKEN_TTL,
-    user: buildUserPayload(user)
+    user: buildUserPayload(sessionUser)
   };
 }
 
@@ -122,8 +128,9 @@ async function rotateRefreshToken(req, res) {
   existingSession.revokedAt = new Date();
   await existingSession.save();
 
-  const sessionPayload = await issueSession(user, req, res);
-  return { user, sessionPayload };
+  const sessionUser = await syncSystemRole(user);
+  const sessionPayload = await issueSession(sessionUser, req, res);
+  return { user: sessionUser, sessionPayload };
 }
 
 async function createEmailVerification(user) {
@@ -162,7 +169,7 @@ exports.signup = async (req, res) => {
       return res.status(400).json({ msg: validation.msg });
     }
 
-    const { username, email, password } = validation.value;
+    const { username, email, password, role } = validation.value;
     const existingUser = await User.findOne({ email });
 
     if (existingUser) {
@@ -179,8 +186,10 @@ exports.signup = async (req, res) => {
     const user = await User.create({
       username,
       email,
-      password: hashedPassword
+      password: hashedPassword,
+      role
     });
+    await syncSystemRole(user);
 
     const verificationUrl = await createEmailVerification(user);
     logLink("KeyVoid verification link", verificationUrl);
@@ -481,5 +490,27 @@ exports.getCurrentUser = async (req, res) => {
     return res.json({ user: buildUserPayload(req.user) });
   } catch (err) {
     return res.status(500).json({ msg: "Unable to load current user" });
+  }
+};
+
+exports.getCreatorAccess = async (req, res) => {
+  try {
+    return res.json({
+      msg: "Creator access confirmed",
+      user: buildUserPayload(req.user)
+    });
+  } catch (err) {
+    return res.status(500).json({ msg: "Unable to load creator access" });
+  }
+};
+
+exports.getAdminAccess = async (req, res) => {
+  try {
+    return res.json({
+      msg: "Admin access confirmed",
+      user: buildUserPayload(req.user)
+    });
+  } catch (err) {
+    return res.status(500).json({ msg: "Unable to load admin access" });
   }
 };
