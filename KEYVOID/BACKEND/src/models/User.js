@@ -18,6 +18,18 @@ const userSchema = new mongoose.Schema(
       trim: true,
       lowercase: true
     },
+    googleId: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+      default: null
+    },
+    authProvider: {
+      type: String,
+      enum: ["local", "google"],
+      default: "local"
+    },
     emailVerified: {
       type: Boolean,
       default: false
@@ -32,7 +44,9 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: true,
+      required() {
+        return this.authProvider !== "google";
+      },
       select: false
     },
     passwordResetTokenHash: {
@@ -58,13 +72,12 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-userSchema.pre("validate", function syncRoleFields(next) {
+userSchema.pre("validate", function syncRoleFields() {
   if (!this.role) {
     this.role = this.isCreator ? "creator" : "user";
   }
 
   this.isCreator = this.role === "creator";
-  next();
 });
 
 userSchema.methods.hasRole = function hasRole(role) {

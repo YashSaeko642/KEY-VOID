@@ -42,14 +42,9 @@ export default function Navbar() {
             Logout
           </button>
         ) : (
-          <>
-            <Link className="nav-button nav-button-secondary" to="/login">
-              Log In
-            </Link>
-            <Link className="nav-button nav-button-primary" to="/signup">
-              Sign Up
-            </Link>
-          </>
+          <Link className="nav-button nav-button-primary" to="/login">
+            Continue with Google
+          </Link>
         )}
       </div>
     </header>

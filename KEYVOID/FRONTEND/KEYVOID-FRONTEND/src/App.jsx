@@ -1,4 +1,5 @@
 import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
+import { GoogleOAuthProvider } from "@react-oauth/google";
 import AdminHub from "../pages/AdminHub";
 import AppHeader from "../components/AppHeader";
 import AuthHeader from "../components/AuthHeader";
@@ -6,16 +7,12 @@ import Navbar from "../components/Navbar";
 import ProtectedRoute from "../components/ProtectedRoute";
 import CreatorHub from "../pages/CreatorHub";
 import Dashboard from "../pages/Dashboard";
-import ForgotPassword from "../pages/ForgotPassword";
 import Home from "../pages/Home";
 import Login from "../pages/Login";
-import ResetPassword from "../pages/ResetPassword";
-import Signup from "../pages/Signup";
-import VerifyEmail from "../pages/VerifyEmail";
 import { AuthProvider } from "./context/AuthContext";
 import "./App.css";
 
-const AUTH_ROUTES = ["/login", "/signup", "/verify-email", "/forgot-password", "/reset-password"];
+const AUTH_ROUTES = ["/login"];
 const APP_ROUTES = ["/dashboard", "/creator", "/admin"];
 
 function AppLayout() {
@@ -43,10 +40,6 @@ function AppLayout() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/verify-email" element={<VerifyEmail />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
           <Route
             path="/dashboard"
             element={
@@ -78,12 +71,22 @@ function AppLayout() {
 }
 
 function App() {
-  return (
+  const googleClientId = String(import.meta.env.VITE_GOOGLE_CLIENT_ID || "").trim();
+  const isGoogleConfigured = googleClientId.includes(".apps.googleusercontent.com");
+  const appTree = (
     <AuthProvider>
       <BrowserRouter>
         <AppLayout />
       </BrowserRouter>
     </AuthProvider>
+  );
+
+  if (!isGoogleConfigured) {
+    return appTree;
+  }
+
+  return (
+    <GoogleOAuthProvider clientId={googleClientId}>{appTree}</GoogleOAuthProvider>
   );
 }
 

@@ -19,8 +19,8 @@ export default function Dashboard() {
 
         <div className="dashboard-grid">
           <div className="dashboard-card">
-            <span className="dashboard-label">Email</span>
-            <strong>{user?.email}</strong>
+            <span className="dashboard-label">Display name</span>
+            <strong>{user?.username || "Listener"}</strong>
           </div>
           <div className="dashboard-card">
             <span className="dashboard-label">Role</span>
