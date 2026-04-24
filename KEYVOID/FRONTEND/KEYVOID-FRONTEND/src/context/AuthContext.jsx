@@ -41,12 +41,9 @@ export function AuthProvider({ children }) {
           status !== 401 ||
           !originalRequest ||
           originalRequest._retry ||
-          originalRequest.url?.includes("/auth/login") ||
-          originalRequest.url?.includes("/auth/signup") ||
+          originalRequest.url?.includes("/auth/google") ||
           originalRequest.url?.includes("/auth/refresh") ||
-          originalRequest.url?.includes("/auth/forgot-password") ||
-          originalRequest.url?.includes("/auth/reset-password") ||
-          originalRequest.url?.includes("/auth/verify-email")
+          originalRequest.url?.includes("/auth/logout")
         ) {
           return Promise.reject(error);
         }
@@ -102,117 +99,18 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  async function login(credentials) {
+  async function googleAuth({ credential, role = "user", username }) {
     setLoading(true);
 
     try {
-      const { data } = await API.post("/auth/login", credentials);
+      const { data } = await API.post("/auth/google", { credential, role, username });
       setToken(data.token);
       setUser(data.user);
       return { success: true };
     } catch (error) {
       return {
         success: false,
-        message: error.response?.data?.msg || "Login failed",
-        requiresEmailVerification: Boolean(error.response?.data?.requiresEmailVerification)
-      };
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function signup(payload) {
-    setLoading(true);
-
-    try {
-      const { data } = await API.post("/auth/signup", payload);
-      return {
-        success: true,
-        message: data.msg,
-        requiresEmailVerification: Boolean(data.requiresEmailVerification),
-        verificationPreviewUrl: data.verificationPreviewUrl || ""
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: error.response?.data?.msg || "Signup failed"
-      };
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function resendVerificationEmail(email) {
-    setLoading(true);
-
-    try {
-      const { data } = await API.post("/auth/resend-verification", { email });
-      return {
-        success: true,
-        message: data.msg,
-        verificationPreviewUrl: data.verificationPreviewUrl || ""
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: error.response?.data?.msg || "Unable to resend verification"
-      };
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function forgotPassword(email) {
-    setLoading(true);
-
-    try {
-      const { data } = await API.post("/auth/forgot-password", { email });
-      return {
-        success: true,
-        message: data.msg,
-        resetPreviewUrl: data.resetPreviewUrl || ""
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: error.response?.data?.msg || "Unable to process password reset"
-      };
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function resetPassword({ token: resetToken, password }) {
-    setLoading(true);
-
-    try {
-      const { data } = await API.post("/auth/reset-password", {
-        token: resetToken,
-        password
-      });
-      return { success: true, message: data.msg };
-    } catch (error) {
-      return {
-        success: false,
-        message: error.response?.data?.msg || "Unable to reset password"
-      };
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function verifyEmail(tokenToVerify) {
-    setLoading(true);
-
-    try {
-      const { data } = await API.get("/auth/verify-email", {
-        params: { token: tokenToVerify }
-      });
-      return { success: true, message: data.msg };
-    } catch (error) {
-      return {
-        success: false,
-        message: error.response?.data?.msg || "Unable to verify email"
+        message: error.response?.data?.msg || "Google sign-in failed"
       };
     } finally {
       setLoading(false);
@@ -252,12 +150,7 @@ export function AuthProvider({ children }) {
         const allowedRoles = Array.isArray(roles) ? roles : [roles];
         return allowedRoles.includes(user.role);
       },
-      login,
-      signup,
-      resendVerificationEmail,
-      forgotPassword,
-      resetPassword,
-      verifyEmail,
+      googleAuth,
       logout
     }),
     [token, user, loading, isBootstrapping]

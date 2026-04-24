@@ -43,8 +43,8 @@ export default function AdminHub() {
           Admin Hub for {user?.username || "your account"}
         </h1>
         <p className="text-slate-300/80">
-          This area is reserved for internal platform control. No public signup path can create an
-          admin account.
+          This area is reserved for internal platform control. Admin access is granted only through
+          trusted system rules.
         </p>
 
         <div className="dashboard-grid">
