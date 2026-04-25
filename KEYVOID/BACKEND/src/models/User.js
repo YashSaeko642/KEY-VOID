@@ -7,6 +7,7 @@ const userSchema = new mongoose.Schema(
     username: {
       type: String,
       required: true,
+      unique: true,
       trim: true,
       minlength: 3,
       maxlength: 24
@@ -61,6 +62,50 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: USER_ROLES,
       default: "user"
+    },
+    bio: {
+      type: String,
+      trim: true,
+      maxlength: 280,
+      default: ""
+    },
+    location: {
+      type: String,
+      trim: true,
+      maxlength: 60,
+      default: ""
+    },
+    website: {
+      type: String,
+      trim: true,
+      maxlength: 160,
+      default: ""
+    },
+    avatarUrl: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+      default: ""
+    },
+    avatarPublicId: {
+      type: String,
+      trim: true,
+      default: ""
+    },
+    bannerUrl: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+      default: ""
+    },
+    bannerPublicId: {
+      type: String,
+      trim: true,
+      default: ""
+    },
+    favoriteGenres: {
+      type: [String],
+      default: []
     },
     isCreator: {
       type: Boolean,

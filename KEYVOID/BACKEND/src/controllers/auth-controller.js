@@ -30,7 +30,13 @@ function buildUserPayload(user) {
     role,
     isCreator: role === "creator",
     isAdmin: role === "admin",
-    emailVerified: user.emailVerified
+    emailVerified: user.emailVerified,
+    bio: user.bio || "",
+    location: user.location || "",
+    website: user.website || "",
+    avatarUrl: user.avatarUrl || "",
+    bannerUrl: user.bannerUrl || "",
+    favoriteGenres: user.favoriteGenres || []
   };
 }
 
@@ -106,8 +112,14 @@ async function rotateRefreshToken(req, res) {
   existingSession.revokedAt = new Date();
   await existingSession.save();
 
-  const sessionPayload = await issueSession(existingSession.user, req, res);
-  return { user: existingSession.user, sessionPayload };
+  // Fetch fresh copy of user from database to ensure profile updates are current
+  const freshUser = await User.findById(existingSession.user._id);
+  if (!freshUser) {
+    return { error: { status: 401, msg: "User no longer exists" } };
+  }
+
+  const sessionPayload = await issueSession(freshUser, req, res);
+  return { user: freshUser, sessionPayload };
 }
 
 function getGoogleClientId() {
@@ -125,6 +137,10 @@ function buildFallbackUsername(profile = {}) {
     .replace(/\s+/g, " ");
 
   return normalized.slice(0, 24);
+}
+
+function escapeRegex(value = "") {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function verifyGoogleCredential(credential) {
@@ -184,6 +200,18 @@ exports.googleAuth = async (req, res) => {
 
       await user.save();
     } else {
+      const hasProfileInput = Boolean(String(req.body?.username || "").trim());
+
+      if (!hasProfileInput) {
+        return res.json({
+          profileRequired: true,
+          googleProfile: {
+            email,
+            suggestedUsername: buildFallbackUsername(googleProfile)
+          }
+        });
+      }
+
       const profileInput = validateGoogleProfileInput({
         username: req.body?.username || "",
         role: req.body?.role || "user"
@@ -195,6 +223,13 @@ exports.googleAuth = async (req, res) => {
 
       const requestedUsername = profileInput.value.username || buildFallbackUsername(googleProfile);
       const requestedRole = profileInput.value.role;
+      const usernameExists = await User.findOne({
+        username: new RegExp(`^${escapeRegex(requestedUsername)}$`, "i")
+      });
+
+      if (usernameExists) {
+        return res.status(409).json({ msg: "That display name is already taken" });
+      }
 
       user = await User.create({
         username: requestedUsername,

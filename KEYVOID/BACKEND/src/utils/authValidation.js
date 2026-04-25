@@ -63,5 +63,6 @@ function validateGoogleProfileInput({ username = "", role = "user" }) {
 
 module.exports = {
   normalizeRole,
+  validateDisplayName,
   validateGoogleProfileInput
 };

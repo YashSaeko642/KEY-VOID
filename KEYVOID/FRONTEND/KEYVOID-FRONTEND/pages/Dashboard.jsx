@@ -1,4 +1,5 @@
 import { useAuth } from "../src/context/useAuth";
+import { Link } from "react-router-dom";
 
 export default function Dashboard() {
   const { isAdmin, isCreator, user } = useAuth();
@@ -36,6 +37,14 @@ export default function Dashboard() {
             <span className="dashboard-label">Next milestone</span>
             <strong>{isAdmin ? "Admin controls" : isCreator ? "Creator studio" : "Profiles and posts"}</strong>
           </div>
+        </div>
+        <div className="auth-inline-actions">
+          <Link className="nav-button nav-button-primary" to="/profile">
+            Edit profile
+          </Link>
+          <Link className="nav-button nav-button-secondary" to={`/u/${encodeURIComponent(user?.username || "")}`}>
+            View public profile
+          </Link>
         </div>
       </div>
     </section>
