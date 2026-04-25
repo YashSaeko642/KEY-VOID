@@ -104,6 +104,15 @@ export function AuthProvider({ children }) {
 
     try {
       const { data } = await API.post("/auth/google", { credential, role, username });
+
+      if (data.profileRequired) {
+        return {
+          success: false,
+          profileRequired: true,
+          googleProfile: data.googleProfile
+        };
+      }
+
       setToken(data.token);
       setUser(data.user);
       return { success: true };
@@ -131,6 +140,10 @@ export function AuthProvider({ children }) {
     }
   }
 
+  function updateUser(nextUser) {
+    setUser(nextUser);
+  }
+
   const value = useMemo(
     () => ({
       token,
@@ -151,6 +164,7 @@ export function AuthProvider({ children }) {
         return allowedRoles.includes(user.role);
       },
       googleAuth,
+      updateUser,
       logout
     }),
     [token, user, loading, isBootstrapping]

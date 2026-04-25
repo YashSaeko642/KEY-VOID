@@ -33,6 +33,9 @@ export default function AppHeader() {
         <Link className={getLinkClass("/dashboard")} to="/dashboard">
           Dashboard
         </Link>
+        <Link className={getLinkClass("/profile")} to="/profile">
+          Profile
+        </Link>
         {hasRole(["creator", "admin"]) ? (
           <Link className={getLinkClass("/creator")} to="/creator">
             Creator Hub

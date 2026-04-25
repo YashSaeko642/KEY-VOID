@@ -9,11 +9,13 @@ import CreatorHub from "../pages/CreatorHub";
 import Dashboard from "../pages/Dashboard";
 import Home from "../pages/Home";
 import Login from "../pages/Login";
+import Profile from "../pages/Profile";
+import PublicProfile from "../pages/PublicProfile";
 import { AuthProvider } from "./context/AuthContext";
 import "./App.css";
 
 const AUTH_ROUTES = ["/login"];
-const APP_ROUTES = ["/dashboard", "/creator", "/admin"];
+const APP_ROUTES = ["/dashboard", "/creator", "/admin", "/profile"];
 
 function AppLayout() {
   const location = useLocation();
@@ -64,6 +66,15 @@ function AppLayout() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <Profile />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/u/:username" element={<PublicProfile />} />
         </Routes>
       </main>
     </div>

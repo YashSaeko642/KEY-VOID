@@ -25,6 +25,11 @@ export default function Navbar() {
             {user?.username || "Dashboard"}
           </Link>
         ) : null}
+        {isAuthenticated ? (
+          <Link className="text-sm text-slate-300" to="/profile">
+            Profile
+          </Link>
+        ) : null}
         {isAuthenticated && hasRole(["creator", "admin"]) ? (
           <Link className="text-sm text-slate-300" to="/creator">
             Creator Hub
