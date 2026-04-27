@@ -110,6 +110,16 @@ const userSchema = new mongoose.Schema(
     isCreator: {
       type: Boolean,
       default: undefined
+    },
+    followers: {
+      type: [mongoose.Schema.Types.ObjectId],
+      ref: "User",
+      default: []
+    },
+    following: {
+      type: [mongoose.Schema.Types.ObjectId],
+      ref: "User",
+      default: []
     }
   },
   {

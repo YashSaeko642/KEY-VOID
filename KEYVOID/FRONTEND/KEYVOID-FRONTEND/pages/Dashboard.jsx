@@ -34,6 +34,14 @@ export default function Dashboard() {
             <strong>{user?.emailVerified ? "Verified" : "Not verified"}</strong>
           </div>
           <div className="dashboard-card">
+            <span className="dashboard-label">Followers</span>
+            <strong>{user?.followersCount || 0}</strong>
+          </div>
+          <div className="dashboard-card">
+            <span className="dashboard-label">Following</span>
+            <strong>{user?.followingCount || 0}</strong>
+          </div>
+          <div className="dashboard-card">
             <span className="dashboard-label">Next milestone</span>
             <strong>{isAdmin ? "Admin controls" : isCreator ? "Creator studio" : "Profiles and posts"}</strong>
           </div>
@@ -44,6 +52,9 @@ export default function Dashboard() {
           </Link>
           <Link className="nav-button nav-button-secondary" to={`/u/${encodeURIComponent(user?.username || "")}`}>
             View public profile
+          </Link>
+          <Link className="nav-button nav-button-secondary" to="/search">
+            Discover artists
           </Link>
         </div>
       </div>

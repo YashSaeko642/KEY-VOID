@@ -36,7 +36,9 @@ function buildUserPayload(user) {
     website: user.website || "",
     avatarUrl: user.avatarUrl || "",
     bannerUrl: user.bannerUrl || "",
-    favoriteGenres: user.favoriteGenres || []
+    favoriteGenres: user.favoriteGenres || [],
+    followersCount: (user.followers || []).length,
+    followingCount: (user.following || []).length
   };
 }
 

@@ -1,14 +1,13 @@
 {
-  "name": "backend",
-  "version": "1.0.0",
-  "description": "",
+  "name": "keyvoid-backend",
+  "version": "0.1.0",
+  "description": "KeyVoid - Music community platform backend API",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "node --watch server.js"
   },
-  "keywords": [],
+  "keywords": ["music", "community", "creators", "api"],
   "author": "",
   "license": "ISC",
   "dependencies": {
