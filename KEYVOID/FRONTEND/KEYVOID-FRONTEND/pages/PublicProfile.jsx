@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import API from "../services/api";
+import { motion } from "framer-motion";
+import API, { followUser, unfollowUser } from "../services/api";
 import { useAuth } from "../src/context/useAuth";
 
 export default function PublicProfile() {
@@ -9,6 +10,8 @@ export default function PublicProfile() {
   const [profile, setProfile] = useState(null);
   const [status, setStatus] = useState("loading");
   const [message, setMessage] = useState("");
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -22,6 +25,7 @@ export default function PublicProfile() {
 
         if (!ignore) {
           setProfile(data.profile);
+          setIsFollowing(data.profile.isFollowing);
           setStatus("ready");
         }
       } catch (error) {
@@ -38,6 +42,23 @@ export default function PublicProfile() {
       ignore = true;
     };
   }, [username]);
+
+  const handleFollowClick = async () => {
+    setFollowLoading(true);
+    try {
+      if (isFollowing) {
+        await unfollowUser(profile.id);
+        setIsFollowing(false);
+      } else {
+        await followUser(profile.id);
+        setIsFollowing(true);
+      }
+    } catch (error) {
+      setMessage(error.response?.data?.msg || "Failed to update follow status");
+    } finally {
+      setFollowLoading(false);
+    }
+  };
 
   if (status === "loading") {
     return (
@@ -104,6 +125,14 @@ export default function PublicProfile() {
                 )}
               </strong>
             </div>
+            <div className="dashboard-card">
+              <span className="dashboard-label">Followers</span>
+              <strong>{profile.followersCount}</strong>
+            </div>
+            <div className="dashboard-card">
+              <span className="dashboard-label">Following</span>
+              <strong>{profile.followingCount}</strong>
+            </div>
           </div>
 
           <div className="profile-chip-row">
@@ -114,11 +143,37 @@ export default function PublicProfile() {
             ))}
           </div>
 
-          {isOwnProfile ? (
-            <Link className="nav-button nav-button-primary" to="/profile">
-              Edit profile
-            </Link>
-          ) : null}
+          {message && (
+            <motion.p
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={message.includes("Failed") ? "auth-error" : "auth-success"}
+            >
+              {message}
+            </motion.p>
+          )}
+
+          <div className="auth-inline-actions">
+            {isOwnProfile ? (
+              <Link className="nav-button nav-button-primary" to="/profile">
+                Edit profile
+              </Link>
+            ) : (
+              <>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={handleFollowClick}
+                  disabled={followLoading}
+                  className={`nav-button ${
+                    isFollowing ? "nav-button-secondary" : "nav-button-primary"
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  {followLoading ? "..." : isFollowing ? "Following" : "Follow"}
+                </motion.button>
+              </>
+            )}
+          </div>
         </div>
       </article>
     </section>

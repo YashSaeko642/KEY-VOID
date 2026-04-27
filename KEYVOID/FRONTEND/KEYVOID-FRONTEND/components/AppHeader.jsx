@@ -33,6 +33,9 @@ export default function AppHeader() {
         <Link className={getLinkClass("/dashboard")} to="/dashboard">
           Dashboard
         </Link>
+        <Link className={getLinkClass("/search")} to="/search">
+          Discover
+        </Link>
         <Link className={getLinkClass("/profile")} to="/profile">
           Profile
         </Link>
