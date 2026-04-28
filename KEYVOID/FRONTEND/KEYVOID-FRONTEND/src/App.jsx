@@ -12,17 +12,16 @@ import Login from "../pages/Login";
 import Profile from "../pages/Profile";
 import PublicProfile from "../pages/PublicProfile";
 import Search from "../pages/Search";
-import Followers from "../pages/Followers";
 import { AuthProvider } from "./context/AuthContext";
 import "./App.css";
 
 const AUTH_ROUTES = ["/login"];
-const APP_ROUTES = ["/dashboard", "/creator", "/admin", "/profile", "/search", "/followers"];
+const APP_ROUTES = ["/dashboard", "/creator", "/admin", "/profile", "/search"];
 
 function AppLayout() {
   const location = useLocation();
   const isAuthRoute = AUTH_ROUTES.includes(location.pathname);
-  const isAppRoute = APP_ROUTES.some((route) => location.pathname.startsWith(route));
+  const isAppRoute = APP_ROUTES.includes(location.pathname);
   const shellClassName = isAuthRoute
     ? "app-shell app-shell-auth bg-transparent text-slate-50"
     : isAppRoute
@@ -53,22 +52,6 @@ function AppLayout() {
             }
           />
           <Route
-            path="/search"
-            element={
-              <ProtectedRoute>
-                <Search />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/followers/:username"
-            element={
-              <ProtectedRoute>
-                <Followers />
-              </ProtectedRoute>
-            }
-          />
-          <Route
             path="/creator"
             element={
               <ProtectedRoute allowedRoles={["creator", "admin"]}>
@@ -92,6 +75,7 @@ function AppLayout() {
               </ProtectedRoute>
             }
           />
+          <Route path="/search" element={<Search />} />
           <Route path="/u/:username" element={<PublicProfile />} />
         </Routes>
       </main>

@@ -37,8 +37,8 @@ function buildUserPayload(user) {
     avatarUrl: user.avatarUrl || "",
     bannerUrl: user.bannerUrl || "",
     favoriteGenres: user.favoriteGenres || [],
-    followersCount: (user.followers || []).length,
-    followingCount: (user.following || []).length
+    followersCount: user.followersCount || 0,
+    followingCount: user.followingCount || 0
   };
 }
 
@@ -159,9 +159,11 @@ async function verifyGoogleCredential(credential) {
   }
 
   try {
+    const clientId = getGoogleClientId();
+    
     const ticket = await googleClient.verifyIdToken({
-      idToken: credential,
-      audience: getGoogleClientId()
+      idToken: String(credential).trim(),
+      audience: clientId
     });
     const payload = ticket.getPayload();
 
@@ -175,6 +177,12 @@ async function verifyGoogleCredential(credential) {
 
     return { valid: true, payload };
   } catch (error) {
+    console.error("Google token verification failed:", {
+      error: error.message,
+      credentialLength: String(credential || "").length,
+      clientIdConfigured: isGoogleClientIdConfigured()
+    });
+    
     return { valid: false, status: 401, msg: "Google sign-in could not be verified" };
   }
 }

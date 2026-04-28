@@ -17,3 +17,5 @@ Thumbs.db
 
 # Vite specific
 .vite/
+
+.env 

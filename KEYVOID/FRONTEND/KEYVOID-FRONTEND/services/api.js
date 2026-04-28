@@ -5,38 +5,17 @@ const API = axios.create({
   withCredentials: true
 });
 
-// ==================== SEARCH ENDPOINTS ====================
-export const searchProfiles = async (query, limit = 20, page = 1) => {
-  const response = await API.get("/profiles/search", {
-    params: { query, limit, page }
-  });
-  return response.data;
-};
+// Profile search
+export const searchProfiles = (query, limit = 10, skip = 0) => 
+  API.get("/profiles/search", { params: { q: query, limit, skip } });
 
-// ==================== FOLLOW ENDPOINTS ====================
-export const followUser = async (userId) => {
-  const response = await API.post(`/profiles/${userId}/follow`);
-  return response.data;
-};
-
-export const unfollowUser = async (userId) => {
-  const response = await API.delete(`/profiles/${userId}/follow`);
-  return response.data;
-};
-
-// ==================== FOLLOWERS/FOLLOWING ENDPOINTS ====================
-export const getFollowers = async (userId, limit = 20, page = 1) => {
-  const response = await API.get(`/profiles/${userId}/followers`, {
-    params: { limit, page }
-  });
-  return response.data;
-};
-
-export const getFollowing = async (userId, limit = 20, page = 1) => {
-  const response = await API.get(`/profiles/${userId}/following`, {
-    params: { limit, page }
-  });
-  return response.data;
-};
+// Follower operations
+export const followUser = (userId) => API.post(`/followers/follow/${userId}`);
+export const unfollowUser = (userId) => API.post(`/followers/unfollow/${userId}`);
+export const getFollowers = (userId, limit = 10, skip = 0) => 
+  API.get(`/followers/${userId}/followers`, { params: { limit, skip } });
+export const getFollowing = (userId, limit = 10, skip = 0) => 
+  API.get(`/followers/${userId}/following`, { params: { limit, skip } });
+export const getFollowStatus = (userId) => API.get(`/followers/${userId}/status`);
 
 export default API;

@@ -13,7 +13,7 @@ const { validateProfileInput } = require("../utils/profileValidation");
  * @param {Object} user - User document from MongoDB
  * @param {Object} options - Configuration options
  * @param {boolean} options.includePrivate - Whether to include private fields like email
- * @param {string} options.currentUserId - Current user's ID to check follow status
+ * @param {string} options.currentUserId - Current user ID for follower status
  * @returns {Object} Profile object for API response
  */
 function buildProfilePayload(user, { includePrivate = false, currentUserId = null } = {}) {
@@ -30,10 +30,15 @@ function buildProfilePayload(user, { includePrivate = false, currentUserId = nul
     bannerUrl: user.bannerUrl || "",
     favoriteGenres: user.favoriteGenres || [],
     joinedAt: user.createdAt,
-    followersCount: (user.followers || []).length,
-    followingCount: (user.following || []).length,
-    isFollowing: currentUserId ? (user.followers || []).some(id => String(id) === String(currentUserId)) : false
+    followersCount: user.followersCount || 0,
+    followingCount: user.followingCount || 0
   };
+
+  // Include follower status for authenticated users
+  if (currentUserId) {
+    payload.isFollowing = user.isFollowing ? user.isFollowing(currentUserId) : false;
+    payload.isFollowedBy = user.isFollowedBy ? user.isFollowedBy(currentUserId) : false;
+  }
 
   // Include sensitive fields only for authenticated user viewing their own profile
   if (includePrivate) {
@@ -285,8 +290,9 @@ exports.getPublicProfile = async (req, res) => {
       return res.status(404).json({ msg: "Profile not found" });
     }
 
-    // Return profile without private fields
-    return res.json({ profile: buildProfilePayload(user) });
+    // Return profile without private fields, but with follower status if authenticated
+    const currentUserId = req.user?._id || null;
+    return res.json({ profile: buildProfilePayload(user, { currentUserId }) });
   } catch (error) {
     console.error("Error loading public profile:", error.message);
     return res.status(500).json({ msg: "Unable to load public profile" });
@@ -294,252 +300,42 @@ exports.getPublicProfile = async (req, res) => {
 };
 
 /**
- * GET /profiles/search?query=searchTerm&limit=20&page=1
+ * GET /profiles/search?q=query
  * Searches for profiles by username or bio
- * @route GET /profiles/search
+ * @route GET /profiles/search?q=query&limit=10&skip=0
  * @access Public
- * @query {string} query - Search term (min 2 chars)
- * @query {number} limit - Results per page (default: 20, max: 50)
- * @query {number} page - Page number (default: 1)
  */
 exports.searchProfiles = async (req, res) => {
   try {
-    const { query = "", limit = 20, page = 1 } = req.query;
-    const searchTerm = String(query || "").trim();
+    const query = String(req.query.q || "").trim();
+    const limit = Math.min(parseInt(req.query.limit) || 10, 50);
+    const skip = Math.max(parseInt(req.query.skip) || 0, 0);
 
-    // Validate search query
-    if (searchTerm.length < 2) {
-      return res.status(400).json({ msg: "Search query must be at least 2 characters" });
+    if (!query || query.length < 2) {
+      return res.json({ profiles: [], total: 0 });
     }
 
-    // Parse and validate pagination
-    const pageNum = Math.max(1, parseInt(page, 10) || 1);
-    const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
-    const skip = (pageNum - 1) * limitNum;
+    const escapedQuery = escapeRegex(query);
+    const searchRegex = new RegExp(escapedQuery, "i");
 
-    // Build search regex (case-insensitive)
-    const searchRegex = new RegExp(escapeRegex(searchTerm), "i");
+    const [profiles, total] = await Promise.all([
+      User.find({
+        $or: [{ username: searchRegex }, { bio: searchRegex }]
+      })
+        .limit(limit)
+        .skip(skip)
+        .select("-password -emailVerificationTokenHash -passwordResetTokenHash"),
+      User.countDocuments({
+        $or: [{ username: searchRegex }, { bio: searchRegex }]
+      })
+    ]);
 
-    // Search for profiles matching username or bio
-    const results = await User.find({
-      $or: [
-        { username: searchRegex },
-        { bio: searchRegex }
-      ]
-    })
-      .select("-password -passwordResetTokenHash -emailVerificationTokenHash")
-      .limit(limitNum)
-      .skip(skip)
-      .sort({ username: 1 });
+    const currentUserId = req.user?._id || null;
+    const profilePayloads = profiles.map(user => buildProfilePayload(user, { currentUserId }));
 
-    // Get total count for pagination metadata
-    const total = await User.countDocuments({
-      $or: [
-        { username: searchRegex },
-        { bio: searchRegex }
-      ]
-    });
-
-    // Build profile payloads
-    const profiles = results.map(user => buildProfilePayload(user));
-
-    return res.json({
-      profiles,
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total,
-        totalPages: Math.ceil(total / limitNum)
-      }
-    });
+    return res.json({ profiles: profilePayloads, total });
   } catch (error) {
     console.error("Error searching profiles:", error.message);
     return res.status(500).json({ msg: "Unable to search profiles" });
-  }
-};
-
-/**
- * POST /profiles/:userId/follow
- * Follows a user (adds to followers and following arrays)
- * @route POST /profiles/:userId/follow
- * @access Private (requires authentication)
- * @param {string} userId - ID of user to follow
- */
-exports.followUser = async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const currentUserId = String(req.user._id);
-    const targetUserId = String(userId);
-
-    // Prevent self-following
-    if (currentUserId === targetUserId) {
-      return res.status(400).json({ msg: "You cannot follow yourself" });
-    }
-
-    // Verify target user exists
-    const targetUser = await User.findById(targetUserId);
-    if (!targetUser) {
-      return res.status(404).json({ msg: "User not found" });
-    }
-
-    // Check if already following
-    if (req.user.following.includes(targetUserId)) {
-      return res.status(400).json({ msg: "You are already following this user" });
-    }
-
-    // Add to current user's following array
-    req.user.following.push(targetUserId);
-    await req.user.save();
-
-    // Add to target user's followers array
-    targetUser.followers.push(currentUserId);
-    await targetUser.save();
-
-    // Fetch updated user data
-    const updatedUser = await User.findById(currentUserId);
-
-    return res.json({
-      msg: "Successfully followed user",
-      profile: buildProfilePayload(updatedUser, { includePrivate: true })
-    });
-  } catch (error) {
-    console.error("Error following user:", error.message);
-    return res.status(500).json({ msg: "Unable to follow user" });
-  }
-};
-
-/**
- * DELETE /profiles/:userId/follow
- * Unfollows a user (removes from followers and following arrays)
- * @route DELETE /profiles/:userId/follow
- * @access Private (requires authentication)
- * @param {string} userId - ID of user to unfollow
- */
-exports.unfollowUser = async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const currentUserId = String(req.user._id);
-    const targetUserId = String(userId);
-
-    // Prevent self-unfollowing
-    if (currentUserId === targetUserId) {
-      return res.status(400).json({ msg: "You cannot unfollow yourself" });
-    }
-
-    // Verify target user exists
-    const targetUser = await User.findById(targetUserId);
-    if (!targetUser) {
-      return res.status(404).json({ msg: "User not found" });
-    }
-
-    // Check if not following
-    if (!req.user.following.includes(targetUserId)) {
-      return res.status(400).json({ msg: "You are not following this user" });
-    }
-
-    // Remove from current user's following array
-    req.user.following = req.user.following.filter(id => String(id) !== targetUserId);
-    await req.user.save();
-
-    // Remove from target user's followers array
-    targetUser.followers = targetUser.followers.filter(id => String(id) !== currentUserId);
-    await targetUser.save();
-
-    // Fetch updated user data
-    const updatedUser = await User.findById(currentUserId);
-
-    return res.json({
-      msg: "Successfully unfollowed user",
-      profile: buildProfilePayload(updatedUser, { includePrivate: true })
-    });
-  } catch (error) {
-    console.error("Error unfollowing user:", error.message);
-    return res.status(500).json({ msg: "Unable to unfollow user" });
-  }
-};
-
-/**
- * GET /profiles/:userId/followers
- * Gets list of users following a profile
- * @route GET /profiles/:userId/followers
- * @access Public
- * @query {number} limit - Results per page (default: 20)
- * @query {number} page - Page number (default: 1)
- */
-exports.getFollowers = async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const { limit = 20, page = 1 } = req.query;
-
-    // Validate user exists
-    const user = await User.findById(userId).populate("followers");
-    if (!user) {
-      return res.status(404).json({ msg: "User not found" });
-    }
-
-    // Parse and validate pagination
-    const pageNum = Math.max(1, parseInt(page, 10) || 1);
-    const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
-
-    // Get followers with pagination
-    const followers = user.followers
-      .slice((pageNum - 1) * limitNum, pageNum * limitNum)
-      .map(follower => buildProfilePayload(follower));
-
-    return res.json({
-      followers,
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total: user.followers.length,
-        totalPages: Math.ceil(user.followers.length / limitNum)
-      }
-    });
-  } catch (error) {
-    console.error("Error getting followers:", error.message);
-    return res.status(500).json({ msg: "Unable to get followers" });
-  }
-};
-
-/**
- * GET /profiles/:userId/following
- * Gets list of users that a profile is following
- * @route GET /profiles/:userId/following
- * @access Public
- * @query {number} limit - Results per page (default: 20)
- * @query {number} page - Page number (default: 1)
- */
-exports.getFollowing = async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const { limit = 20, page = 1 } = req.query;
-
-    // Validate user exists
-    const user = await User.findById(userId).populate("following");
-    if (!user) {
-      return res.status(404).json({ msg: "User not found" });
-    }
-
-    // Parse and validate pagination
-    const pageNum = Math.max(1, parseInt(page, 10) || 1);
-    const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
-
-    // Get following with pagination
-    const following = user.following
-      .slice((pageNum - 1) * limitNum, pageNum * limitNum)
-      .map(followedUser => buildProfilePayload(followedUser));
-
-    return res.json({
-      following,
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total: user.following.length,
-        totalPages: Math.ceil(user.following.length / limitNum)
-      }
-    });
-  } catch (error) {
-    console.error("Error getting following:", error.message);
-    return res.status(500).json({ msg: "Unable to get following" });
   }
 };
