@@ -6,11 +6,7 @@ const {
   getMyProfile,
   getPublicProfile,
   updateMyProfile,
-  searchProfiles,
-  followUser,
-  unfollowUser,
-  getFollowers,
-  getFollowing
+  searchProfiles
 } = require("../controllers/profile-controller");
 const { protect } = require("../middleware/authMiddleware");
 const { handleUploadError, imageUpload } = require("../middleware/uploadMiddleware");
@@ -18,18 +14,18 @@ const { handleUploadError, imageUpload } = require("../middleware/uploadMiddlewa
 // ==================== PROFILE ROUTES ====================
 
 /**
+ * GET /profiles/search?q=query
+ * Searches for profiles by username or bio
+ * @access Public
+ */
+router.get("/search", searchProfiles);
+
+/**
  * GET /profiles/me
  * Retrieves authenticated user's profile
  * @access Private
  */
 router.get("/me", protect, getMyProfile);
-
-/**
- * GET /profiles/search?query=searchTerm&limit=20&page=1
- * Searches for profiles by username or bio
- * @access Public
- */
-router.get("/search", searchProfiles);
 
 /**
  * PATCH /profiles/me
@@ -47,34 +43,6 @@ router.patch(
   handleUploadError,
   updateMyProfile
 );
-
-/**
- * POST /profiles/:userId/follow
- * Follows a user
- * @access Private
- */
-router.post("/:userId/follow", protect, followUser);
-
-/**
- * DELETE /profiles/:userId/follow
- * Unfollows a user
- * @access Private
- */
-router.delete("/:userId/follow", protect, unfollowUser);
-
-/**
- * GET /profiles/:userId/followers
- * Gets list of followers for a user
- * @access Public
- */
-router.get("/:userId/followers", getFollowers);
-
-/**
- * GET /profiles/:userId/following
- * Gets list of users that a user is following
- * @access Public
- */
-router.get("/:userId/following", getFollowing);
 
 /**
  * GET /profiles/:username

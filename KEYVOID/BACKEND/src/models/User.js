@@ -120,6 +120,16 @@ const userSchema = new mongoose.Schema(
       type: [mongoose.Schema.Types.ObjectId],
       ref: "User",
       default: []
+    },
+    followersCount: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    followingCount: {
+      type: Number,
+      default: 0,
+      min: 0
     }
   },
   {
@@ -137,6 +147,14 @@ userSchema.pre("validate", function syncRoleFields() {
 
 userSchema.methods.hasRole = function hasRole(role) {
   return this.role === role;
+};
+
+userSchema.methods.isFollowing = function isFollowing(userId) {
+  return this.following.some(id => String(id) === String(userId));
+};
+
+userSchema.methods.isFollowedBy = function isFollowedBy(userId) {
+  return this.followers.some(id => String(id) === String(userId));
 };
 
 userSchema.statics.USER_ROLES = USER_ROLES;

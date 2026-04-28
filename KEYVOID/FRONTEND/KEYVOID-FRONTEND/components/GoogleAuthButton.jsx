@@ -11,16 +11,15 @@ export default function GoogleAuthButton({
 }) {
   if (!isGoogleClientIdConfigured) {
     return (
-      <p className="auth-google-note">
+      <p className="text-sm text-slate-400 bg-slate-900/50 px-4 py-3 rounded border border-slate-700">
         Google sign-in is not ready yet. Add a valid Google Client ID to
-        <code> VITE_GOOGLE_CLIENT_ID</code>.
+        <code className="bg-slate-800 px-1.5 py-0.5 rounded text-slate-300 ml-1"> VITE_GOOGLE_CLIENT_ID</code>.
       </p>
     );
   }
 
   return (
-    <div className={`auth-google ${disabled ? "auth-google-disabled" : ""}`}>
-      <div className="auth-google-accent" aria-hidden="true" />
+    <div className={disabled ? "opacity-50 cursor-not-allowed" : ""}>
       <GoogleLogin
         onError={onError}
         onSuccess={onSuccess}
