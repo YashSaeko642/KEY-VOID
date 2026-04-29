@@ -1,6 +1,14 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "../src/context/useAuth";
 import { useState } from "react";
+import { useAuth } from "../src/context/useAuth";
+
+const baseNavItems = [
+  { path: "/", label: "Home" },
+  { path: "/dashboard", label: "Dashboard" },
+  { path: "/feed", label: "Feed" },
+  { path: "/search", label: "Search" },
+  { path: "/profile", label: "Profile" }
+];
 
 export default function AppHeader() {
   const location = useLocation();
@@ -12,37 +20,47 @@ export default function AppHeader() {
     await logout();
   }
 
-  function handleSearch(e) {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/search?q=${encodeURIComponent(searchQuery)}`);
+  function handleSearch(event) {
+    event.preventDefault();
+    const query = searchQuery.trim();
+
+    if (query) {
+      navigate(`/search?q=${encodeURIComponent(query)}`);
       setSearchQuery("");
     }
   }
 
   const isActive = (path) => location.pathname === path;
+  const navItems = [
+    ...baseNavItems,
+    ...(hasRole(["creator", "admin"]) ? [{ path: "/creator", label: "Creator Hub" }] : []),
+    ...(isAdmin ? [{ path: "/admin", label: "Admin" }] : [])
+  ];
 
   return (
-    <header style={{
-      position: "sticky",
-      top: 0,
-      zIndex: 40,
-      background: "linear-gradient(180deg, rgba(15, 23, 42, 0.95), rgba(15, 23, 42, 0.85))",
-      backdropFilter: "blur(20px)",
-      borderBottom: "1px solid rgba(71, 85, 105, 0.2)",
-      boxShadow: "0 4px 20px rgba(0, 0, 0, 0.3)"
-    }}>
-      <div style={{
-        maxWidth: "1400px",
-        margin: "0 auto",
-        padding: "16px 40px",
-        display: "grid",
-        gridTemplateColumns: "auto 1fr auto auto",
-        gap: "30px",
-        alignItems: "center"
-      }}>
-        {/* Logo */}
-        <Link 
+    <header
+      style={{
+        position: "sticky",
+        top: 0,
+        zIndex: 40,
+        background: "linear-gradient(180deg, rgba(15, 23, 42, 0.95), rgba(15, 23, 42, 0.85))",
+        backdropFilter: "blur(20px)",
+        borderBottom: "1px solid rgba(71, 85, 105, 0.2)",
+        boxShadow: "0 4px 20px rgba(0, 0, 0, 0.3)"
+      }}
+    >
+      <div
+        style={{
+          maxWidth: "1400px",
+          margin: "0 auto",
+          padding: "16px 40px",
+          display: "grid",
+          gridTemplateColumns: "auto auto 1fr auto auto",
+          gap: "24px",
+          alignItems: "center"
+        }}
+      >
+        <Link
           to="/dashboard"
           style={{
             textDecoration: "none",
@@ -51,82 +69,61 @@ export default function AppHeader() {
             fontWeight: "700",
             letterSpacing: "3px",
             textTransform: "uppercase",
-            fontFamily: "'Michroma', monospace",
-            transition: "all 0.3s ease"
+            fontFamily: "'Michroma', monospace"
           }}
-          onMouseEnter={(e) => e.target.style.color = "#818cf8"}
-          onMouseLeave={(e) => e.target.style.color = "#f1f5f9"}
         >
           KeyVoid
         </Link>
 
-        {/* User Info */}
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "16px"
-        }}>
-          <div style={{
-            padding: "8px 16px",
-            background: "rgba(30, 41, 59, 0.6)",
-            border: "1px solid rgba(99, 102, 241, 0.2)",
-            borderRadius: "20px",
-            fontSize: "13px",
-            fontWeight: "600",
-            color: "#e2e8f0",
-            transition: "all 0.3s ease"
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            minWidth: 0
           }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = "rgba(99, 102, 241, 0.6)";
-            e.currentTarget.style.background = "rgba(99, 102, 241, 0.1)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = "rgba(99, 102, 241, 0.2)";
-            e.currentTarget.style.background = "rgba(30, 41, 59, 0.6)";
-          }}>
-            👤 {user?.username || "Account"}
-          </div>
-
-          <div style={{
-            padding: "8px 16px",
-            background: "rgba(99, 102, 241, 0.1)",
-            border: "1px solid rgba(99, 102, 241, 0.3)",
-            borderRadius: "20px",
-            fontSize: "11px",
-            fontWeight: "700",
-            color: "#818cf8",
-            textTransform: "uppercase",
-            letterSpacing: "1px"
-          }}>
-            {isAdmin ? "🛡️ Admin" : user?.role === "creator" ? "🎵 Creator" : "🎧 Listener"}
-          </div>
-
-          {user?.followersCount !== undefined && (
-            <div style={{
-              padding: "8px 16px",
-              background: "rgba(6, 182, 212, 0.1)",
-              border: "1px solid rgba(6, 182, 212, 0.3)",
+        >
+          <span
+            style={{
+              padding: "8px 14px",
+              background: "rgba(30, 41, 59, 0.6)",
+              border: "1px solid rgba(99, 102, 241, 0.2)",
               borderRadius: "20px",
-              fontSize: "12px",
+              fontSize: "13px",
               fontWeight: "600",
-              color: "#67e8f9"
-            }}>
-              {user?.followersCount || 0} 👥 • {user?.followingCount || 0} 🔗
-            </div>
-          )}
+              color: "#e2e8f0"
+            }}
+          >
+            {user?.username || "Account"}
+          </span>
+          <span
+            style={{
+              padding: "8px 14px",
+              background: "rgba(99, 102, 241, 0.1)",
+              border: "1px solid rgba(99, 102, 241, 0.3)",
+              borderRadius: "20px",
+              fontSize: "11px",
+              fontWeight: "700",
+              color: "#818cf8",
+              textTransform: "uppercase",
+              letterSpacing: "1px"
+            }}
+          >
+            {isAdmin ? "Admin" : user?.role === "creator" ? "Creator" : "Listener"}
+          </span>
         </div>
 
-        {/* Navigation Links */}
-        <nav style={{
-          display: "flex",
-          gap: "8px",
-          alignItems: "center"
-        }}>
-          {[
-            { path: "/dashboard", label: "Dashboard", icon: "📊" },
-            { path: "/search", label: "Search", icon: "🔍" },
-            { path: "/profile", label: "Profile", icon: "👤" }
-          ].map((item) => (
+        <nav
+          aria-label="Application"
+          style={{
+            display: "flex",
+            gap: "8px",
+            alignItems: "center",
+            justifyContent: "center",
+            flexWrap: "wrap"
+          }}
+        >
+          {navItems.map((item) => (
             <Link
               key={item.path}
               to={item.path}
@@ -135,188 +132,75 @@ export default function AppHeader() {
                 color: isActive(item.path) ? "#818cf8" : "#cbd5e1",
                 fontSize: "14px",
                 fontWeight: isActive(item.path) ? "700" : "600",
-                padding: "10px 16px",
+                padding: "10px 14px",
                 borderRadius: "8px",
                 background: isActive(item.path) ? "rgba(99, 102, 241, 0.15)" : "transparent",
                 border: `1px solid ${isActive(item.path) ? "rgba(99, 102, 241, 0.4)" : "transparent"}`,
-                transition: "all 0.3s ease",
-                display: "flex",
-                alignItems: "center",
-                gap: "6px"
-              }}
-              onMouseEnter={(e) => {
-                if (!isActive(item.path)) {
-                  e.currentTarget.style.background = "rgba(99, 102, 241, 0.08)";
-                  e.currentTarget.style.color = "#e2e8f0";
-                  e.currentTarget.style.transform = "translateY(-2px)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isActive(item.path)) {
-                  e.currentTarget.style.background = "transparent";
-                  e.currentTarget.style.color = "#cbd5e1";
-                  e.currentTarget.style.transform = "translateY(0)";
-                }
+                transition: "all 0.2s ease"
               }}
             >
-              {item.icon} {item.label}
+              {item.label}
             </Link>
           ))}
-
-          {hasRole(["creator", "admin"]) && (
-            <Link
-              to="/creator"
-              style={{
-                textDecoration: "none",
-                color: isActive("/creator") ? "#a855f7" : "#cbd5e1",
-                fontSize: "14px",
-                fontWeight: isActive("/creator") ? "700" : "600",
-                padding: "10px 16px",
-                borderRadius: "8px",
-                background: isActive("/creator") ? "rgba(168, 85, 247, 0.15)" : "transparent",
-                border: `1px solid ${isActive("/creator") ? "rgba(168, 85, 247, 0.4)" : "transparent"}`,
-                transition: "all 0.3s ease",
-                display: "flex",
-                alignItems: "center",
-                gap: "6px"
-              }}
-              onMouseEnter={(e) => {
-                if (!isActive("/creator")) {
-                  e.currentTarget.style.background = "rgba(168, 85, 247, 0.08)";
-                  e.currentTarget.style.color = "#e2e8f0";
-                  e.currentTarget.style.transform = "translateY(-2px)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isActive("/creator")) {
-                  e.currentTarget.style.background = "transparent";
-                  e.currentTarget.style.color = "#cbd5e1";
-                  e.currentTarget.style.transform = "translateY(0)";
-                }
-              }}
-            >
-              🎬 Creator Hub
-            </Link>
-          )}
-
-          {isAdmin && (
-            <Link
-              to="/admin"
-              style={{
-                textDecoration: "none",
-                color: isActive("/admin") ? "#10b981" : "#cbd5e1",
-                fontSize: "14px",
-                fontWeight: isActive("/admin") ? "700" : "600",
-                padding: "10px 16px",
-                borderRadius: "8px",
-                background: isActive("/admin") ? "rgba(16, 185, 129, 0.15)" : "transparent",
-                border: `1px solid ${isActive("/admin") ? "rgba(16, 185, 129, 0.4)" : "transparent"}`,
-                transition: "all 0.3s ease",
-                display: "flex",
-                alignItems: "center",
-                gap: "6px"
-              }}
-              onMouseEnter={(e) => {
-                if (!isActive("/admin")) {
-                  e.currentTarget.style.background = "rgba(16, 185, 129, 0.08)";
-                  e.currentTarget.style.color = "#e2e8f0";
-                  e.currentTarget.style.transform = "translateY(-2px)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isActive("/admin")) {
-                  e.currentTarget.style.background = "transparent";
-                  e.currentTarget.style.color = "#cbd5e1";
-                  e.currentTarget.style.transform = "translateY(0)";
-                }
-              }}
-            >
-              ⚙️ Admin
-            </Link>
-          )}
         </nav>
 
-        {/* Search Box */}
-        <form 
+        <form
           onSubmit={handleSearch}
           style={{
             display: "flex",
             alignItems: "center",
             gap: "8px",
-            padding: "10px 16px",
+            padding: "10px 14px",
             border: "1px solid rgba(71, 85, 105, 0.4)",
             borderRadius: "12px",
             background: "rgba(30, 41, 59, 0.5)",
-            transition: "all 0.3s ease",
-            minWidth: "240px"
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = "rgba(99, 102, 241, 0.6)";
-            e.currentTarget.style.background = "rgba(30, 41, 59, 0.8)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = "rgba(71, 85, 105, 0.4)";
-            e.currentTarget.style.background = "rgba(30, 41, 59, 0.5)";
+            minWidth: "220px"
           }}
         >
           <input
             type="text"
             placeholder="Search creators..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(event) => setSearchQuery(event.target.value)}
             style={{
               flex: 1,
               border: "none",
               background: "transparent",
               color: "#f1f5f9",
               fontSize: "14px",
-              outline: "none"
+              outline: "none",
+              minWidth: 0
             }}
           />
-          <button 
+          <button
             type="submit"
             style={{
               background: "none",
               border: "none",
               color: "#818cf8",
-              fontSize: "16px",
-              cursor: "pointer",
-              transition: "color 0.2s ease"
+              fontSize: "14px",
+              cursor: "pointer"
             }}
-            onMouseEnter={(e) => e.target.style.color = "#c4b5fd"}
-            onMouseLeave={(e) => e.target.style.color = "#818cf8"}
           >
-            🔍
+            Go
           </button>
         </form>
 
-        {/* Logout Button */}
         <button
           onClick={handleLogout}
           type="button"
           style={{
-            padding: "10px 20px",
+            padding: "10px 18px",
             background: "rgba(239, 68, 68, 0.1)",
             border: "1px solid rgba(239, 68, 68, 0.3)",
             color: "#fca5a5",
             borderRadius: "8px",
             fontSize: "14px",
             fontWeight: "600",
-            cursor: "pointer",
-            transition: "all 0.3s ease"
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "rgba(239, 68, 68, 0.2)";
-            e.currentTarget.style.borderColor = "rgba(239, 68, 68, 0.6)";
-            e.currentTarget.style.color = "#fecaca";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "rgba(239, 68, 68, 0.1)";
-            e.currentTarget.style.borderColor = "rgba(239, 68, 68, 0.3)";
-            e.currentTarget.style.color = "#fca5a5";
+            cursor: "pointer"
           }}
         >
-          🚪 Logout
+          Logout
         </button>
       </div>
     </header>

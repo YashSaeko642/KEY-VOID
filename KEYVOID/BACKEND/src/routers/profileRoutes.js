@@ -10,15 +10,9 @@ const {
 } = require("../controllers/profile-controller");
 const { protect } = require("../middleware/authMiddleware");
 const { handleUploadError, imageUpload } = require("../middleware/uploadMiddleware");
+const { searchRateLimit } = require("../middleware/securityMiddleware");
 
 // ==================== PROFILE ROUTES ====================
-
-/**
- * GET /profiles/search?q=query
- * Searches for profiles by username or bio
- * @access Public
- */
-router.get("/search", searchProfiles);
 
 /**
  * GET /profiles/me
@@ -43,6 +37,13 @@ router.patch(
   handleUploadError,
   updateMyProfile
 );
+
+/**
+ * GET /profiles/search
+ * Searches for profiles by username or bio
+ * @access Public
+ */
+router.get("/search", searchRateLimit, searchProfiles);
 
 /**
  * GET /profiles/:username

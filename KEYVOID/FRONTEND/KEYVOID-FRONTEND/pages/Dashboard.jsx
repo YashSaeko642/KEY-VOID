@@ -1,8 +1,59 @@
 import { useAuth } from "../src/context/useAuth";
 import { Link } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import API from "../services/api";
+import RainEffect from "../components/RainEffect";
+import PostCard from "../components/PostCard";
 
 export default function Dashboard() {
   const { isAdmin, isCreator, user } = useAuth();
+  const [postText, setPostText] = useState("");
+  const [posts, setPosts] = useState([]);
+  const [isCreatingPost, setIsCreatingPost] = useState(false);
+  const [postError, setPostError] = useState("");
+
+  const fetchPosts = useCallback(async () => {
+    try {
+      const res = await API.get("/posts", { params: { page: 1, limit: 20 } });
+      const postsData = res.data.posts || res.data || [];
+      setPosts(Array.isArray(postsData) ? postsData : []);
+    } catch (err) {
+      console.error("Failed to fetch posts:", err);
+      setPosts([]);
+    }
+  }, []);
+
+  const handleCreatePost = async () => {
+    if (!postText.trim() || isCreatingPost) return;
+
+    setIsCreatingPost(true);
+    setPostError("");
+
+    try {
+      const res = await API.post("/posts", {
+        text: postText
+      });
+
+      if (res.status === 201) {
+        setPostText("");
+        await fetchPosts();
+      }
+    } catch (err) {
+      const errorMsg = err.response?.data?.message || "Failed to create post";
+      console.error("Post creation error:", errorMsg);
+      setPostError(errorMsg);
+    } finally {
+      setIsCreatingPost(false);
+    }
+  };
+
+  const handlePostDeleted = (postId) => {
+    setPosts(prev => prev.filter(post => post._id !== postId));
+  };
+
+  useEffect(() => {
+    fetchPosts();
+  }, [fetchPosts]);
 
   return (
     <section style={{
@@ -317,6 +368,71 @@ export default function Dashboard() {
             </Link>
           )}
         </div>
+                          {/* POST SECTION */}
+                  <div style={{
+                    marginTop: "100px",
+                    maxWidth: "800px",
+                    marginLeft: "auto",
+                    marginRight: "auto"
+                  }}>
+
+                    {/* Create Post Box */}
+                    <div style={{
+                      background: "rgba(15, 23, 42, 0.5)",
+                      border: "1px solid rgba(99, 102, 241, 0.3)",
+                      borderRadius: "16px",
+                      padding: "20px",
+                      marginBottom: "40px"
+                    }}>
+                      <textarea
+                        placeholder="Share something with KeyVoid..."
+                        value={postText}
+                        onChange={(e) => setPostText(e.target.value)}
+                        style={{
+                          width: "100%",
+                          minHeight: "80px",
+                          background: "transparent",
+                          border: "none",
+                          color: "#f1f5f9",
+                          fontSize: "16px",
+                          outline: "none",
+                          resize: "none"
+                        }}
+                      />
+
+                      <button
+                        onClick={handleCreatePost}
+                        disabled={!postText.trim() || isCreatingPost}
+                        style={{
+                          marginTop: "10px",
+                          padding: "10px 20px",
+                          borderRadius: "8px",
+                          background: "#6366f1",
+                          border: "none",
+                          color: "white",
+                          cursor: isCreatingPost ? "not-allowed" : "pointer",
+                          opacity: !postText.trim() || isCreatingPost ? 0.6 : 1
+                        }}
+                      >
+                        {isCreatingPost ? "Posting..." : "Post"}
+                      </button>
+                      {postError && (
+                        <p style={{ color: "#fca5a5", marginTop: "12px" }}>{postError}</p>
+                      )}
+                    </div>
+
+                    {/* Feed */}
+                    <div>
+                      {posts.map((post) => (
+                        <PostCard
+                          key={post._id}
+                          post={post}
+                          onPostDeleted={handlePostDeleted}
+                        />
+                      ))}
+                    </div>
+
+                  </div>
       </div>
     </section>
   );

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import API from "../services/api";
+import RainEffect from "../components/RainEffect";
 import { useAuth } from "../src/context/useAuth";
 
 export default function CreatorHub() {
@@ -35,6 +36,7 @@ export default function CreatorHub() {
 
   return (
     <section className="dashboard-page">
+      <RainEffect />
       <div className="dashboard-panel">
         <p className="dashboard-kicker text-xs uppercase tracking-[0.18em] text-blue-300/90">
           Creator access
