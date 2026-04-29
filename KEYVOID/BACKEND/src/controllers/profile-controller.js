@@ -13,10 +13,9 @@ const { validateProfileInput } = require("../utils/profileValidation");
  * @param {Object} user - User document from MongoDB
  * @param {Object} options - Configuration options
  * @param {boolean} options.includePrivate - Whether to include private fields like email
- * @param {string} options.currentUserId - Current user ID for follower status
  * @returns {Object} Profile object for API response
  */
-function buildProfilePayload(user, { includePrivate = false, currentUserId = null } = {}) {
+function buildProfilePayload(user, { includePrivate = false } = {}) {
   const role = user.role || (user.isCreator ? "creator" : "user");
   const payload = {
     id: user._id,
@@ -29,16 +28,10 @@ function buildProfilePayload(user, { includePrivate = false, currentUserId = nul
     avatarUrl: user.avatarUrl || "",
     bannerUrl: user.bannerUrl || "",
     favoriteGenres: user.favoriteGenres || [],
-    joinedAt: user.createdAt,
     followersCount: user.followersCount || 0,
-    followingCount: user.followingCount || 0
+    followingCount: user.followingCount || 0,
+    joinedAt: user.createdAt
   };
-
-  // Include follower status for authenticated users
-  if (currentUserId) {
-    payload.isFollowing = user.isFollowing ? user.isFollowing(currentUserId) : false;
-    payload.isFollowedBy = user.isFollowedBy ? user.isFollowedBy(currentUserId) : false;
-  }
 
   // Include sensitive fields only for authenticated user viewing their own profile
   if (includePrivate) {
@@ -290,9 +283,8 @@ exports.getPublicProfile = async (req, res) => {
       return res.status(404).json({ msg: "Profile not found" });
     }
 
-    // Return profile without private fields, but with follower status if authenticated
-    const currentUserId = req.user?._id || null;
-    return res.json({ profile: buildProfilePayload(user, { currentUserId }) });
+    // Return profile without private fields
+    return res.json({ profile: buildProfilePayload(user) });
   } catch (error) {
     console.error("Error loading public profile:", error.message);
     return res.status(500).json({ msg: "Unable to load public profile" });
@@ -300,42 +292,67 @@ exports.getPublicProfile = async (req, res) => {
 };
 
 /**
- * GET /profiles/search?q=query
+ * GET /profiles/search
  * Searches for profiles by username or bio
- * @route GET /profiles/search?q=query&limit=10&skip=0
+ * @route GET /profiles/search?q=searchterm&limit=10&skip=0
  * @access Public
  */
 exports.searchProfiles = async (req, res) => {
   try {
-    const query = String(req.query.q || "").trim();
-    const limit = Math.min(parseInt(req.query.limit) || 10, 50);
-    const skip = Math.max(parseInt(req.query.skip) || 0, 0);
+    const { q, limit = 10, skip = 0 } = req.query;
 
-    if (!query || query.length < 2) {
-      return res.json({ profiles: [], total: 0 });
+    // Validate search query
+    if (!q || typeof q !== "string" || q.trim().length < 2) {
+      return res.status(400).json({ msg: "Search query must be at least 2 characters" });
     }
 
-    const escapedQuery = escapeRegex(query);
-    const searchRegex = new RegExp(escapedQuery, "i");
+    const searchTerm = q.trim();
+    const pageLimit = Math.min(parseInt(limit) || 10, 50); // Max 50 results
+    const pageSkip = Math.max(0, parseInt(skip) || 0);
 
-    const [profiles, total] = await Promise.all([
+    // Build search regex (case-insensitive)
+    const searchRegex = new RegExp(escapeRegex(searchTerm), "i");
+
+    // Find matching users
+    const [users, total] = await Promise.all([
       User.find({
-        $or: [{ username: searchRegex }, { bio: searchRegex }]
+        $or: [
+          { username: searchRegex },
+          { bio: searchRegex },
+          { displayName: searchRegex }
+        ]
       })
-        .limit(limit)
-        .skip(skip)
-        .select("-password -emailVerificationTokenHash -passwordResetTokenHash"),
+        .select("_id username displayName bio avatarUrl isCreator role")
+        .limit(pageLimit)
+        .skip(pageSkip)
+        .lean(),
       User.countDocuments({
-        $or: [{ username: searchRegex }, { bio: searchRegex }]
+        $or: [
+          { username: searchRegex },
+          { bio: searchRegex },
+          { displayName: searchRegex }
+        ]
       })
     ]);
 
-    const currentUserId = req.user?._id || null;
-    const profilePayloads = profiles.map(user => buildProfilePayload(user, { currentUserId }));
+    // Build profile payloads for results
+    const profiles = users.map(user => ({
+      id: user._id,
+      username: user.username,
+      displayName: user.displayName || user.username,
+      bio: user.bio || "",
+      avatarUrl: user.avatarUrl || "",
+      isCreator: user.role === "creator" || user.isCreator
+    }));
 
-    return res.json({ profiles: profilePayloads, total });
+    res.json({
+      profiles,
+      total,
+      limit: pageLimit,
+      skip: pageSkip
+    });
   } catch (error) {
     console.error("Error searching profiles:", error.message);
-    return res.status(500).json({ msg: "Unable to search profiles" });
+    res.status(500).json({ msg: "Failed to search profiles" });
   }
 };

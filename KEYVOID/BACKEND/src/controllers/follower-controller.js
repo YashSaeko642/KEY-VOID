@@ -39,6 +39,11 @@ exports.followUser = async (req, res) => {
     const currentUserId = req.user._id;
     const targetUserId = req.params.userId;
 
+    // Validate ObjectId format
+    if (!targetUserId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ msg: "Invalid user ID" });
+    }
+
     // Validate user IDs
     if (String(currentUserId) === String(targetUserId)) {
       return res.status(400).json({ msg: "You cannot follow yourself" });
@@ -72,7 +77,8 @@ exports.followUser = async (req, res) => {
 
     return res.json({
       msg: "Successfully followed user",
-      following: buildFollowerPayload(targetUser, currentUserId)
+      following: buildFollowerPayload(targetUser, currentUserId),
+      currentUserFollowingCount: currentUser.followingCount
     });
   } catch (error) {
     console.error("Error following user:", error.message);
@@ -90,6 +96,11 @@ exports.unfollowUser = async (req, res) => {
   try {
     const currentUserId = req.user._id;
     const targetUserId = req.params.userId;
+
+    // Validate ObjectId format
+    if (!targetUserId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ msg: "Invalid user ID" });
+    }
 
     // Find both users
     const [currentUser, targetUser] = await Promise.all([
@@ -123,7 +134,8 @@ exports.unfollowUser = async (req, res) => {
 
     return res.json({
       msg: "Successfully unfollowed user",
-      following: buildFollowerPayload(targetUser, currentUserId)
+      following: buildFollowerPayload(targetUser, currentUserId),
+      currentUserFollowingCount: currentUser.followingCount
     });
   } catch (error) {
     console.error("Error unfollowing user:", error.message);
@@ -140,6 +152,12 @@ exports.unfollowUser = async (req, res) => {
 exports.getFollowers = async (req, res) => {
   try {
     const userId = req.params.userId;
+
+    // Validate ObjectId format
+    if (!userId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ msg: "Invalid user ID" });
+    }
+
     const limit = Math.min(parseInt(req.query.limit) || 10, 50);
     const skip = Math.max(parseInt(req.query.skip) || 0, 0);
 
@@ -178,6 +196,12 @@ exports.getFollowers = async (req, res) => {
 exports.getFollowing = async (req, res) => {
   try {
     const userId = req.params.userId;
+
+    // Validate ObjectId format
+    if (!userId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ msg: "Invalid user ID" });
+    }
+
     const limit = Math.min(parseInt(req.query.limit) || 10, 50);
     const skip = Math.max(parseInt(req.query.skip) || 0, 0);
 
@@ -218,10 +242,17 @@ exports.getFollowStatus = async (req, res) => {
     const currentUserId = req.user._id;
     const targetUserId = req.params.userId;
 
+    // Validate ObjectId format
+    if (!targetUserId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ msg: "Invalid user ID" });
+    }
+
     if (String(currentUserId) === String(targetUserId)) {
       return res.json({
         isFollowing: false,
-        isFollowedBy: false
+        isFollowedBy: false,
+        targetFollowersCount: 0,
+        targetFollowingCount: 0
       });
     }
 
@@ -236,7 +267,9 @@ exports.getFollowStatus = async (req, res) => {
 
     return res.json({
       isFollowing: currentUser.isFollowing(targetUserId),
-      isFollowedBy: currentUser.isFollowedBy(targetUserId)
+      isFollowedBy: currentUser.isFollowedBy(targetUserId),
+      targetFollowersCount: targetUser.followersCount || 0,
+      targetFollowingCount: targetUser.followingCount || 0
     });
   } catch (error) {
     console.error("Error fetching follow status:", error.message);

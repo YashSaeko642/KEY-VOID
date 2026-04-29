@@ -5,6 +5,15 @@ const API = axios.create({
   withCredentials: true
 });
 
+export function getApiErrorMessage(error, fallback = "Request failed") {
+  return (
+    error.response?.data?.message ||
+    error.response?.data?.msg ||
+    error.message ||
+    fallback
+  );
+}
+
 // Profile search
 export const searchProfiles = (query, limit = 10, skip = 0) => 
   API.get("/profiles/search", { params: { q: query, limit, skip } });

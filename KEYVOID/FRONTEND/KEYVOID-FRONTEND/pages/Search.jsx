@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
+import RainEffect from "../components/RainEffect";
 import { searchProfiles } from "../services/api";
 
 export default function Search() {
@@ -73,6 +74,7 @@ export default function Search() {
       padding: "60px 40px",
       fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
     }}>
+      <RainEffect />
       <div style={{maxWidth: "1200px", margin: "0 auto"}}>
         {/* Header */}
         <div style={{marginBottom: "50px"}}>

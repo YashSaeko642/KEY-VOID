@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import API from "../services/api";
+import RainEffect from "../components/RainEffect";
 import { useAuth } from "../src/context/useAuth";
 
 const EMPTY_FORM = {
@@ -189,6 +190,7 @@ export default function Profile() {
 
   return (
     <section className="dashboard-page">
+      <RainEffect />
       <div className="profile-layout">
         <form className="dashboard-panel profile-editor" onSubmit={handleSubmit}>
           <p className="dashboard-kicker text-xs uppercase tracking-[0.18em] text-blue-300/90">
@@ -298,6 +300,34 @@ export default function Profile() {
             <Link className="nav-button nav-button-secondary" to={publicProfilePath}>
               View public profile
             </Link>
+          </div>
+
+          <div style={{
+            marginTop: "40px",
+            paddingTop: "30px",
+            borderTop: "1px solid rgba(71, 85, 105, 0.2)",
+            display: "grid",
+            gridTemplateColumns: "repeat(2, 1fr)",
+            gap: "20px"
+          }}>
+            <div style={{
+              padding: "16px",
+              background: "rgba(99, 102, 241, 0.1)",
+              borderRadius: "10px",
+              border: "1px solid rgba(99, 102, 241, 0.2)"
+            }}>
+              <p style={{fontSize: "12px", color: "#94a3b8", textTransform: "uppercase", marginBottom: "8px"}}>Followers</p>
+              <p style={{fontSize: "28px", fontWeight: "700", color: "#818cf8"}}>{user?.followersCount || 0}</p>
+            </div>
+            <div style={{
+              padding: "16px",
+              background: "rgba(168, 85, 247, 0.1)",
+              borderRadius: "10px",
+              border: "1px solid rgba(168, 85, 247, 0.2)"
+            }}>
+              <p style={{fontSize: "12px", color: "#94a3b8", textTransform: "uppercase", marginBottom: "8px"}}>Following</p>
+              <p style={{fontSize: "28px", fontWeight: "700", color: "#a855f7"}}>{user?.followingCount || 0}</p>
+            </div>
           </div>
         </form>
 

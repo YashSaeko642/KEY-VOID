@@ -2,11 +2,14 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const path = require("path");
 
 const connectDB = require("./src/config/db");
 const authRoutes = require("./src/routers/authRoutes");
 const profileRoutes = require("./src/routers/profileRoutes");
 const followerRoutes = require("./src/routers/followerRoutes");
+const postRoutes = require("./src/routers/postRoutes");
+const { securityHeaders, validateInput } = require("./src/middleware/securityMiddleware");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -22,11 +25,17 @@ app.use(
   })
 );
 app.use(express.json({ limit: "6mb" }));
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// Security middleware
+app.use(securityHeaders);
+app.use(validateInput);
 
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/profiles", profileRoutes);
 app.use("/api/followers", followerRoutes);
+app.use("/api/posts", postRoutes);
 
 app.get("/", (req, res) => {
   res.send("KeyVoid API Running");

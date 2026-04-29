@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
-import { getFollowers, followUser, unfollowUser, getFollowStatus } from "../../services/api";
-import { useAuth } from "../../src/context/useAuth";
+import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { getFollowers, followUser, unfollowUser, getFollowStatus } from "../services/api";
+import { useAuth } from "../src/context/useAuth";
 
 export default function FollowersList({ userId, isOpen, onClose }) {
   const { user, isAuthenticated } = useAuth();
@@ -13,31 +14,41 @@ export default function FollowersList({ userId, isOpen, onClose }) {
 
   const ITEMS_PER_PAGE = 10;
 
-  useEffect(() => {
-    if (isOpen) {
-      loadFollowers(0);
-    }
-  }, [isOpen, userId]);
+  const loadFollowStatus = useCallback(async (followersList) => {
+    try {
+      const statusEntries = await Promise.all(
+        followersList.map(async (follower) => {
+          try {
+            const res = await getFollowStatus(follower.id);
+            return [follower.id, res.data];
+          } catch {
+            return null;
+          }
+        })
+      );
 
-  const loadFollowers = async (pageNum) => {
+      setFollowStatus(Object.fromEntries(statusEntries.filter(Boolean)));
+    } catch (err) {
+      console.error("Error loading follow status:", err);
+    }
+  }, []);
+
+  const loadFollowers = useCallback(async (pageNum) => {
+    if (!userId) return;
+
     setLoading(true);
     setError("");
 
     try {
       const response = await getFollowers(userId, ITEMS_PER_PAGE, pageNum * ITEMS_PER_PAGE);
-      
-      if (pageNum === 0) {
-        setFollowers(response.data.followers || []);
-      } else {
-        setFollowers(prev => [...prev, ...(response.data.followers || [])]);
-      }
-      
+      const nextFollowers = response.data.followers || [];
+
+      setFollowers(prev => (pageNum === 0 ? nextFollowers : [...prev, ...nextFollowers]));
       setTotal(response.data.total || 0);
       setPage(pageNum);
 
-      // Load follow status if authenticated
-      if (isAuthenticated && response.data.followers?.length > 0) {
-        await loadFollowStatus(response.data.followers);
+      if (isAuthenticated && nextFollowers.length > 0) {
+        await loadFollowStatus(nextFollowers);
       }
     } catch (err) {
       setError("Failed to load followers");
@@ -45,25 +56,13 @@ export default function FollowersList({ userId, isOpen, onClose }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAuthenticated, loadFollowStatus, userId]);
 
-  const loadFollowStatus = async (followersList) => {
-    try {
-      const statusMap = {};
-      const promises = followersList.map(follower =>
-        getFollowStatus(follower.id)
-          .then(res => {
-            statusMap[follower.id] = res.data;
-          })
-          .catch(() => {})
-      );
-
-      await Promise.all(promises);
-      setFollowStatus(statusMap);
-    } catch (err) {
-      console.error("Error loading follow status:", err);
+  useEffect(() => {
+    if (isOpen) {
+      loadFollowers(0);
     }
-  };
+  }, [isOpen, loadFollowers]);
 
   const handleFollowToggle = async (follower) => {
     if (!isAuthenticated) {
@@ -136,7 +135,7 @@ export default function FollowersList({ userId, isOpen, onClose }) {
           <div className="divide-y divide-slate-700">
             {followers.map(follower => (
               <div key={follower.id} className="flex items-center gap-3 p-4 hover:bg-slate-800/50 transition-colors">
-                <a href={`/u/${follower.username}`} className="flex items-center gap-3 flex-1 min-w-0">
+                <Link to={`/u/${encodeURIComponent(follower.username)}`} className="flex items-center gap-3 flex-1 min-w-0">
                   {follower.avatarUrl ? (
                     <img
                       src={follower.avatarUrl}
@@ -156,7 +155,7 @@ export default function FollowersList({ userId, isOpen, onClose }) {
                       {follower.isCreator ? "Creator" : "Listener"}
                     </p>
                   </div>
-                </a>
+                </Link>
 
                 {isAuthenticated && follower.id !== user?.id && (
                   <button

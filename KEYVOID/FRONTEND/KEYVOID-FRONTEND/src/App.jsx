@@ -5,6 +5,7 @@ import AppHeader from "../components/AppHeader";
 import AuthHeader from "../components/AuthHeader";
 import Navbar from "../components/Navbar";
 import ProtectedRoute from "../components/ProtectedRoute";
+import RainEffect from "../components/RainEffect";
 import CreatorHub from "../pages/CreatorHub";
 import Dashboard from "../pages/Dashboard";
 import Home from "../pages/Home";
@@ -13,10 +14,11 @@ import Profile from "../pages/Profile";
 import PublicProfile from "../pages/PublicProfile";
 import Search from "../pages/Search";
 import { AuthProvider } from "./context/AuthContext";
+import Feed from "../pages/Feed";
 import "./App.css";
 
 const AUTH_ROUTES = ["/login"];
-const APP_ROUTES = ["/dashboard", "/creator", "/admin", "/profile", "/search"];
+const APP_ROUTES = ["/dashboard", "/creator", "/admin", "/profile", "/search","/feed"];
 
 function AppLayout() {
   const location = useLocation();
@@ -38,6 +40,7 @@ function AppLayout() {
       {isAuthRoute ? <AuthHeader /> : null}
       {isAppRoute ? <AppHeader /> : null}
       {!isAuthRoute && !isAppRoute ? <Navbar /> : null}
+      <RainEffect />
 
       <main className={mainClassName}>
         <Routes>
@@ -77,6 +80,13 @@ function AppLayout() {
           />
           <Route path="/search" element={<Search />} />
           <Route path="/u/:username" element={<PublicProfile />} />
+          <Route path="/feed"
+        element={
+      <ProtectedRoute>
+        <Feed />
+      </ProtectedRoute>
+      }
+    />
         </Routes>
       </main>
     </div>

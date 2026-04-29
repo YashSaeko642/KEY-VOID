@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import GoogleAuthButton from "../components/GoogleAuthButton";
+import RainEffect from "../components/RainEffect";
 import { useAuth } from "../src/context/useAuth";
 
 const ROLE_OPTIONS = [
@@ -54,7 +55,7 @@ export default function Login() {
       return;
     }
 
-    navigate(location.state?.from?.pathname || "/dashboard", { replace: true });
+    navigate(location.state?.from?.pathname || "/feed", { replace: true });
   }
 
   async function handleProfileSubmit(event) {
@@ -77,11 +78,12 @@ export default function Login() {
       return;
     }
 
-    navigate(location.state?.from?.pathname || "/dashboard", { replace: true });
+    navigate(location.state?.from?.pathname || "/feed", { replace: true });
   }
 
   return (
     <section className="auth-page">
+      <RainEffect />
       <div className="auth-panel auth-panel-onboard">
         <div className="auth-copy">
           <p className="auth-kicker text-xs uppercase tracking-[0.18em] text-blue-300/90">
