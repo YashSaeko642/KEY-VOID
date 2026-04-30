@@ -78,7 +78,7 @@ function validateInput(req, res, next) {
   const contentLength = parseInt(req.headers["content-length"] || "0", 10);
   const contentType = String(req.headers["content-type"] || "");
   const maxPayloadBytes = contentType.includes("multipart/form-data")
-    ? 30 * 1024 * 1024
+    ? 120 * 1024 * 1024
     : 1024 * 1024;
 
   // Check for overly large payloads.

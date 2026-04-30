@@ -49,6 +49,22 @@ const postMediaUpload = multer({
   }
 });
 
+const REEL_MEDIA_LIMIT_BYTES = 100 * 1024 * 1024; // 100 MB
+const reelMediaUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: REEL_MEDIA_LIMIT_BYTES,
+    files: 1
+  },
+  fileFilter(req, file, callback) {
+    if (!ALLOWED_POST_MEDIA_TYPES.includes(file.mimetype)) {
+      return callback(new Error("Reel media must be PNG, JPG, WEBP, GIF, MP4, WEBM, or MOV"));
+    }
+
+    return callback(null, true);
+  }
+});
+
 /**
  * Error handler middleware for image upload failures
  * Catches multer validation errors and returns formatted response
@@ -76,5 +92,6 @@ function handleUploadError(error, req, res, next) {
 module.exports = {
   handleUploadError,
   imageUpload,
-  postMediaUpload
+  postMediaUpload,
+  reelMediaUpload
 };

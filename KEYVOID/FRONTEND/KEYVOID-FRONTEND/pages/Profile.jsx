@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import API from "../services/api";
-import RainEffect from "../components/RainEffect";
 import { useAuth } from "../src/context/useAuth";
 
 const EMPTY_FORM = {
@@ -190,7 +189,6 @@ export default function Profile() {
 
   return (
     <section className="dashboard-page">
-      <RainEffect />
       <div className="profile-layout">
         <form className="dashboard-panel profile-editor" onSubmit={handleSubmit}>
           <p className="dashboard-kicker text-xs uppercase tracking-[0.18em] text-blue-300/90">

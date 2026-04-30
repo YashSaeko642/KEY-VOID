@@ -166,21 +166,26 @@ function PostCard({ post, onPostDeleted }) {
       {showDeleteModal && (
         <div className="delete-modal-overlay" onClick={() => setShowDeleteModal(false)}>
           <div className="delete-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Delete Post?</h3>
-            <p>This action cannot be undone.</p>
+            <div className="delete-modal-header">
+              <span className="delete-modal-title">Delete Post?</span>
+              <span className="delete-modal-status">This action cannot be undone.</span>
+            </div>
+            <p className="delete-modal-copy">
+              Are you sure you want to remove this post from your feed? It will be permanently deleted for everyone.
+            </p>
             <div className="modal-actions">
               <button 
                 className="modal-cancel" 
                 onClick={() => setShowDeleteModal(false)}
               >
-                Cancel
+                Keep Post
               </button>
               <button 
                 className="modal-delete" 
                 onClick={handleDeletePost}
                 disabled={isDeleting}
               >
-                {isDeleting ? "Deleting..." : "Delete"}
+                {isDeleting ? "Deleting..." : "Delete Forever"}
               </button>
             </div>
           </div>

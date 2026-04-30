@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import API, { followUser, unfollowUser, getFollowStatus } from "../services/api";
-import RainEffect from "../components/RainEffect";
 import { useAuth } from "../src/context/useAuth";
 
 export default function PublicProfile() {
@@ -86,7 +85,6 @@ export default function PublicProfile() {
   if (status === "loading") {
     return (
       <section className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 py-12 px-4">
-        <RainEffect />
         <div className="mx-auto max-w-4xl">
           <p className="text-slate-400">Loading profile...</p>
         </div>
@@ -97,7 +95,6 @@ export default function PublicProfile() {
   if (status === "error") {
     return (
       <section className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 py-12 px-4">
-        <RainEffect />
         <div className="mx-auto max-w-4xl text-center">
           <h1 className="text-3xl font-bold text-slate-50 mb-4">Profile Not Found</h1>
           <p className="text-slate-400 mb-6">{message}</p>
@@ -119,7 +116,6 @@ export default function PublicProfile() {
       padding: "40px 20px",
       fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
     }}>
-      <RainEffect />
       <div style={{maxWidth: "900px", margin: "0 auto"}}>
         {/* Banner */}
         {profile.bannerUrl && (

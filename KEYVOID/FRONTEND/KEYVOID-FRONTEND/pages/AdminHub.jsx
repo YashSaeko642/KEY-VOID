@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import API from "../services/api";
-import RainEffect from "../components/RainEffect";
 import { useAuth } from "../src/context/useAuth";
 
 export default function AdminHub() {
@@ -36,7 +35,6 @@ export default function AdminHub() {
 
   return (
     <section className="dashboard-page">
-      <RainEffect />
       <div className="dashboard-panel">
         <p className="dashboard-kicker text-xs uppercase tracking-[0.18em] text-blue-300/90">
           Admin access

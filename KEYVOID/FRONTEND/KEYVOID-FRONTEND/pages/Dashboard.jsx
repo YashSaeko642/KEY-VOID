@@ -2,7 +2,6 @@ import { useAuth } from "../src/context/useAuth";
 import { Link } from "react-router-dom";
 import { useCallback, useEffect, useState } from "react";
 import API from "../services/api";
-import RainEffect from "../components/RainEffect";
 import PostCard from "../components/PostCard";
 
 export default function Dashboard() {

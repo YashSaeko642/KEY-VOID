@@ -13,12 +13,13 @@ import Login from "../pages/Login";
 import Profile from "../pages/Profile";
 import PublicProfile from "../pages/PublicProfile";
 import Search from "../pages/Search";
+import Reels from "../pages/Reels";
 import { AuthProvider } from "./context/AuthContext";
 import Feed from "../pages/Feed";
 import "./App.css";
 
 const AUTH_ROUTES = ["/login"];
-const APP_ROUTES = ["/dashboard", "/creator", "/admin", "/profile", "/search","/feed"];
+const APP_ROUTES = ["/dashboard", "/creator", "/admin", "/profile", "/search","/feed", "/reels"];
 
 function AppLayout() {
   const location = useLocation();
@@ -37,10 +38,10 @@ function AppLayout() {
 
   return (
     <div className={shellClassName}>
+      <RainEffect />
       {isAuthRoute ? <AuthHeader /> : null}
       {isAppRoute ? <AppHeader /> : null}
       {!isAuthRoute && !isAppRoute ? <Navbar /> : null}
-      <RainEffect />
 
       <main className={mainClassName}>
         <Routes>
@@ -87,6 +88,7 @@ function AppLayout() {
       </ProtectedRoute>
       }
     />
+          <Route path="/reels" element={<Reels />} />
         </Routes>
       </main>
     </div>

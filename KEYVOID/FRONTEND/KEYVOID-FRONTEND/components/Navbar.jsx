@@ -31,6 +31,11 @@ export default function Navbar() {
           </Link>
         ) : null}
         {isAuthenticated ? (
+          <Link className="text-sm text-slate-300" to="/reels">
+            Reels
+          </Link>
+        ) : null}
+        {isAuthenticated ? (
           <Link className="text-sm text-slate-300" to="/profile">
             Profile
           </Link>
