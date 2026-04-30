@@ -107,6 +107,11 @@ const userSchema = new mongoose.Schema(
       type: [String],
       default: []
     },
+    featuredContent: {
+      type: [mongoose.Schema.Types.ObjectId],
+      ref: "Post",
+      default: []
+    },
     isCreator: {
       type: Boolean,
       default: undefined

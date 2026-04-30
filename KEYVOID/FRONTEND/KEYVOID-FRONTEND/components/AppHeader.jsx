@@ -6,6 +6,7 @@ const baseNavItems = [
   { path: "/", label: "Home" },
   { path: "/dashboard", label: "Dashboard" },
   { path: "/feed", label: "Feed" },
+  { path: "/reels", label: "Reels" },
   { path: "/search", label: "Search" },
   { path: "/profile", label: "Profile" }
 ];
