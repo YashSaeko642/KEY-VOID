@@ -16,21 +16,35 @@ const ROLE_OPTIONS = [
   }
 ];
 
+const INITIAL_FORM = {
+  email: "",
+  password: "",
+  confirmPassword: "",
+  username: "",
+  role: "user"
+};
+
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { googleAuth, loading } = useAuth();
+  const { googleAuth, localLogin, localRegister, loading } = useAuth();
+  const [mode, setMode] = useState("login");
   const [error, setError] = useState("");
   const [pendingGoogleCredential, setPendingGoogleCredential] = useState("");
-  const [formData, setFormData] = useState({
-    username: "",
-    role: "user"
-  });
+  const [formData, setFormData] = useState(INITIAL_FORM);
   const isCompletingProfile = Boolean(pendingGoogleCredential);
+  const isSignup = mode === "signup";
 
   function handleChange(event) {
     const { name, value } = event.target;
     setFormData((current) => ({ ...current, [name]: value }));
+  }
+
+  function resetForm(newMode) {
+    setMode(newMode);
+    setError("");
+    setPendingGoogleCredential("");
+    setFormData(INITIAL_FORM);
   }
 
   async function handleGoogleSuccess(googleResponse) {
@@ -46,6 +60,7 @@ export default function Login() {
         ...current,
         username: result.googleProfile?.suggestedUsername || current.username
       }));
+      setMode("signup");
       return;
     }
 
@@ -57,12 +72,12 @@ export default function Login() {
     navigate(location.state?.from?.pathname || "/feed", { replace: true });
   }
 
-  async function handleProfileSubmit(event) {
+  async function handleGoogleProfileSubmit(event) {
     event.preventDefault();
     setError("");
 
     if (!pendingGoogleCredential) {
-      setError("Please continue with Google first");
+      setError("Please continue with Google first.");
       return;
     }
 
@@ -80,6 +95,43 @@ export default function Login() {
     navigate(location.state?.from?.pathname || "/feed", { replace: true });
   }
 
+  async function handleLocalSubmit(event) {
+    event.preventDefault();
+    setError("");
+
+    if (isSignup) {
+      if (formData.password !== formData.confirmPassword) {
+        setError("Passwords do not match.");
+        return;
+      }
+
+      const result = await localRegister({
+        email: formData.email,
+        password: formData.password,
+        confirmPassword: formData.confirmPassword,
+        username: formData.username,
+        role: formData.role
+      });
+
+      if (!result.success) {
+        setError(result.message);
+        return;
+      }
+    } else {
+      const result = await localLogin({
+        email: formData.email,
+        password: formData.password
+      });
+
+      if (!result.success) {
+        setError(result.message);
+        return;
+      }
+    }
+
+    navigate(location.state?.from?.pathname || "/feed", { replace: true });
+  }
+
   return (
     <section className="auth-page">
       <div className="auth-panel auth-panel-onboard">
@@ -87,22 +139,45 @@ export default function Login() {
           <p className="auth-kicker text-xs uppercase tracking-[0.18em] text-blue-300/90">
             Welcome to KeyVoid
           </p>
+
+          <div className="auth-mode-tabs">
+            <button
+              type="button"
+              className={`auth-mode-tab ${mode === "login" ? "auth-mode-tab-active" : ""}`}
+              onClick={() => resetForm("login")}
+            >
+              Sign in
+            </button>
+            <button
+              type="button"
+              className={`auth-mode-tab ${mode === "signup" ? "auth-mode-tab-active" : ""}`}
+              onClick={() => resetForm("signup")}
+            >
+              Sign up
+            </button>
+          </div>
+
           <h1 className="font-['Michroma'] text-[clamp(2rem,4vw,3.4rem)] leading-tight text-slate-50">
-            {isCompletingProfile ? "Finish your KeyVoid profile." : "Continue into KeyVoid."}
+            {isCompletingProfile
+              ? "Finish your KeyVoid profile"
+              : isSignup
+                ? "Create your KeyVoid account"
+                : "Sign in to KeyVoid"}
           </h1>
+
           <p className="text-slate-300/80">
             {isCompletingProfile
               ? "Choose the name people will see and whether this account is for listening or creating."
-              : "Sign in with Google first. New accounts will choose a display name and account type after verification."}
+              : isSignup
+                ? "Sign up with email or continue with Google to join as a listener or creator."
+                : "Sign in with email or Google to continue."}
           </p>
-
-          <div className="auth-copy-note">
-            <span className="auth-copy-badge">Google Verified</span>
-            <p>Your Google account handles identity. Your display name and role stay inside KeyVoid.</p>
-          </div>
         </div>
 
-        <form className="auth-form auth-form-onboard" onSubmit={handleProfileSubmit}>
+        <form
+          className="auth-form auth-form-onboard"
+          onSubmit={isCompletingProfile ? handleGoogleProfileSubmit : handleLocalSubmit}
+        >
           {isCompletingProfile ? (
             <>
               <label className="auth-field">
@@ -144,11 +219,116 @@ export default function Login() {
                 })}
               </div>
             </>
-          ) : null}
+          ) : (
+            <>
+              <label className="auth-field">
+                <span className="text-sm text-slate-300/80">Email address</span>
+                <input
+                  autoComplete="email"
+                  name="email"
+                  onChange={handleChange}
+                  placeholder="you@example.com"
+                  required
+                  type="email"
+                  value={formData.email}
+                />
+              </label>
+
+              <label className="auth-field">
+                <span className="text-sm text-slate-300/80">Password</span>
+                <input
+                  autoComplete={isSignup ? "new-password" : "current-password"}
+                  minLength="8"
+                  name="password"
+                  onChange={handleChange}
+                  placeholder="Enter your password"
+                  required
+                  type="password"
+                  value={formData.password}
+                />
+              </label>
+
+              {isSignup ? (
+                <>
+                  <label className="auth-field">
+                    <span className="text-sm text-slate-300/80">Confirm password</span>
+                    <input
+                      autoComplete="new-password"
+                      minLength="8"
+                      name="confirmPassword"
+                      onChange={handleChange}
+                      placeholder="Confirm your password"
+                      required
+                      type="password"
+                      value={formData.confirmPassword}
+                    />
+                  </label>
+
+                  <label className="auth-field">
+                    <span className="text-sm text-slate-300/80">Display name</span>
+                    <input
+                      autoComplete="nickname"
+                      maxLength="24"
+                      minLength="3"
+                      name="username"
+                      onChange={handleChange}
+                      placeholder="What should people call you?"
+                      required
+                      type="text"
+                      value={formData.username}
+                    />
+                  </label>
+
+                  <div className="auth-role-grid" role="radiogroup" aria-label="Account type">
+                    {ROLE_OPTIONS.map((option) => {
+                      const isSelected = formData.role === option.value;
+
+                      return (
+                        <label
+                          key={option.value}
+                          className={`auth-role-card ${isSelected ? "auth-role-card-active" : ""}`}
+                        >
+                          <input
+                            checked={isSelected}
+                            className="auth-role-input"
+                            name="role"
+                            onChange={handleChange}
+                            type="radio"
+                            value={option.value}
+                          />
+                          <span className="auth-role-label">{option.label}</span>
+                          <span className="auth-role-description">{option.description}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : null}
+            </>
+          )}
 
           {error ? <p className="auth-error">{error}</p> : null}
 
-          {isCompletingProfile ? (
+          {!isCompletingProfile ? (
+            <>
+              <button className="auth-submit" disabled={loading} type="submit">
+                {loading ? "Working..." : isSignup ? "Create account" : "Sign in"}
+              </button>
+
+              <div className="auth-divider auth-divider-compact">
+                <span />
+                <p>{isSignup ? "Or sign up with Google" : "Or sign in with Google"}</p>
+                <span />
+              </div>
+
+              <GoogleAuthButton
+                disabled={loading}
+                onError={() => setError("Google sign-in was cancelled or blocked")}
+                onSuccess={handleGoogleSuccess}
+                text="continue_with"
+              />
+            </>
+          ) : (
             <div className="auth-inline-actions">
               <button className="auth-submit" disabled={loading} type="submit">
                 {loading ? "Creating account..." : "Create account"}
@@ -165,31 +345,23 @@ export default function Login() {
                 Use another Google account
               </button>
             </div>
-          ) : (
-            <div className="auth-google-shell">
-              <div className="auth-divider auth-divider-compact">
-                <span />
-                <p>Continue with Google</p>
-                <span />
-              </div>
-
-              <GoogleAuthButton
-                disabled={loading}
-                onError={() => setError("Google sign-in was cancelled or blocked")}
-                onSuccess={handleGoogleSuccess}
-                text="continue_with"
-              />
-            </div>
           )}
+
+          {!isCompletingProfile ? (
+            <p className="auth-meta">
+              {isSignup ? (
+                <>Already have an account? <button type="button" className="auth-link" onClick={() => resetForm("login")}>Sign in</button>.</>
+              ) : (
+                <>New to KeyVoid? <button type="button" className="auth-link" onClick={() => resetForm("signup")}>Create an account</button>.</>
+              )}
+            </p>
+          ) : null}
 
           {isCompletingProfile ? (
             <p className="auth-hint">
-              Display names can use letters, numbers, spaces, dots, underscores, and hyphens.
+              Your Google account is verified. Choose how you want to appear in KeyVoid.
             </p>
           ) : null}
-          <p className="auth-meta">
-            Prefer browsing first? <Link to="/">Return home</Link>
-          </p>
         </form>
       </div>
     </section>

@@ -126,6 +126,49 @@ export function AuthProvider({ children }) {
     }
   }
 
+  async function localLogin({ email, password }) {
+    setLoading(true);
+
+    try {
+      const { data } = await API.post("/auth/login", { email, password });
+      setToken(data.token);
+      setUser(data.user);
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.response?.data?.msg || "Login failed"
+      };
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function localRegister({ email, password, confirmPassword, username, role = "user" }) {
+    setLoading(true);
+
+    try {
+      const { data } = await API.post("/auth/register", {
+        email,
+        password,
+        confirmPassword,
+        username,
+        role
+      });
+
+      setToken(data.token);
+      setUser(data.user);
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.response?.data?.msg || "Registration failed"
+      };
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function logout() {
     setLoading(true);
 
@@ -164,6 +207,8 @@ export function AuthProvider({ children }) {
         return allowedRoles.includes(user.role);
       },
       googleAuth,
+      localLogin,
+      localRegister,
       updateUser,
       logout
     }),

@@ -5,6 +5,7 @@ import { useAuth } from "../src/context/useAuth";
 const baseNavItems = [
   { path: "/", label: "Home" },
   { path: "/dashboard", label: "Dashboard" },
+  { path: "/music", label: "Music" },
   { path: "/feed", label: "Feed" },
   { path: "/reels", label: "Reels" },
   { path: "/search", label: "Search" },

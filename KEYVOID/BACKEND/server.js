@@ -5,10 +5,12 @@ const cors = require("cors");
 const path = require("path");
 
 const connectDB = require("./src/config/db");
+const { initGridFS } = require("./src/utils/gridfsUtils");
 const authRoutes = require("./src/routers/authRoutes");
 const profileRoutes = require("./src/routers/profileRoutes");
 const followerRoutes = require("./src/routers/followerRoutes");
 const postRoutes = require("./src/routers/postRoutes");
+const audioRoutes = require("./src/routers/audioRoutes");
 const { securityHeaders, validateInput } = require("./src/middleware/securityMiddleware");
 
 const app = express();
@@ -37,6 +39,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/profiles", profileRoutes);
 app.use("/api/followers", followerRoutes);
 app.use("/api/posts", postRoutes);
+app.use("/api/audio", audioRoutes);
 
 app.get("/", (req, res) => {
   res.send("KeyVoid API Running");
@@ -45,6 +48,7 @@ app.get("/", (req, res) => {
 const startServer = async () => {
   try {
     await connectDB();
+    initGridFS(require("mongoose").connection);
 
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);

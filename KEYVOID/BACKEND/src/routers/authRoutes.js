@@ -3,6 +3,8 @@ const router = express.Router();
 
 const {
   googleAuth,
+  localLogin,
+  localRegister,
   refreshSession,
   logout,
   getCurrentUser,
@@ -12,6 +14,8 @@ const {
 const { authRateLimiter } = require("../middleware/authRateLimiter");
 const { protect, authorizeRoles } = require("../middleware/authMiddleware");
 
+router.post("/login", authRateLimiter, localLogin);
+router.post("/register", authRateLimiter, localRegister);
 router.post("/google", authRateLimiter, googleAuth);
 router.post("/refresh", refreshSession);
 router.post("/logout", logout);

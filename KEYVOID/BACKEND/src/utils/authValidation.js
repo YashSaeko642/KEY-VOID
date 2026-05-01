@@ -40,6 +40,96 @@ function validateDisplayName(username = "") {
   };
 }
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function validateEmail(email = "") {
+  const normalized = String(email || "").trim().toLowerCase();
+
+  if (!normalized) {
+    return { valid: false, msg: "Email address is required" };
+  }
+
+  if (!EMAIL_REGEX.test(normalized)) {
+    return { valid: false, msg: "Please provide a valid email address" };
+  }
+
+  return { valid: true, value: normalized };
+}
+
+function validatePassword(password = "") {
+  if (!password) {
+    return { valid: false, msg: "Password is required" };
+  }
+
+  if (password.length < 8) {
+    return { valid: false, msg: "Password must be at least 8 characters" };
+  }
+
+  if (password.length > 100) {
+    return { valid: false, msg: "Password must be 100 characters or fewer" };
+  }
+
+  return { valid: true, value: password };
+}
+
+function validateLocalLogin({ email = "", password = "" }) {
+  const emailValidation = validateEmail(email);
+  const passwordValidation = validatePassword(password);
+
+  if (!emailValidation.valid) {
+    return { valid: false, msg: emailValidation.msg };
+  }
+
+  if (!passwordValidation.valid) {
+    return { valid: false, msg: passwordValidation.msg };
+  }
+
+  return {
+    valid: true,
+    value: {
+      email: emailValidation.value,
+      password: passwordValidation.value
+    }
+  };
+}
+
+function validateLocalRegistration({ email = "", password = "", confirmPassword = "", username = "", role = "user" }) {
+  const emailValidation = validateEmail(email);
+  const passwordValidation = validatePassword(password);
+  const usernameValidation = validateDisplayName(username);
+  const roleValidation = normalizeRole(role);
+
+  if (!emailValidation.valid) {
+    return { valid: false, msg: emailValidation.msg };
+  }
+
+  if (!passwordValidation.valid) {
+    return { valid: false, msg: passwordValidation.msg };
+  }
+
+  if (password !== confirmPassword) {
+    return { valid: false, msg: "Passwords do not match" };
+  }
+
+  if (!usernameValidation.valid) {
+    return { valid: false, msg: usernameValidation.msg };
+  }
+
+  if (!roleValidation.valid) {
+    return { valid: false, msg: roleValidation.msg };
+  }
+
+  return {
+    valid: true,
+    value: {
+      email: emailValidation.value,
+      password: passwordValidation.value,
+      username: usernameValidation.value,
+      role: roleValidation.value
+    }
+  };
+}
+
 function validateGoogleProfileInput({ username = "", role = "user" }) {
   const usernameValidation = validateDisplayName(username);
   const roleValidation = normalizeRole(role);
@@ -64,5 +154,9 @@ function validateGoogleProfileInput({ username = "", role = "user" }) {
 module.exports = {
   normalizeRole,
   validateDisplayName,
+  validateEmail,
+  validatePassword,
+  validateLocalLogin,
+  validateLocalRegistration,
   validateGoogleProfileInput
 };

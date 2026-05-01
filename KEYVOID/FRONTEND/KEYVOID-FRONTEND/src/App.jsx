@@ -3,6 +3,7 @@ import { GoogleOAuthProvider } from "@react-oauth/google";
 import AdminHub from "../pages/AdminHub";
 import AppHeader from "../components/AppHeader";
 import AuthHeader from "../components/AuthHeader";
+import BottomPlayer from "../components/BottomPlayer";
 import Navbar from "../components/Navbar";
 import ProtectedRoute from "../components/ProtectedRoute";
 import RainEffect from "../components/RainEffect";
@@ -14,12 +15,14 @@ import Profile from "../pages/Profile";
 import PublicProfile from "../pages/PublicProfile";
 import Search from "../pages/Search";
 import Reels from "../pages/Reels";
+import Music from "../pages/Music";
 import { AuthProvider } from "./context/AuthContext";
+import { PlayerProvider } from "./context/PlayerContext";
 import Feed from "../pages/Feed";
 import "./App.css";
 
 const AUTH_ROUTES = ["/login"];
-const APP_ROUTES = ["/dashboard", "/creator", "/admin", "/profile", "/search","/feed", "/reels"];
+const APP_ROUTES = ["/dashboard", "/creator", "/admin", "/profile", "/search","/feed", "/reels", "/music"];
 
 function AppLayout() {
   const location = useLocation();
@@ -82,15 +85,17 @@ function AppLayout() {
           <Route path="/search" element={<Search />} />
           <Route path="/u/:username" element={<PublicProfile />} />
           <Route path="/feed"
-        element={
-      <ProtectedRoute>
-        <Feed />
-      </ProtectedRoute>
-      }
-    />
+            element={
+              <ProtectedRoute>
+                <Feed />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/music" element={<Music />} />
           <Route path="/reels" element={<Reels />} />
         </Routes>
       </main>
+      <BottomPlayer />
     </div>
   );
 }
@@ -100,9 +105,11 @@ function App() {
   const isGoogleConfigured = googleClientId.includes(".apps.googleusercontent.com");
   const appTree = (
     <AuthProvider>
-      <BrowserRouter>
-        <AppLayout />
-      </BrowserRouter>
+      <PlayerProvider>
+        <BrowserRouter>
+          <AppLayout />
+        </BrowserRouter>
+      </PlayerProvider>
     </AuthProvider>
   );
 
