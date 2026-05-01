@@ -5,6 +5,7 @@ const cors = require("cors");
 const path = require("path");
 
 const connectDB = require("./src/config/db");
+const { initGridFS } = require("./src/utils/gridfsUtils");
 const authRoutes = require("./src/routers/authRoutes");
 const profileRoutes = require("./src/routers/profileRoutes");
 const followerRoutes = require("./src/routers/followerRoutes");
@@ -47,6 +48,7 @@ app.get("/", (req, res) => {
 const startServer = async () => {
   try {
     await connectDB();
+    initGridFS(require("mongoose").connection);
 
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);

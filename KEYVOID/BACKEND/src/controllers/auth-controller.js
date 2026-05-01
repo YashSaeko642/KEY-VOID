@@ -1,8 +1,13 @@
+const bcrypt = require("bcrypt");
 const { OAuth2Client } = require("google-auth-library");
 const User = require("../models/User");
 const RefreshToken = require("../models/RefreshToken");
 const { logAuthEvent } = require("../utils/auditLogger");
-const { validateGoogleProfileInput } = require("../utils/authValidation");
+const {
+  validateGoogleProfileInput,
+  validateLocalLogin,
+  validateLocalRegistration
+} = require("../utils/authValidation");
 const {
   ACCESS_TOKEN_TTL,
   hashToken,
@@ -17,6 +22,8 @@ const {
   clearRefreshTokenCookie,
   getCookieValue
 } = require("../utils/cookieUtils");
+
+const PASSWORD_SALT_ROUNDS = 12;
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -258,6 +265,118 @@ exports.googleAuth = async (req, res) => {
   } catch (error) {
     console.error("Google auth failed:", error.message);
     return res.status(500).json({ msg: "Unable to continue with Google right now" });
+  }
+};
+
+exports.localLogin = async (req, res) => {
+  try {
+    const email = String(req.body?.email || "").toLowerCase().trim();
+    const password = String(req.body?.password || "");
+    const validation = validateLocalLogin({ email, password });
+
+    if (!validation.valid) {
+      return res.status(400).json({ msg: validation.msg });
+    }
+
+    const user = await User.findOne({ email }).select("+password");
+
+    if (!user || !user.password) {
+      return res.status(401).json({ msg: "Invalid email or password" });
+    }
+
+    if (user.authProvider === "google") {
+      return res.status(400).json({ msg: "This email is registered with Google. Use Google sign-in." });
+    }
+
+    const passwordMatch = await bcrypt.compare(password, user.password);
+
+    if (!passwordMatch) {
+      return res.status(401).json({ msg: "Invalid email or password" });
+    }
+
+    const sessionPayload = await issueSession(user, req, res);
+
+    await logAuthEvent({
+      user: user._id,
+      email: user.email,
+      action: "login_success",
+      success: true,
+      req,
+      metadata: {
+        role: sessionPayload.user.role
+      }
+    });
+
+    return res.json(sessionPayload);
+  } catch (error) {
+    console.error("Local login failed:", error.message);
+    return res.status(500).json({ msg: "Unable to login right now" });
+  }
+};
+
+exports.localRegister = async (req, res) => {
+  try {
+    const email = String(req.body?.email || "").toLowerCase().trim();
+    const password = String(req.body?.password || "");
+    const confirmPassword = String(req.body?.confirmPassword || "");
+    const username = String(req.body?.username || "");
+    const role = String(req.body?.role || "user");
+    const validation = validateLocalRegistration({
+      email,
+      password,
+      confirmPassword,
+      username,
+      role
+    });
+
+    if (!validation.valid) {
+      return res.status(400).json({ msg: validation.msg });
+    }
+
+    const { email: normalizedEmail, password: validatedPassword, username: requestedUsername, role: requestedRole } = validation.value;
+
+    const existingEmailUser = await User.findOne({ email: normalizedEmail });
+    if (existingEmailUser) {
+      if (existingEmailUser.authProvider === "google") {
+        return res.status(409).json({ msg: "That email is already registered with Google. Use Google sign-in." });
+      }
+
+      return res.status(409).json({ msg: "That email is already registered" });
+    }
+
+    const usernameExists = await User.findOne({ username: new RegExp(`^${escapeRegex(requestedUsername)}$`, "i") });
+    if (usernameExists) {
+      return res.status(409).json({ msg: "That display name is already taken" });
+    }
+
+    const passwordHash = await bcrypt.hash(validatedPassword, PASSWORD_SALT_ROUNDS);
+
+    const user = await User.create({
+      username: requestedUsername,
+      email: normalizedEmail,
+      password: passwordHash,
+      authProvider: "local",
+      emailVerified: true,
+      role: requestedRole
+    });
+
+    const sessionPayload = await issueSession(user, req, res);
+
+    await logAuthEvent({
+      user: user._id,
+      email: user.email,
+      action: "register_success",
+      success: true,
+      req,
+      metadata: {
+        role: sessionPayload.user.role
+      }
+    });
+
+    return res.status(201).json(sessionPayload);
+  } catch (error) {
+    console.error("Local registration failed:", error.message);
+    return res.status(500).json({ msg: "Unable to create account right now" });
   }
 };
 

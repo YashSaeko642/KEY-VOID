@@ -1,64 +1,96 @@
-const axios = require("axios");
+const Audio = require("../models/Audio");
+const { getGridFSBucket, getFileFromGridFS } = require("../utils/gridfsUtils");
+const mongoose = require("mongoose");
 
 exports.getLibrary = async (req, res) => {
   try {
-    const apiKey = String(process.env.PIXABAY_API_KEY || "").trim();
-    if (!apiKey) {
-      return res.status(500).json({ msg: "Pixabay API key not configured" });
+    const tracks = await Audio.find({ isPublic: true })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    if (tracks.length === 0) {
+      return res.json({ tracks: [], message: "Library is empty. Upload music files to get started." });
     }
 
-    const response = await axios.get("https://pixabay.com/api/audio/", {
-      params: {
-        key: apiKey,
-        q: "music",
-        per_page: 20
+    const tracksWithUrls = tracks.map((track) => ({
+      id: track._id.toString(),
+      title: track.title,
+      artist: track.artist,
+      genre: track.genre,
+      duration: track.duration,
+      url: `/api/audio/stream/${track._id}`,
+      filename: track.filename,
+      source: "library"
+    }));
+
+    return res.json({ tracks: tracksWithUrls });
+  } catch (error) {
+    console.error("Error fetching library:", error.message);
+    return res.status(500).json({ msg: "Unable to fetch music library" });
+  }
+};
+
+exports.streamTrack = async (req, res) => {
+  try {
+    const { trackId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(trackId)) {
+      return res.status(400).json({ msg: "Invalid track ID" });
+    }
+
+    const audio = await Audio.findById(trackId);
+    if (!audio) {
+      return res.status(404).json({ msg: "Track not found" });
+    }
+
+    const bucket = getGridFSBucket();
+    const downloadStream = bucket.openDownloadStream(new mongoose.Types.ObjectId(audio.gridFsId));
+
+    res.setHeader("Content-Type", audio.mimeType || "audio/mpeg");
+    res.setHeader("Content-Disposition", `inline; filename="${audio.filename}"`);
+    res.setHeader("Cache-Control", "public, max-age=604800");
+
+    downloadStream.on("error", (error) => {
+      console.error("Stream error:", error.message);
+      if (!res.headersSent) {
+        res.status(500).json({ msg: "Unable to stream track" });
       }
     });
 
-    const tracks = response.data.hits.map((hit) => ({
-      id: `pixabay-${hit.id}`,
-      title: hit.tags.split(",")[0]?.trim() || "Untitled",
-      artist: "Pixabay Audio",
-      url: hit.audio,
-      license: "Pixabay License",
-      source: "library",
-      genre: hit.tags.split(",")[1]?.trim() || "Ambient"
-    }));
-
-    return res.json({ tracks });
+    downloadStream.pipe(res);
   } catch (error) {
-    console.error("Error fetching from Pixabay:", error.response?.status, error.response?.data || error.message);
+    console.error("Error streaming track:", error.message);
+    if (!res.headersSent) {
+      res.status(500).json({ msg: "Unable to stream track" });
+    }
+  }
+};
 
-    const fallbackTracks = [
-      {
-        id: "fallback-1",
-        title: "KeyVoid metal Beat",
-        artist: "KeyVoid Studio",
-        url: "https://pixabay.com/music/search/metal/",
-        license: "Public sample",
-        source: "fallback",
-        genre: "Metal"
-      },
-      {
-        id: "fallback-2",
-        title: "KeyVoid rock Loop",
-        artist: "KeyVoid Studio",
-        url: "https://file-examples.com/wp-content/uploads/2017/11/file_example_MP3_1MG.mp3",
-        license: "Public sample",
-        source: "fallback",
-        genre: "Rock"
-      },
-      {
-        id: "fallback-3",
-        title: "KeyVoid Demo Track",
-        artist: "KeyVoid Studio",
-        url: "https://file-examples.com/wp-content/uploads/2017/11/file_example_MP3_2MG.mp3",
-        license: "Public sample",
-        source: "fallback",
-        genre: "Synth"
-      }
-    ];
+exports.getTrackMetadata = async (req, res) => {
+  try {
+    const { trackId } = req.params;
 
-    return res.json({ tracks: fallbackTracks, fallback: true });
+    if (!mongoose.Types.ObjectId.isValid(trackId)) {
+      return res.status(400).json({ msg: "Invalid track ID" });
+    }
+
+    const audio = await Audio.findById(trackId).lean();
+    if (!audio) {
+      return res.status(404).json({ msg: "Track not found" });
+    }
+
+    return res.json({
+      id: audio._id.toString(),
+      title: audio.title,
+      artist: audio.artist,
+      genre: audio.genre,
+      duration: audio.duration,
+      filename: audio.filename,
+      fileSize: audio.fileSize,
+      createdAt: audio.createdAt
+    });
+  } catch (error) {
+    console.error("Error fetching metadata:", error.message);
+    return res.status(500).json({ msg: "Unable to fetch track metadata" });
   }
 };

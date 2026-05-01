@@ -974,6 +974,46 @@
   gap: 1rem;
 }
 
+.auth-mode-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.auth-mode-tab {
+  padding: 0.9rem 1rem;
+  border-radius: 16px;
+  border: 1px solid rgba(129, 150, 214, 0.14);
+  background: rgba(12, 19, 37, 0.85);
+  color: #d9e2ff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 180ms ease, background 180ms ease;
+}
+
+.auth-mode-tab-active {
+  border-color: rgba(138, 161, 255, 0.36);
+  background: rgba(27, 37, 74, 0.95);
+}
+
+.auth-mode-tab:hover {
+  border-color: rgba(129, 150, 214, 0.3);
+}
+
+.auth-link {
+  border: none;
+  background: transparent;
+  color: #a18fff;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.auth-link:hover {
+  text-decoration: underline;
+}
+
 .auth-form-onboard {
   align-content: start;
 }
