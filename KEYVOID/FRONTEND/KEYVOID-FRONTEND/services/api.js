@@ -27,4 +27,6 @@ export const getFollowing = (userId, limit = 10, skip = 0) =>
   API.get(`/followers/${userId}/following`, { params: { limit, skip } });
 export const getFollowStatus = (userId) => API.get(`/followers/${userId}/status`);
 
+export const getAudioLibrary = () => API.get("/audio/library");
+
 export default API;

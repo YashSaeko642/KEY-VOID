@@ -213,6 +213,7 @@
 .app-main {
   width: min(1520px, calc(100% - 2rem));
   margin: 0 auto;
+  padding-bottom: 140px;
 }
 
 .app-main-auth {

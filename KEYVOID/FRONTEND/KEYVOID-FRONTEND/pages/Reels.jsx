@@ -1,5 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Heart, MessageCircle, Send, Share2, Volume2, VolumeX, Play, Pause } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Heart,
+  MessageCircle,
+  Send,
+  Share2,
+  Volume2,
+  VolumeX,
+  Play,
+  Pause
+} from "lucide-react";
 import { useAuth } from "../src/context/useAuth";
 import API, { getApiErrorMessage } from "../services/api";
 import { getRelativeTime } from "../src/utils/formatters";
@@ -47,6 +58,20 @@ function ReelCard({ reel }) {
   useEffect(() => {
     setComments((reel.comments || []).filter((comment) => !comment.isDeleted));
   }, [reel.comments]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+
+    setIsPlaying(false);
+    setShowComments(false);
+    setCommentText("");
+    setCommentError("");
+
+    if (video) {
+      video.pause();
+      video.currentTime = 0;
+    }
+  }, [reelId]);
 
   // Video controls
   const togglePlay = useCallback(() => {
@@ -316,11 +341,11 @@ function ReelCard({ reel }) {
 
 export default function Reels() {
   const [reels, setReels] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
   const [hasNext, setHasNext] = useState(true);
-  const loadMoreTrigger = useRef(null);
 
   const fetchReels = useCallback(async (pageNum = 1) => {
     try {
@@ -328,56 +353,88 @@ export default function Reels() {
       setError(null);
 
       const res = await API.get("/posts/reels", {
-        params: { page: pageNum, limit: 8 }
+        params: { page: pageNum, limit: 5 }
       });
 
       const reelsData = res.data.posts || res.data;
       const pagination = res.data.pagination || {};
 
+      const newReels = Array.isArray(reelsData) ? reelsData : [];
+
       setReels((prev) => {
-        const newReels = Array.isArray(reelsData) ? reelsData : [];
-        const combined = pageNum === 1 ? newReels : [...prev, ...newReels];
-        return combined.length > 24 ? combined.slice(combined.length - 24) : combined;
+        const merged = pageNum === 1 ? newReels : [...prev, ...newReels];
+        const seen = new Set();
+
+        return merged.filter((item) => {
+          if (!item?._id || seen.has(item._id)) return false;
+          seen.add(item._id);
+          return true;
+        });
       });
 
       setHasNext(pagination.hasNext || false);
       setPage(pageNum);
+      return newReels;
     } catch (err) {
       console.error("Failed to fetch reels:", err);
       setError(getApiErrorMessage(err, "Failed to load reels. Please try again."));
-      setReels([]);
       setHasNext(false);
+      return [];
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  const loadMoreReels = useCallback(() => {
-    if (!isLoading && hasNext) {
-      fetchReels(page + 1);
-    }
-  }, [isLoading, hasNext, page, fetchReels]);
+  const currentReel = reels[currentIndex];
+  const canGoPrevious = currentIndex > 0;
+  const canGoNext = currentIndex < reels.length - 1 || hasNext;
 
   useEffect(() => {
     fetchReels(1);
   }, [fetchReels]);
 
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting && hasNext && !isLoading) {
-          fetchReels(page + 1);
-        }
-      },
-      { rootMargin: "220px" }
-    );
+    // Prefetch next batch when approaching end of cache
+    if (reels.length - currentIndex <= 2 && hasNext && !isLoading) {
+      fetchReels(page + 1);
+    }
+  }, [currentIndex, reels.length, hasNext, isLoading, page, fetchReels]);
 
-    if (loadMoreTrigger.current) {
-      observer.observe(loadMoreTrigger.current);
+  const goToPreviousReel = useCallback(() => {
+    setCurrentIndex((index) => Math.max(index - 1, 0));
+  }, []);
+
+  const goToNextReel = useCallback(async () => {
+    if (currentIndex < reels.length - 1) {
+      setCurrentIndex((index) => index + 1);
+      return;
     }
 
-    return () => observer.disconnect();
-  }, [fetchReels, hasNext, isLoading, page]);
+    if (!hasNext || isLoading) return;
+
+    const nextPageReels = await fetchReels(page + 1);
+    if (nextPageReels.length > 0) {
+      setCurrentIndex((index) => index + 1);
+    }
+  }, [currentIndex, fetchReels, hasNext, isLoading, page, reels.length]);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        goToPreviousReel();
+      }
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        goToNextReel();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [goToNextReel, goToPreviousReel]);
 
   return (
     <div className="reels-page">
@@ -389,12 +446,39 @@ export default function Reels() {
           </div>
         )}
 
-        {reels.map((reel) => (
-          <ReelCard
-            key={reel._id}
-            reel={reel}
-          />
-        ))}
+        {currentReel && (
+          <div className="reels-stage">
+            <ReelCard key={currentReel._id} reel={currentReel} />
+
+            <div className="reel-navigation" aria-label="Reel navigation">
+              <button
+                type="button"
+                onClick={goToPreviousReel}
+                disabled={!canGoPrevious}
+                className="reel-nav-btn"
+                aria-label="Previous reel"
+                title="Previous reel"
+              >
+                <ChevronUp size={28} />
+              </button>
+
+              <span className="reel-position">
+                {currentIndex + 1}/{Math.max(reels.length, currentIndex + 1)}
+              </span>
+
+              <button
+                type="button"
+                onClick={goToNextReel}
+                disabled={!canGoNext || isLoading}
+                className="reel-nav-btn"
+                aria-label="Next reel"
+                title="Next reel"
+              >
+                <ChevronDown size={28} />
+              </button>
+            </div>
+          </div>
+        )}
 
         {isLoading && (
           <div className="reels-loading">
@@ -402,20 +486,6 @@ export default function Reels() {
             <p>Loading more reels...</p>
           </div>
         )}
-
-        {!isLoading && hasNext && reels.length > 0 && (
-          <div className="reels-pagination">
-            <button
-              className="reels-load-more"
-              onClick={() => fetchReels(page + 1)}
-              disabled={isLoading}
-            >
-              Load more reels
-            </button>
-          </div>
-        )}
-
-        <div ref={loadMoreTrigger} className="reels-load-trigger" />
 
         {!hasNext && reels.length > 0 && (
           <div className="reels-end">
