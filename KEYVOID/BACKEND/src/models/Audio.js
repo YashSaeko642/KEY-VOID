@@ -17,6 +17,24 @@ const audioSchema = new mongoose.Schema(
       default: "Uncategorized",
       trim: true
     },
+    audienceTags: {
+      type: [
+        {
+          tag: {
+            type: String,
+            required: true,
+            trim: true
+          },
+          voters: [
+            {
+              type: mongoose.Schema.Types.ObjectId,
+              ref: "User"
+            }
+          ]
+        }
+      ],
+      default: []
+    },
     duration: {
       type: Number,
       default: 0

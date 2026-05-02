@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import API, { getApiErrorMessage } from "../../services/api";
+import API, { addAudioTag, getApiErrorMessage } from "../../services/api";
 
 const PlayerContext = createContext(null);
 
@@ -57,10 +57,15 @@ export function PlayerProvider({ children }) {
     }
 
     const results = library.filter((track) => {
+      const tagMatch = Array.isArray(track.audienceTags)
+        ? track.audienceTags.some((tag) => String(tag.tag || "").toLowerCase().includes(query))
+        : false;
+
       return (
         String(track.title || "").toLowerCase().includes(query) ||
         String(track.artist || "").toLowerCase().includes(query) ||
-        String(track.genre || "").toLowerCase().includes(query)
+        String(track.genre || "").toLowerCase().includes(query) ||
+        tagMatch
       );
     });
 
@@ -106,6 +111,33 @@ export function PlayerProvider({ children }) {
     const next = trackList[activeIndex + direction];
     if (next) {
       handleSelectTrack(next);
+    }
+  };
+
+  const submitTrackTag = async (tag) => {
+    if (!activeTrack || activeTrack.source === "local") {
+      setError("You can only tag tracks that are in the library.");
+      return;
+    }
+
+    try {
+      const response = await addAudioTag(activeTrack.id || activeTrack._id, tag);
+      const audienceTags = response.data.audienceTags || [];
+      setLibrary((prevLibrary) =>
+        prevLibrary.map((track) =>
+          (track.id === activeTrack.id || String(track.id) === String(activeTrack._id))
+            ? { ...track, audienceTags }
+            : track
+        )
+      );
+      setActiveTrack((prevTrack) =>
+        prevTrack && (prevTrack.id === activeTrack.id || String(prevTrack.id) === String(activeTrack._id))
+          ? { ...prevTrack, audienceTags }
+          : prevTrack
+      );
+      setError(null);
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Unable to add tag."));
     }
   };
 
@@ -182,6 +214,7 @@ export function PlayerProvider({ children }) {
         handleLocalFileChange,
         handleTogglePlay,
         handleSkip,
+        submitTrackTag,
         handleSeek,
         handleTimeUpdate,
         handleLoadedMetadata,

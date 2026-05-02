@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Search, Upload, Play, Pause, SkipBack, SkipForward, Disc3 } from "lucide-react";
 import { usePlayer } from "../src/context/PlayerContext";
+import { useAuth } from "../src/context/useAuth";
 import "./MusicPlayer.css";
 
 function formatTime(seconds = 0) {
@@ -27,14 +28,24 @@ export default function MusicPlayer() {
     setSearchQuery,
     handleLocalFileChange,
     handleTogglePlay,
-    handleSkip
+    handleSkip,
+    submitTrackTag
   } = usePlayer();
+  const { isAuthenticated } = useAuth();
+  const [tagInput, setTagInput] = useState("");
 
   const trackList = useMemo(() => [...filteredLibrary], [filteredLibrary]);
 
   const activeIndex = useMemo(() => {
     return trackList.findIndex((track) => getTrackId(track) === getTrackId(activeTrack));
   }, [trackList, activeTrack]);
+
+  const handleTagSubmit = async (event) => {
+    event.preventDefault();
+    if (!tagInput.trim()) return;
+    await submitTrackTag(tagInput.trim());
+    setTagInput("");
+  };
 
   return (
     <div className="music-page">
@@ -76,6 +87,33 @@ export default function MusicPlayer() {
                     </p>
                     <strong>{activeTrack?.title || "Pick a track to play"}</strong>
                     <p>{activeTrack?.artist || "Search or upload a file"}</p>
+                    {activeTrack?.audienceTags?.length > 0 ? (
+                      <div className="track-tag-list">
+                        {activeTrack.audienceTags.slice(0, 5).map((tag) => (
+                          <span key={tag.tag} className="track-tag">
+                            {tag.tag} {tag.count > 1 ? `(${tag.count})` : ""}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="track-tag-empty">No audience tags yet.</p>
+                    )}
+                    {isAuthenticated ? (
+                      <form className="tag-input-form" onSubmit={handleTagSubmit}>
+                        <input
+                          type="text"
+                          value={tagInput}
+                          onChange={(event) => setTagInput(event.target.value)}
+                          placeholder="Add a genre tag"
+                          maxLength={32}
+                        />
+                        <button type="submit" className="tag-submit-button">
+                          Add
+                        </button>
+                      </form>
+                    ) : (
+                      <p className="track-tag-hint">Login to tag this track.</p>
+                    )}
                   </div>
                   <div className="player-controls">
                     <button type="button" className="control-button" onClick={() => handleSkip(-1)} disabled={activeIndex <= 0}>

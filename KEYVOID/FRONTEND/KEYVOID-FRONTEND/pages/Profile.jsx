@@ -54,6 +54,7 @@ export default function Profile() {
             removeAvatar: false,
             removeBanner: false
           });
+          updateUser(data.profile);
           setStatus("ready");
         }
       } catch (error) {
@@ -301,32 +302,33 @@ export default function Profile() {
           </div>
 
           <div style={{
-            marginTop: "40px",
-            paddingTop: "30px",
-            borderTop: "1px solid rgba(71, 85, 105, 0.2)",
+            marginBottom: "32px",
             display: "grid",
-            gridTemplateColumns: "repeat(2, 1fr)",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
             gap: "20px"
           }}>
             <div style={{
-              padding: "16px",
+              padding: "20px",
               background: "rgba(99, 102, 241, 0.1)",
-              borderRadius: "10px",
-              border: "1px solid rgba(99, 102, 241, 0.2)"
+              borderRadius: "16px",
+              border: "1px solid rgba(99, 102, 241, 0.25)",
+              textAlign: "center"
             }}>
-              <p style={{fontSize: "12px", color: "#94a3b8", textTransform: "uppercase", marginBottom: "8px"}}>Followers</p>
-              <p style={{fontSize: "28px", fontWeight: "700", color: "#818cf8"}}>{user?.followersCount || 0}</p>
+              <p style={{fontSize: "12px", color: "#c7d2fe", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px"}}>Followers</p>
+              <p style={{fontSize: "36px", fontWeight: "700", color: "#818cf8", margin: 0}}>{user?.followersCount || 0}</p>
             </div>
             <div style={{
-              padding: "16px",
+              padding: "20px",
               background: "rgba(168, 85, 247, 0.1)",
-              borderRadius: "10px",
-              border: "1px solid rgba(168, 85, 247, 0.2)"
+              borderRadius: "16px",
+              border: "1px solid rgba(168, 85, 247, 0.25)",
+              textAlign: "center"
             }}>
-              <p style={{fontSize: "12px", color: "#94a3b8", textTransform: "uppercase", marginBottom: "8px"}}>Following</p>
-              <p style={{fontSize: "28px", fontWeight: "700", color: "#a855f7"}}>{user?.followingCount || 0}</p>
+              <p style={{fontSize: "12px", color: "#f3e8ff", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px"}}>Following</p>
+              <p style={{fontSize: "36px", fontWeight: "700", color: "#a855f7", margin: 0}}>{user?.followingCount || 0}</p>
             </div>
           </div>
+
         </form>
 
         <aside className="dashboard-panel profile-preview-panel">
