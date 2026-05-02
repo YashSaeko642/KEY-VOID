@@ -43,7 +43,9 @@ function buildUserPayload(user) {
     website: user.website || "",
     avatarUrl: user.avatarUrl || "",
     bannerUrl: user.bannerUrl || "",
-    favoriteGenres: user.favoriteGenres || []
+    favoriteGenres: user.favoriteGenres || [],
+    followersCount: user.followersCount || 0,
+    followingCount: user.followingCount || 0
   };
 }
 

@@ -1,6 +1,15 @@
 const Audio = require("../models/Audio");
-const { getGridFSBucket, getFileFromGridFS } = require("../utils/gridfsUtils");
+const { getGridFSBucket } = require("../utils/gridfsUtils");
 const mongoose = require("mongoose");
+
+const formatAudienceTags = (tags = []) => {
+  return tags
+    .map((item) => ({
+      tag: item.tag,
+      count: Array.isArray(item.voters) ? item.voters.length : 0
+    }))
+    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+};
 
 exports.getLibrary = async (req, res) => {
   try {
@@ -17,6 +26,7 @@ exports.getLibrary = async (req, res) => {
       title: track.title,
       artist: track.artist,
       genre: track.genre,
+      audienceTags: formatAudienceTags(track.audienceTags),
       duration: track.duration,
       url: `/api/audio/stream/${track._id}`,
       filename: track.filename,
@@ -84,6 +94,7 @@ exports.getTrackMetadata = async (req, res) => {
       title: audio.title,
       artist: audio.artist,
       genre: audio.genre,
+      audienceTags: formatAudienceTags(audio.audienceTags),
       duration: audio.duration,
       filename: audio.filename,
       fileSize: audio.fileSize,
@@ -92,5 +103,92 @@ exports.getTrackMetadata = async (req, res) => {
   } catch (error) {
     console.error("Error fetching metadata:", error.message);
     return res.status(500).json({ msg: "Unable to fetch track metadata" });
+  }
+};
+
+exports.addTrackTag = async (req, res) => {
+  try {
+    const { trackId } = req.params;
+    const { tag } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(trackId)) {
+      return res.status(400).json({ msg: "Invalid track ID" });
+    }
+
+    const normalizedTag = String(tag || "").trim();
+    if (!normalizedTag || normalizedTag.length > 32) {
+      return res.status(400).json({ msg: "Tag must be between 1 and 32 characters." });
+    }
+
+    const audio = await Audio.findById(trackId);
+    if (!audio) {
+      return res.status(404).json({ msg: "Track not found" });
+    }
+
+    const lowerTag = normalizedTag.toLowerCase();
+    const existingTag = audio.audienceTags.find((item) => item.tag.toLowerCase() === lowerTag);
+
+    if (existingTag) {
+      const alreadyTagged = existingTag.voters.some((voter) => voter.equals(req.user._id));
+      if (alreadyTagged) {
+        return res.status(400).json({ msg: "You already added this tag." });
+      }
+      existingTag.voters.push(req.user._id);
+    } else {
+      audio.audienceTags.push({ tag: normalizedTag, voters: [req.user._id] });
+    }
+
+    await audio.save();
+
+    return res.json({
+      audienceTags: formatAudienceTags(audio.audienceTags)
+    });
+  } catch (error) {
+    console.error("Error adding track tag:", error.message);
+    return res.status(500).json({ msg: "Unable to add tag to track" });
+  }
+};
+
+exports.removeTrackTag = async (req, res) => {
+  try {
+    const { trackId } = req.params;
+    const { tag } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(trackId)) {
+      return res.status(400).json({ msg: "Invalid track ID" });
+    }
+
+    const normalizedTag = String(tag || "").trim();
+    if (!normalizedTag) {
+      return res.status(400).json({ msg: "Tag is required." });
+    }
+
+    const audio = await Audio.findById(trackId);
+    if (!audio) {
+      return res.status(404).json({ msg: "Track not found" });
+    }
+
+    const lowerTag = normalizedTag.toLowerCase();
+    const tagIndex = audio.audienceTags.findIndex((item) => item.tag.toLowerCase() === lowerTag);
+
+    if (tagIndex === -1) {
+      return res.status(404).json({ msg: "Tag not found on this track." });
+    }
+
+    const voters = audio.audienceTags[tagIndex].voters.filter((voter) => !voter.equals(req.user._id));
+    if (voters.length === 0) {
+      audio.audienceTags.splice(tagIndex, 1);
+    } else {
+      audio.audienceTags[tagIndex].voters = voters;
+    }
+
+    await audio.save();
+
+    return res.json({
+      audienceTags: formatAudienceTags(audio.audienceTags)
+    });
+  } catch (error) {
+    console.error("Error removing track tag:", error.message);
+    return res.status(500).json({ msg: "Unable to remove tag from track" });
   }
 };

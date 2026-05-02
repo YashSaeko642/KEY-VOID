@@ -28,5 +28,7 @@ export const getFollowing = (userId, limit = 10, skip = 0) =>
 export const getFollowStatus = (userId) => API.get(`/followers/${userId}/status`);
 
 export const getAudioLibrary = () => API.get("/audio/library");
+export const addAudioTag = (trackId, tag) => API.post(`/audio/${trackId}/tags`, { tag });
+export const removeAudioTag = (trackId, tag) => API.delete(`/audio/${trackId}/tags`, { data: { tag } });
 
 export default API;
