@@ -1,12 +1,21 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../src/context/useAuth";
+import EnterVoidModal from "./EnterVoidModal";
+import "./Navbar.css";
 
 export default function Navbar() {
   const { hasRole, isAdmin, isAuthenticated, logout, user } = useAuth();
+  const [showVoidModal, setShowVoidModal] = useState(false);
 
   async function handleLogout() {
     await logout();
   }
+
+  const handleVoidSessionStart = (sessionId) => {
+    // Session has started, modal will close automatically
+    setShowVoidModal(false);
+  };
 
   return (
     <header className="site-header">
@@ -55,6 +64,18 @@ export default function Navbar() {
             Admin
           </Link>
         ) : null}
+        {isAuthenticated ? (
+          <button
+            className="void-nav-btn"
+            onClick={() => setShowVoidModal(true)}
+            type="button"
+            title="Enter the void for guided music discovery"
+          >
+            <span className="void-nav-btn-icon">🌌</span>
+            <span className="void-nav-btn-text">Enter Void</span>
+            <span className="void-nav-btn-glow"></span>
+          </button>
+        ) : null}
       </nav>
       <div className="nav-actions">
         {isAuthenticated ? (
@@ -67,6 +88,12 @@ export default function Navbar() {
           </Link>
         )}
       </div>
+
+      <EnterVoidModal
+        isOpen={showVoidModal}
+        onClose={() => setShowVoidModal(false)}
+        onSessionStart={handleVoidSessionStart}
+      />
     </header>
   );
 }
