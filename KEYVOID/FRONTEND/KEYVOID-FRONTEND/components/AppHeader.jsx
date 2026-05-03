@@ -1,6 +1,8 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useAuth } from "../src/context/useAuth";
+import EnterVoidModal from "./EnterVoidModal";
+import "./Navbar.css";
 
 const baseNavItems = [
   { path: "/", label: "Home" },
@@ -17,10 +19,15 @@ export default function AppHeader() {
   const navigate = useNavigate();
   const { hasRole, isAdmin, logout, user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
+  const [showVoidModal, setShowVoidModal] = useState(false);
 
   async function handleLogout() {
     await logout();
   }
+
+  const handleVoidSessionStart = (sessionId) => {
+    setShowVoidModal(false);
+  };
 
   function handleSearch(event) {
     event.preventDefault();
@@ -57,7 +64,7 @@ export default function AppHeader() {
           margin: "0 auto",
           padding: "16px 40px",
           display: "grid",
-          gridTemplateColumns: "auto auto 1fr auto auto",
+          gridTemplateColumns: "auto auto 1fr auto auto auto",
           gap: "24px",
           alignItems: "center"
         }}
@@ -188,22 +195,47 @@ export default function AppHeader() {
           </button>
         </form>
 
-        <button
-          onClick={handleLogout}
-          type="button"
+        <div
           style={{
-            padding: "10px 18px",
-            background: "rgba(239, 68, 68, 0.1)",
-            border: "1px solid rgba(239, 68, 68, 0.3)",
-            color: "#fca5a5",
-            borderRadius: "8px",
-            fontSize: "14px",
-            fontWeight: "600",
-            cursor: "pointer"
+            display: "flex",
+            gap: "12px",
+            alignItems: "center"
           }}
         >
-          Logout
-        </button>
+          <button
+            className="void-nav-btn"
+            onClick={() => setShowVoidModal(true)}
+            type="button"
+            title="Enter the void for guided music discovery"
+          >
+            <span className="void-nav-btn-icon">🌌</span>
+            <span className="void-nav-btn-text">Enter Void</span>
+            <span className="void-nav-btn-glow"></span>
+          </button>
+
+          <button
+            onClick={handleLogout}
+            type="button"
+            style={{
+              padding: "10px 18px",
+              background: "rgba(239, 68, 68, 0.1)",
+              border: "1px solid rgba(239, 68, 68, 0.3)",
+              color: "#fca5a5",
+              borderRadius: "8px",
+              fontSize: "14px",
+              fontWeight: "600",
+              cursor: "pointer"
+            }}
+          >
+            Logout
+          </button>
+        </div>
+
+        <EnterVoidModal
+          isOpen={showVoidModal}
+          onClose={() => setShowVoidModal(false)}
+          onSessionStart={handleVoidSessionStart}
+        />
       </div>
     </header>
   );

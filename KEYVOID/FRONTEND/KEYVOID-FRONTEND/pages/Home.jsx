@@ -1,3 +1,8 @@
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../src/context/useAuth";
+import EnterVoidModal from "../components/EnterVoidModal";
+
 const rainDrops = Array.from({ length: 120 }, (_, index) => ({
   id: index,
   style: {
@@ -41,6 +46,22 @@ const hoverCards = [
 ];
 
 export default function Home() {
+  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const [showVoidModal, setShowVoidModal] = useState(false);
+
+  const handleEnterVoid = () => {
+    if (!isAuthenticated) {
+      navigate("/login");
+    } else {
+      setShowVoidModal(true);
+    }
+  };
+
+  const handleVoidSessionStart = (sessionId) => {
+    setShowVoidModal(false);
+  };
+
   return (
     <section className="home-hero overflow-hidden">
       <div className="rain-layer" aria-hidden="true">
@@ -88,7 +109,12 @@ export default function Home() {
           </div>
 
           <div className="hero-actions">
-            <button type="button" className="primary-action">
+            <button
+              type="button"
+              className="primary-action"
+              onClick={handleEnterVoid}
+              title={!isAuthenticated ? "Log in to enter the void" : ""}
+            >
               Enter The Void
             </button>
             <button type="button" className="secondary-action">
@@ -136,6 +162,12 @@ export default function Home() {
           </article>
         ))}
       </div>
+
+      <EnterVoidModal
+        isOpen={showVoidModal}
+        onClose={() => setShowVoidModal(false)}
+        onSessionStart={handleVoidSessionStart}
+      />
     </section>
   );
 }

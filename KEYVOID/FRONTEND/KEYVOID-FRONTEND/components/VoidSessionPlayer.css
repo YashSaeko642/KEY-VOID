@@ -1,0 +1,350 @@
+.void-session-player {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.void-player-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(59, 130, 246, 0.15) 0%,
+    rgba(15, 23, 42, 0.95) 100%
+  );
+  pointer-events: none;
+}
+
+.void-player-container {
+  position: relative;
+  width: 90%;
+  max-width: 500px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 41, 59, 0.9) 100%);
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 40px rgba(59, 130, 246, 0.2);
+  pointer-events: auto;
+  animation: voidPop 0.5s ease-out;
+}
+
+@keyframes voidPop {
+  0% {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.void-player-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(96, 165, 250, 0.2);
+}
+
+/* Genre Notification */
+.void-notification {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  animation: slideDown 0.3s ease-out;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.void-notification-info {
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(96, 165, 250, 0.4);
+  color: rgba(96, 165, 250, 1);
+}
+
+.void-notification-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.void-notification-text {
+  color: rgba(226, 232, 240, 0.9);
+  font-weight: 500;
+}
+
+.void-session-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.void-mode-badge {
+  background: rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(96, 165, 250, 0.5);
+  color: rgba(96, 165, 250, 1);
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.void-session-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.7);
+}
+
+.void-session-stats .stat {
+  font-weight: 500;
+}
+
+.void-session-stats .separator {
+  opacity: 0.5;
+}
+
+.void-exit-btn {
+  background: none;
+  border: none;
+  color: rgba(226, 232, 240, 0.6);
+  font-size: 24px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.void-exit-btn:hover {
+  background: rgba(96, 165, 250, 0.1);
+  color: rgba(226, 232, 240, 1);
+}
+
+/* Now Playing Section */
+.void-now-playing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.void-album-art {
+  position: relative;
+  width: 200px;
+  height: 200px;
+}
+
+.void-album-placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(37, 99, 235, 0.2) 100%);
+  border: 2px solid rgba(96, 165, 250, 0.3);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 80px;
+  animation: voidFloat 3s ease-in-out infinite;
+}
+
+@keyframes voidFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+
+.void-pulse {
+  position: absolute;
+  inset: -8px;
+  border: 2px solid rgba(96, 165, 250, 0.5);
+  border-radius: 12px;
+  animation: voidPulse 2s ease-out infinite;
+}
+
+@keyframes voidPulse {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.15);
+  }
+}
+
+.void-track-info {
+  text-align: center;
+  width: 100%;
+}
+
+.void-track-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: rgba(226, 232, 240, 1);
+  margin: 0 0 8px 0;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.void-track-artist {
+  font-size: 14px;
+  color: rgba(226, 232, 240, 0.8);
+  margin: 0 0 4px 0;
+  font-weight: 500;
+}
+
+.void-track-genre {
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.6);
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Loading State */
+.void-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 32px 0;
+  color: rgba(226, 232, 240, 0.7);
+}
+
+.void-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(96, 165, 250, 0.2);
+  border-top: 3px solid rgba(96, 165, 250, 1);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Controls */
+.void-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.void-skip-btn,
+.void-exit-session-btn {
+  padding: 12px 24px;
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.void-skip-btn {
+  background: rgba(59, 130, 246, 0.1);
+  color: rgba(96, 165, 250, 1);
+}
+
+.void-skip-btn:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(96, 165, 250, 0.6);
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.3);
+}
+
+.void-skip-btn.disabled,
+.void-skip-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  color: rgba(226, 232, 240, 0.5);
+}
+
+.void-exit-session-btn {
+  background: rgba(239, 68, 68, 0.1);
+  color: rgba(248, 113, 113, 1);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.void-exit-session-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.5);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.2);
+}
+
+/* Footer */
+.void-player-footer {
+  text-align: center;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(96, 165, 250, 0.2);
+}
+
+.void-footer-text {
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.6);
+  margin: 0;
+}
+
+.void-footer-text strong {
+  color: rgba(96, 165, 250, 1);
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .void-player-container {
+    width: 95%;
+    padding: 24px;
+  }
+
+  .void-album-art {
+    width: 160px;
+    height: 160px;
+  }
+
+  .void-album-placeholder {
+    font-size: 60px;
+  }
+
+  .void-track-title {
+    font-size: 16px;
+  }
+}

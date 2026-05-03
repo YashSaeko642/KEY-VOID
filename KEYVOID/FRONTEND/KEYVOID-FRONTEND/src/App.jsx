@@ -16,8 +16,10 @@ import PublicProfile from "../pages/PublicProfile";
 import Search from "../pages/Search";
 import Reels from "../pages/Reels";
 import Music from "../pages/Music";
+import VoidSessionPlayer from "../components/VoidSessionPlayer";
 import { AuthProvider } from "./context/AuthContext";
 import { PlayerProvider } from "./context/PlayerContext";
+import { EnterVoidProvider } from "./context/EnterVoidContext";
 import Feed from "../pages/Feed";
 import "./App.css";
 
@@ -96,6 +98,7 @@ function AppLayout() {
         </Routes>
       </main>
       <BottomPlayer />
+      <VoidSessionPlayer />
     </div>
   );
 }
@@ -106,9 +109,11 @@ function App() {
   const appTree = (
     <AuthProvider>
       <PlayerProvider>
-        <BrowserRouter>
-          <AppLayout />
-        </BrowserRouter>
+        <EnterVoidProvider>
+          <BrowserRouter>
+            <AppLayout />
+          </BrowserRouter>
+        </EnterVoidProvider>
       </PlayerProvider>
     </AuthProvider>
   );
