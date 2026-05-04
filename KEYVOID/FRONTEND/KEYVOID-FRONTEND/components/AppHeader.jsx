@@ -47,17 +47,18 @@ export default function AppHeader() {
   ];
 
   return (
-    <header
-      style={{
-        position: "sticky",
-        top: 0,
-        zIndex: 40,
-        background: "linear-gradient(180deg, rgba(15, 23, 42, 0.95), rgba(15, 23, 42, 0.85))",
-        backdropFilter: "blur(20px)",
-        borderBottom: "1px solid rgba(71, 85, 105, 0.2)",
-        boxShadow: "0 4px 20px rgba(0, 0, 0, 0.3)"
-      }}
-    >
+    <>
+      <header
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 40,
+          background: "linear-gradient(180deg, rgba(15, 23, 42, 0.95), rgba(15, 23, 42, 0.85))",
+          backdropFilter: "blur(20px)",
+          borderBottom: "1px solid rgba(71, 85, 105, 0.2)",
+          boxShadow: "0 4px 20px rgba(0, 0, 0, 0.3)"
+        }}
+      >
       <div
         style={{
           maxWidth: "1400px",
@@ -231,12 +232,14 @@ export default function AppHeader() {
           </button>
         </div>
 
-        <EnterVoidModal
-          isOpen={showVoidModal}
-          onClose={() => setShowVoidModal(false)}
-          onSessionStart={handleVoidSessionStart}
-        />
       </div>
     </header>
+
+    <EnterVoidModal
+      isOpen={showVoidModal}
+      onClose={() => setShowVoidModal(false)}
+      onSessionStart={handleVoidSessionStart}
+    />
+    </>
   );
 }
