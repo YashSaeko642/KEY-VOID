@@ -1,6 +1,7 @@
 const Audio = require("../models/Audio");
 const { getGridFSBucket } = require("../utils/gridfsUtils");
 const mongoose = require("mongoose");
+const path = require("path");
 
 const formatAudienceTags = (tags = []) => {
   return tags
@@ -11,14 +12,60 @@ const formatAudienceTags = (tags = []) => {
     .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
 };
 
+const escapeRegex = (value) => String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 exports.getLibrary = async (req, res) => {
   try {
-    const tracks = await Audio.find({ isPublic: true })
-      .sort({ createdAt: -1 })
-      .lean();
+    const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 10, 1), 50);
+    const search = String(req.query.search || "").trim();
+    const skip = (page - 1) * limit;
+    const visibilityFilter = req.user
+      ? {
+          $or: [
+            { isPublic: true },
+            { uploadedBy: req.user._id }
+          ]
+        }
+      : { isPublic: true };
+    const query = { $and: [visibilityFilter] };
 
-    if (tracks.length === 0) {
-      return res.json({ tracks: [], message: "Library is empty. Upload music files to get started." });
+    if (search) {
+      const searchRegex = new RegExp(escapeRegex(search), "i");
+      query.$and.push({
+        $or: [
+          { title: searchRegex },
+          { artist: searchRegex },
+          { genre: searchRegex },
+          { "audienceTags.tag": searchRegex }
+        ]
+      });
+    }
+
+    const [tracks, total] = await Promise.all([
+      Audio.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Audio.countDocuments(query)
+    ]);
+
+    res.setHeader("Cache-Control", "private, max-age=60");
+
+    if (total === 0) {
+      return res.json({
+        tracks: [],
+        pagination: {
+          page,
+          limit,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: page > 1
+        },
+        message: search ? "No tracks match your search." : "Library is empty. Upload music files to get started."
+      });
     }
 
     const tracksWithUrls = tracks.map((track) => ({
@@ -33,7 +80,17 @@ exports.getLibrary = async (req, res) => {
       source: "library"
     }));
 
-    return res.json({ tracks: tracksWithUrls });
+    return res.json({
+      tracks: tracksWithUrls,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: skip + tracks.length < total,
+        hasPrev: page > 1
+      }
+    });
   } catch (error) {
     console.error("Error fetching library:", error.message);
     return res.status(500).json({ msg: "Unable to fetch music library" });
@@ -51,6 +108,10 @@ exports.streamTrack = async (req, res) => {
     const audio = await Audio.findById(trackId);
     if (!audio) {
       return res.status(404).json({ msg: "Track not found" });
+    }
+
+    if (!audio.isPublic && (!req.user || !audio.uploadedBy?.equals(req.user._id))) {
+      return res.status(403).json({ msg: "You do not have access to this track" });
     }
 
     const bucket = getGridFSBucket();
@@ -76,6 +137,70 @@ exports.streamTrack = async (req, res) => {
   }
 };
 
+exports.uploadUserTracks = async (req, res) => {
+  try {
+    const files = req.files || [];
+
+    if (files.length === 0) {
+      return res.status(400).json({ msg: "Select at least one audio file" });
+    }
+
+    const bucket = getGridFSBucket();
+    const uploadedTracks = [];
+
+    for (const file of files) {
+      const ext = path.extname(file.originalname || "") || ".mp3";
+      const baseName = path.basename(file.originalname || "Untitled", ext).trim() || "Untitled";
+      const filename = `${req.user._id}-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+
+      const gridFsId = await new Promise((resolve, reject) => {
+        const uploadStream = bucket.openUploadStream(filename, {
+          contentType: file.mimetype,
+          metadata: {
+            uploadedAt: new Date(),
+            uploadedBy: req.user._id,
+            originalName: file.originalname
+          }
+        });
+
+        uploadStream.on("error", reject);
+        uploadStream.on("finish", () => resolve(uploadStream.id));
+        uploadStream.end(file.buffer);
+      });
+
+      const audio = await Audio.create({
+        title: baseName,
+        artist: req.user.username || "My Uploads",
+        genre: "Uploads",
+        filename,
+        gridFsId,
+        fileSize: file.size,
+        mimeType: file.mimetype,
+        source: "user-upload",
+        isPublic: false,
+        uploadedBy: req.user._id
+      });
+
+      uploadedTracks.push({
+        id: audio._id.toString(),
+        _id: audio._id.toString(),
+        title: audio.title,
+        artist: audio.artist,
+        genre: audio.genre,
+        duration: audio.duration,
+        url: `/api/audio/stream/${audio._id}`,
+        filename: audio.filename,
+        source: audio.source
+      });
+    }
+
+    return res.status(201).json({ tracks: uploadedTracks });
+  } catch (error) {
+    console.error("Error uploading tracks:", error.message);
+    return res.status(500).json({ msg: "Unable to upload songs" });
+  }
+};
+
 exports.getTrackMetadata = async (req, res) => {
   try {
     const { trackId } = req.params;
@@ -87,6 +212,10 @@ exports.getTrackMetadata = async (req, res) => {
     const audio = await Audio.findById(trackId).lean();
     if (!audio) {
       return res.status(404).json({ msg: "Track not found" });
+    }
+
+    if (!audio.isPublic && (!req.user || String(audio.uploadedBy) !== String(req.user._id))) {
+      return res.status(403).json({ msg: "You do not have access to this track" });
     }
 
     return res.json({

@@ -1,7 +1,7 @@
 .app-shell {
   min-height: 100vh;
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 .site-header {
@@ -211,7 +211,7 @@
 }
 
 .app-main {
-  width: min(1520px, calc(100% - 2rem));
+  width: 100%;
   margin: 0 auto;
   padding-bottom: 140px;
 }
@@ -221,7 +221,12 @@
 }
 
 .app-main-app {
-  width: min(1180px, calc(100% - 2rem));
+  width: 100%;
+  max-width: none;
+}
+
+.app-main-home {
+  width: min(1520px, calc(100% - 2rem));
 }
 
 .home-hero {
@@ -780,7 +785,12 @@
   }
 
   .app-main {
-    width: min(100% - 1rem, 1180px);
+    width: 100%;
+  }
+
+  .app-main-auth,
+  .app-main-home {
+    width: calc(100% - 1rem);
   }
 
   .auth-header,

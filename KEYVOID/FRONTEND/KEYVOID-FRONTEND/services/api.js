@@ -27,8 +27,18 @@ export const getFollowing = (userId, limit = 10, skip = 0) =>
   API.get(`/followers/${userId}/following`, { params: { limit, skip } });
 export const getFollowStatus = (userId) => API.get(`/followers/${userId}/status`);
 
-export const getAudioLibrary = () => API.get("/audio/library");
+export const getAudioLibrary = ({ page = 1, limit = 10, search = "" } = {}) =>
+  API.get("/audio/library", { params: { page, limit, search } });
+export const uploadAudioTracks = (formData) =>
+  API.post("/audio/upload", formData, { headers: { "Content-Type": "multipart/form-data" } });
 export const addAudioTag = (trackId, tag) => API.post(`/audio/${trackId}/tags`, { tag });
 export const removeAudioTag = (trackId, tag) => API.delete(`/audio/${trackId}/tags`, { data: { tag } });
+export const getPlaylists = () => API.get("/playlists");
+export const getPlaylist = (playlistId) => API.get(`/playlists/${playlistId}`);
+export const createPlaylist = (formData) =>
+  API.post("/playlists/create", formData, { headers: { "Content-Type": "multipart/form-data" } });
+export const addTrackToPlaylist = (playlistId, trackId) => API.post("/playlists/add-track", { playlistId, trackId });
+export const removeTrackFromPlaylist = (playlistId, trackId) => API.post("/playlists/remove-track", { playlistId, trackId });
+export const toggleLikedTrack = (trackId) => API.post("/playlists/like", { trackId });
 
 export default API;

@@ -25,7 +25,7 @@ export default function AppHeader() {
     await logout();
   }
 
-  const handleVoidSessionStart = (sessionId) => {
+  const handleVoidSessionStart = () => {
     setShowVoidModal(false);
   };
 
@@ -61,13 +61,14 @@ export default function AppHeader() {
       >
       <div
         style={{
-          maxWidth: "1400px",
+          width: "100%",
+          maxWidth: "none",
           margin: "0 auto",
-          padding: "16px 40px",
-          display: "grid",
-          gridTemplateColumns: "auto auto 1fr auto auto auto",
-          gap: "24px",
-          alignItems: "center"
+          padding: "14px clamp(12px, 2vw, 32px)",
+          display: "flex",
+          gap: "12px",
+          alignItems: "center",
+          flexWrap: "wrap"
         }}
       >
         <Link
@@ -90,7 +91,9 @@ export default function AppHeader() {
             display: "flex",
             alignItems: "center",
             gap: "10px",
-            minWidth: 0
+            minWidth: 0,
+            flex: "0 1 auto",
+            flexWrap: "wrap"
           }}
         >
           <span
@@ -130,7 +133,9 @@ export default function AppHeader() {
             gap: "8px",
             alignItems: "center",
             justifyContent: "center",
-            flexWrap: "wrap"
+            flexWrap: "wrap",
+            flex: "1 1 420px",
+            minWidth: 0
           }}
         >
           {navItems.map((item) => (
@@ -164,7 +169,9 @@ export default function AppHeader() {
             border: "1px solid rgba(71, 85, 105, 0.4)",
             borderRadius: "12px",
             background: "rgba(30, 41, 59, 0.5)",
-            minWidth: "220px"
+            flex: "1 1 220px",
+            minWidth: "min(100%, 220px)",
+            maxWidth: "320px"
           }}
         >
           <input
@@ -200,7 +207,9 @@ export default function AppHeader() {
           style={{
             display: "flex",
             gap: "12px",
-            alignItems: "center"
+            alignItems: "center",
+            flex: "0 1 auto",
+            flexWrap: "wrap"
           }}
         >
           <button
