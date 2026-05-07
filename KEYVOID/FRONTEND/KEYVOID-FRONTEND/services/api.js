@@ -29,10 +29,14 @@ export const getFollowStatus = (userId) => API.get(`/followers/${userId}/status`
 
 export const getAudioLibrary = ({ page = 1, limit = 10, search = "" } = {}) =>
   API.get("/audio/library", { params: { page, limit, search } });
-export const uploadAudioTracks = (formData) =>
-  API.post("/audio/upload", formData, { headers: { "Content-Type": "multipart/form-data" } });
+export const streamAudioTrack = (trackId) => API.get(`/audio/stream/${trackId}`, { responseType: "blob" });
 export const addAudioTag = (trackId, tag) => API.post(`/audio/${trackId}/tags`, { tag });
 export const removeAudioTag = (trackId, tag) => API.delete(`/audio/${trackId}/tags`, { data: { tag } });
+export const uploadCreatorSongs = (formData) =>
+  API.post("/audio/upload", formData, { headers: { "Content-Type": "multipart/form-data" } });
+export const getMyAudioUploads = () => API.get("/audio/my-uploads");
+export const updateAudioTrack = (trackId, payload) => API.patch(`/audio/${trackId}`, payload);
+export const deleteAudioTrack = (trackId) => API.delete(`/audio/${trackId}`);
 export const getPlaylists = () => API.get("/playlists");
 export const getPlaylist = (playlistId) => API.get(`/playlists/${playlistId}`);
 export const createPlaylist = (formData) =>

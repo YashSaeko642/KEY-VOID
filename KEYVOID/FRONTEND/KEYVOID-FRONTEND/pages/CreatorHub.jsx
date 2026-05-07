@@ -1,13 +1,52 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Video, Upload, Play } from "lucide-react";
-import API, { getApiErrorMessage } from "../services/api";
+import { Music, Save, Trash2, Video, Upload, Play } from "lucide-react";
+import API, {
+  deleteAudioTrack,
+  getApiErrorMessage,
+  getMyAudioUploads,
+  updateAudioTrack,
+  uploadCreatorSongs
+} from "../services/api";
 import { useAuth } from "../src/context/useAuth";
+import { usePlayer } from "../src/context/PlayerContext";
+
+const MUSIC_CATEGORIES = [
+  "Metal",
+  "Blues",
+  "Electronic",
+  "Rock",
+  "Pop",
+  "Hip-Hop",
+  "Jazz",
+  "Classical",
+  "Folk",
+  "Country",
+  "R&B",
+  "Punk",
+  "Ambient",
+  "Indie"
+];
+
+function trackTagsToText(track) {
+  return (track?.audienceTags || []).map((tag) => tag.tag).join(", ");
+}
 
 export default function CreatorHub() {
   const { isAdmin, user } = useAuth();
+  const { refreshLibrary } = usePlayer();
   const [status, setStatus] = useState("checking");
   const [message, setMessage] = useState("");
+  const [songFiles, setSongFiles] = useState([]);
+  const [songTitle, setSongTitle] = useState("");
+  const [songArtist, setSongArtist] = useState(user?.username || "");
+  const [songCategory, setSongCategory] = useState(MUSIC_CATEGORIES[0]);
+  const [songTags, setSongTags] = useState("");
+  const [releaseType, setReleaseType] = useState("track");
+  const [isUploadingSongs, setIsUploadingSongs] = useState(false);
+  const [songNotice, setSongNotice] = useState({ type: "", message: "" });
+  const [myUploads, setMyUploads] = useState([]);
+  const [uploadEdits, setUploadEdits] = useState({});
 
   // Reel creation state
   const [reelText, setReelText] = useState("");
@@ -16,6 +55,107 @@ export default function CreatorHub() {
   const [isCreatingReel, setIsCreatingReel] = useState(false);
   const [reelError, setReelError] = useState("");
   const [reelNotice, setReelNotice] = useState({ type: "", message: "" });
+
+  const loadMyUploads = async () => {
+    try {
+      const { data } = await getMyAudioUploads();
+      const tracks = data.tracks || [];
+      setMyUploads(tracks);
+      setUploadEdits(Object.fromEntries(tracks.map((track) => [
+        track.id,
+        {
+          title: track.title || "",
+          artist: track.artist || "",
+          genre: track.genre || MUSIC_CATEGORIES[0],
+          tags: trackTagsToText(track),
+          releaseType: track.releaseType || "track",
+          isPublic: track.isPublic !== false
+        }
+      ])));
+    } catch (err) {
+      setSongNotice({ type: "error", message: getApiErrorMessage(err, "Unable to load your song uploads.") });
+    }
+  };
+
+  const handleSongFileChange = (event) => {
+    const files = Array.from(event.target.files || []);
+    const invalidFile = files.find((file) => !file.type.startsWith("audio/") || file.size > 30 * 1024 * 1024);
+
+    if (invalidFile) {
+      setSongNotice({ type: "error", message: "Each song must be an audio file under 30MB." });
+      event.target.value = "";
+      return;
+    }
+
+    setSongFiles(files);
+    setSongNotice({ type: "", message: "" });
+  };
+
+  const handleUploadSongs = async (event) => {
+    event.preventDefault();
+
+    if (songFiles.length === 0 || isUploadingSongs) {
+      setSongNotice({ type: "error", message: "Choose at least one audio file to upload." });
+      return;
+    }
+
+    try {
+      setIsUploadingSongs(true);
+      const formData = new FormData();
+      songFiles.forEach((file) => formData.append("songs", file));
+      formData.append("title", songTitle);
+      formData.append("artist", songArtist || user?.username || "Original Artist");
+      formData.append("genre", songCategory);
+      formData.append("tags", songTags);
+      formData.append("releaseType", releaseType);
+
+      const { data } = await uploadCreatorSongs(formData);
+      const uploadedCount = data.tracks?.length || songFiles.length;
+      setSongFiles([]);
+      setSongTitle("");
+      setSongTags("");
+      setSongNotice({ type: "success", message: `${uploadedCount} song${uploadedCount === 1 ? "" : "s"} uploaded to the music library.` });
+      await loadMyUploads();
+      refreshLibrary();
+    } catch (err) {
+      setSongNotice({ type: "error", message: getApiErrorMessage(err, "Unable to upload songs.") });
+    } finally {
+      setIsUploadingSongs(false);
+    }
+  };
+
+  const updateUploadEdit = (trackId, key, value) => {
+    setUploadEdits((prev) => ({
+      ...prev,
+      [trackId]: {
+        ...prev[trackId],
+        [key]: value
+      }
+    }));
+  };
+
+  const handleSaveUpload = async (trackId) => {
+    try {
+      const payload = uploadEdits[trackId];
+      await updateAudioTrack(trackId, payload);
+      setSongNotice({ type: "success", message: "Song details updated." });
+      await loadMyUploads();
+      refreshLibrary();
+    } catch (err) {
+      setSongNotice({ type: "error", message: getApiErrorMessage(err, "Unable to update song.") });
+    }
+  };
+
+  const handleDeleteUpload = async (trackId) => {
+    try {
+      await deleteAudioTrack(trackId);
+      setSongNotice({ type: "success", message: "Song deleted from the music library." });
+      await loadMyUploads();
+      refreshLibrary();
+    } catch (err) {
+      setSongNotice({ type: "error", message: getApiErrorMessage(err, "Unable to delete song.") });
+    }
+  };
 
   const clearReelMedia = () => {
     if (mediaPreviewUrl) {
@@ -107,6 +247,7 @@ export default function CreatorHub() {
     }
 
     checkCreatorAccess();
+    loadMyUploads();
 
     return () => {
       ignore = true;
@@ -159,6 +300,141 @@ export default function CreatorHub() {
                 View Feed
               </Link>
             </div>
+          </div>
+        </div>
+
+        <div className="dashboard-card" style={{ marginTop: "2rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
+            <Music size={24} color="#6366f1" />
+            <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: "600" }}>Upload Original Songs</h2>
+          </div>
+
+          {songNotice.message && (
+            <div style={{
+              background: songNotice.type === "success" ? "rgba(16, 185, 129, 0.12)" : "rgba(248, 113, 113, 0.12)",
+              border: `1px solid ${songNotice.type === "success" ? "rgba(16, 185, 129, 0.3)" : "rgba(248, 113, 113, 0.3)"}`,
+              color: songNotice.type === "success" ? "#10b981" : "#ef4444",
+              borderRadius: "10px",
+              padding: "14px 16px",
+              marginBottom: "16px",
+              fontSize: "14px"
+            }}>
+              {songNotice.message}
+            </div>
+          )}
+
+          <form onSubmit={handleUploadSongs} style={{ display: "grid", gap: "12px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
+              <input
+                value={songTitle}
+                onChange={(event) => setSongTitle(event.target.value)}
+                placeholder="Track, album, or EP name"
+                maxLength={100}
+                style={{ padding: "12px", borderRadius: "8px", border: "1px solid #374151", background: "#1f2937", color: "white" }}
+              />
+              <input
+                value={songArtist}
+                onChange={(event) => setSongArtist(event.target.value)}
+                placeholder="Artist name"
+                maxLength={80}
+                style={{ padding: "12px", borderRadius: "8px", border: "1px solid #374151", background: "#1f2937", color: "white" }}
+              />
+              <select
+                value={releaseType}
+                onChange={(event) => setReleaseType(event.target.value)}
+                style={{ padding: "12px", borderRadius: "8px", border: "1px solid #374151", background: "#1f2937", color: "white" }}
+              >
+                <option value="track">Track</option>
+                <option value="single">Single</option>
+                <option value="ep">EP</option>
+                <option value="album">Album</option>
+              </select>
+              <select
+                value={songCategory}
+                onChange={(event) => setSongCategory(event.target.value)}
+                style={{ padding: "12px", borderRadius: "8px", border: "1px solid #374151", background: "#1f2937", color: "white" }}
+              >
+                {MUSIC_CATEGORIES.map((category) => (
+                  <option key={category} value={category}>{category}</option>
+                ))}
+              </select>
+            </div>
+            <input
+              value={songTags}
+              onChange={(event) => setSongTags(event.target.value)}
+              placeholder="Tags, comma separated"
+              maxLength={180}
+              style={{ padding: "12px", borderRadius: "8px", border: "1px solid #374151", background: "#1f2937", color: "white" }}
+            />
+            <label style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              width: "fit-content",
+              padding: "12px 16px",
+              background: "#374151",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontSize: "14px",
+              color: "#e5e7eb"
+            }}>
+              <Upload size={16} />
+              {songFiles.length ? `${songFiles.length} audio file${songFiles.length === 1 ? "" : "s"} selected` : "Choose audio files"}
+              <input type="file" accept="audio/*" multiple onChange={handleSongFileChange} style={{ display: "none" }} />
+            </label>
+            <button
+              type="submit"
+              disabled={isUploadingSongs}
+              style={{
+                width: "fit-content",
+                background: isUploadingSongs ? "#374151" : "#6366f1",
+                color: "white",
+                border: "none",
+                padding: "12px 24px",
+                borderRadius: "8px",
+                fontWeight: "600",
+                cursor: isUploadingSongs ? "not-allowed" : "pointer"
+              }}
+            >
+              {isUploadingSongs ? "Uploading..." : "Upload to Library"}
+            </button>
+          </form>
+
+          <div style={{ display: "grid", gap: "12px", marginTop: "24px" }}>
+            <h3 style={{ margin: 0, fontSize: "1rem", color: "#e5e7eb" }}>Your uploads</h3>
+            {myUploads.length > 0 ? myUploads.map((track) => {
+              const edit = uploadEdits[track.id] || {};
+              return (
+                <div key={track.id} style={{ display: "grid", gap: "10px", padding: "12px", borderRadius: "8px", border: "1px solid #374151", background: "rgba(31, 41, 55, 0.62)" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "8px" }}>
+                    <input value={edit.title || ""} onChange={(event) => updateUploadEdit(track.id, "title", event.target.value)} style={{ padding: "10px", borderRadius: "8px", border: "1px solid #374151", background: "#111827", color: "white" }} />
+                    <input value={edit.artist || ""} onChange={(event) => updateUploadEdit(track.id, "artist", event.target.value)} style={{ padding: "10px", borderRadius: "8px", border: "1px solid #374151", background: "#111827", color: "white" }} />
+                    <select value={edit.genre || MUSIC_CATEGORIES[0]} onChange={(event) => updateUploadEdit(track.id, "genre", event.target.value)} style={{ padding: "10px", borderRadius: "8px", border: "1px solid #374151", background: "#111827", color: "white" }}>
+                      {MUSIC_CATEGORIES.map((category) => (
+                        <option key={category} value={category}>{category}</option>
+                      ))}
+                    </select>
+                    <select value={edit.releaseType || "track"} onChange={(event) => updateUploadEdit(track.id, "releaseType", event.target.value)} style={{ padding: "10px", borderRadius: "8px", border: "1px solid #374151", background: "#111827", color: "white" }}>
+                      <option value="track">Track</option>
+                      <option value="single">Single</option>
+                      <option value="ep">EP</option>
+                      <option value="album">Album</option>
+                    </select>
+                  </div>
+                  <input value={edit.tags || ""} onChange={(event) => updateUploadEdit(track.id, "tags", event.target.value)} placeholder="Tags" style={{ padding: "10px", borderRadius: "8px", border: "1px solid #374151", background: "#111827", color: "white" }} />
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    <button type="button" onClick={() => handleSaveUpload(track.id)} style={{ display: "inline-flex", alignItems: "center", gap: "6px", border: "0", borderRadius: "8px", padding: "9px 12px", background: "#6366f1", color: "white", cursor: "pointer" }}>
+                      <Save size={15} /> Save
+                    </button>
+                    <button type="button" onClick={() => handleDeleteUpload(track.id)} style={{ display: "inline-flex", alignItems: "center", gap: "6px", border: "0", borderRadius: "8px", padding: "9px 12px", background: "#7f1d1d", color: "white", cursor: "pointer" }}>
+                      <Trash2 size={15} /> Delete
+                    </button>
+                  </div>
+                </div>
+              );
+            }) : (
+              <p style={{ color: "#9ca3af", margin: 0 }}>No original songs uploaded yet.</p>
+            )}
           </div>
         </div>
 

@@ -57,6 +57,11 @@ const audioSchema = new mongoose.Schema(
       type: String,
       default: "audio/mpeg"
     },
+    releaseType: {
+      type: String,
+      enum: ["track", "single", "ep", "album"],
+      default: "track"
+    },
     source: {
       type: String,
       enum: ["library", "user-upload"],

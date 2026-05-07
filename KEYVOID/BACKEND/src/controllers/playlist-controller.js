@@ -28,6 +28,14 @@ const formatPlaylist = (playlist) => ({
   updatedAt: playlist.updatedAt
 });
 
+const accessibleTrackQuery = (trackId, userId) => ({
+  _id: trackId,
+  $or: [
+    { isPublic: true },
+    { uploadedBy: userId }
+  ]
+});
+
 const getOrCreateLikedPlaylist = async (userId) => {
   let playlist = await Playlist.findOne({ userId, type: "liked" });
 
@@ -147,13 +155,7 @@ exports.addTrackToPlaylist = async (req, res) => {
       return res.status(400).json({ msg: "Invalid track ID" });
     }
 
-    const track = await Audio.findOne({
-      _id: trackId,
-      $or: [
-        { isPublic: true },
-        { uploadedBy: req.user._id }
-      ]
-    });
+    const track = await Audio.findOne(accessibleTrackQuery(trackId, req.user._id));
     if (!track) {
       return res.status(404).json({ msg: "Track not found" });
     }
@@ -182,13 +184,7 @@ exports.toggleLikedTrack = async (req, res) => {
       return res.status(400).json({ msg: "Invalid track ID" });
     }
 
-    const track = await Audio.findOne({
-      _id: trackId,
-      $or: [
-        { isPublic: true },
-        { uploadedBy: req.user._id }
-      ]
-    });
+    const track = await Audio.findOne(accessibleTrackQuery(trackId, req.user._id));
 
     if (!track) {
       return res.status(404).json({ msg: "Track not found" });

@@ -15,6 +15,24 @@ function getTrackId(track) {
   return track?._id || track?.id || track?.url || "";
 }
 
+const DEFAULT_GENRE_TAGS = [
+  "Uploads",
+  "Metal",
+  "Blues",
+  "Electronic",
+  "Rock",
+  "Pop",
+  "Hip-Hop",
+  "Jazz",
+  "Classical",
+  "Folk",
+  "Country",
+  "R&B",
+  "Punk",
+  "Ambient",
+  "Indie"
+];
+
 export default function MusicPlayer() {
   const {
     filteredLibrary,
@@ -25,6 +43,7 @@ export default function MusicPlayer() {
     position,
     duration,
     pagination,
+    localTracks,
     isLibraryLoading,
     playlists,
     isPlaylistLoading,
@@ -44,7 +63,10 @@ export default function MusicPlayer() {
     submitTrackTag
   } = usePlayer();
   const { isAuthenticated } = useAuth();
-  const [tagInput, setTagInput] = useState("");
+  const [tagInput, setTagInput] = useState(DEFAULT_GENRE_TAGS[0]);
+  const [customTagInput, setCustomTagInput] = useState("");
+  const [uploadGenre, setUploadGenre] = useState(DEFAULT_GENRE_TAGS[0]);
+  const [customUploadGenre, setCustomUploadGenre] = useState("");
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [showCreatePlaylist, setShowCreatePlaylist] = useState(false);
   const [playlistName, setPlaylistName] = useState("");
@@ -68,9 +90,15 @@ export default function MusicPlayer() {
 
   const handleTagSubmit = async (event) => {
     event.preventDefault();
-    if (!tagInput.trim()) return;
-    await submitTrackTag(tagInput.trim());
-    setTagInput("");
+    const nextTag = tagInput === "Custom" ? customTagInput.trim() : tagInput.trim();
+    if (!nextTag) return;
+    await submitTrackTag(nextTag);
+    setCustomTagInput("");
+  };
+
+  const handleUploadChange = async (event) => {
+    const nextGenre = uploadGenre === "Custom" ? customUploadGenre.trim() || DEFAULT_GENRE_TAGS[0] : uploadGenre;
+    await handleLocalFileChange(event, nextGenre);
   };
 
   useEffect(() => {
@@ -118,7 +146,7 @@ export default function MusicPlayer() {
       <section className="music-toolbar" aria-label="Music library controls">
         <div className="music-title-block">
           <h1>Music Library</h1>
-          <p>{pagination.total ? `${pagination.total} tracks available` : "Browse songs, search fast, and keep the server cool."}</p>
+          <p>{pagination.total || localTracks.length ? `${pagination.total + localTracks.length} tracks available` : "Browse songs, search fast, and keep the server cool."}</p>
         </div>
         <div className="music-toolbar-actions">
           <div className="search-box music-search">
@@ -133,10 +161,27 @@ export default function MusicPlayer() {
           <button type="button" className="icon-action" onClick={refreshLibrary} disabled={isLibraryLoading} aria-label="Refresh library">
             <RefreshCw size={17} />
           </button>
+          <div className="upload-tag-controls">
+            <select value={uploadGenre} onChange={(event) => setUploadGenre(event.target.value)} aria-label="Upload genre tag">
+              {DEFAULT_GENRE_TAGS.map((tag) => (
+                <option key={tag} value={tag}>{tag}</option>
+              ))}
+              <option value="Custom">Custom</option>
+            </select>
+            {uploadGenre === "Custom" ? (
+              <input
+                type="text"
+                value={customUploadGenre}
+                onChange={(event) => setCustomUploadGenre(event.target.value)}
+                placeholder="Custom tag"
+                maxLength={32}
+              />
+            ) : null}
+          </div>
           <label className="upload-field">
             <Upload size={16} />
-            <span>Upload songs</span>
-            <input type="file" accept="audio/*" multiple onChange={handleLocalFileChange} />
+            <span>Add local files</span>
+            <input type="file" accept="audio/*" multiple onChange={handleUploadChange} />
           </label>
         </div>
       </section>
@@ -153,7 +198,7 @@ export default function MusicPlayer() {
               </p>
             </div>
             {isLibraryLoading || isPlaylistLoading || isUploadingTracks ? (
-              <span className="loading-pill">{isUploadingTracks ? "Uploading..." : "Loading..."}</span>
+              <span className="loading-pill">{isUploadingTracks ? "Adding..." : "Loading..."}</span>
             ) : null}
           </div>
 
@@ -162,6 +207,7 @@ export default function MusicPlayer() {
               visibleTracks.map((track) => {
                 const active = getTrackId(activeTrack) === getTrackId(track);
                 const trackId = getTrackId(track);
+                const isLocalTrack = track.source === "local";
                 return (
                   <div
                     key={trackId}
@@ -184,7 +230,7 @@ export default function MusicPlayer() {
                       <small>{track.artist || "Unknown Artist"}</small>
                     </span>
                     <span className="track-genre">{track.genre || "Library"}</span>
-                    {isAuthenticated ? (
+                    {isAuthenticated && !isLocalTrack ? (
                       <span className="track-row-actions" onClick={(event) => event.stopPropagation()}>
                         <button
                           type="button"
@@ -288,7 +334,7 @@ export default function MusicPlayer() {
               <div className="player-info">
                 <div>
                   <p className="player-kicker">
-                    {activeTrack?.source === "local" ? "Local preview" : "Now playing"}
+                    {activeTrack?.source === "local" ? "Offline file" : "Now playing"}
                   </p>
                   <strong>{activeTrack?.title || "Pick a track to play"}</strong>
                   <p>{activeTrack?.artist || "Songs load automatically from the library"}</p>
@@ -303,15 +349,27 @@ export default function MusicPlayer() {
                   ) : (
                     <p className="track-tag-empty">No audience tags yet.</p>
                   )}
-                  {isAuthenticated ? (
+                  {isAuthenticated || activeTrack?.source === "local" ? (
                     <form className="tag-input-form" onSubmit={handleTagSubmit}>
-                      <input
-                        type="text"
+                      <select
                         value={tagInput}
                         onChange={(event) => setTagInput(event.target.value)}
-                        placeholder="Add a genre tag"
-                        maxLength={32}
-                      />
+                        aria-label="Choose a genre tag"
+                      >
+                        {DEFAULT_GENRE_TAGS.map((tag) => (
+                          <option key={tag} value={tag}>{tag}</option>
+                        ))}
+                        <option value="Custom">Custom</option>
+                      </select>
+                      {tagInput === "Custom" ? (
+                        <input
+                          type="text"
+                          value={customTagInput}
+                          onChange={(event) => setCustomTagInput(event.target.value)}
+                          placeholder="Custom tag"
+                          maxLength={32}
+                        />
+                      ) : null}
                       <button type="submit" className="tag-submit-button">
                         Add
                       </button>
