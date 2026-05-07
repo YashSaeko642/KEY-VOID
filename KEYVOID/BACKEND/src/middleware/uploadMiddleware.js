@@ -14,6 +14,8 @@ const ALLOWED_POST_MEDIA_TYPES = [
 ];
 const IMAGE_LIMIT_BYTES = 2 * 1024 * 1024; // 2 MB
 const POST_MEDIA_LIMIT_BYTES = 25 * 1024 * 1024; // 25 MB
+const AUDIO_LIMIT_BYTES = 30 * 1024 * 1024; // 30 MB per song
+const ALLOWED_AUDIO_TYPES = ["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/ogg", "audio/webm", "audio/mp4", "audio/aac"];
 
 /**
  * Multer configuration for profile image uploads
@@ -46,6 +48,21 @@ const postMediaUpload = multer({
   fileFilter(req, file, callback) {
     if (!ALLOWED_POST_MEDIA_TYPES.includes(file.mimetype)) {
       return callback(new Error("Post media must be PNG, JPG, WEBP, GIF, MP4, WEBM, or MOV"));
+    }
+
+    return callback(null, true);
+  }
+});
+
+const audioUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: AUDIO_LIMIT_BYTES,
+    files: 10
+  },
+  fileFilter(req, file, callback) {
+    if (!ALLOWED_AUDIO_TYPES.includes(file.mimetype) && !file.mimetype.startsWith("audio/")) {
+      return callback(new Error("Songs must be valid audio files"));
     }
 
     return callback(null, true);
@@ -94,6 +111,7 @@ function handleUploadError(error, req, res, next) {
 
 module.exports = {
   handleUploadError,
+  audioUpload,
   imageUpload,
   postMediaUpload,
   reelMediaUpload

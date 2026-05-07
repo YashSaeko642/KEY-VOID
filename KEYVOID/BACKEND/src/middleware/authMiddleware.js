@@ -38,6 +38,33 @@ async function protect(req, res, next) {
   }
 }
 
+async function optionalProtect(req, res, next) {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return next();
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    if (!process.env.JWT_SECRET) {
+      return next();
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id);
+
+    if (user) {
+      req.user = await syncSystemRole(user);
+    }
+
+    return next();
+  } catch {
+    return next();
+  }
+}
+
 /**
  * Role authorization middleware - Restricts routes to specific roles
  * Must be used after protect() middleware
@@ -60,4 +87,4 @@ function authorizeRoles(...allowedRoles) {
   };
 }
 
-module.exports = { protect, authorizeRoles };
+module.exports = { protect, optionalProtect, authorizeRoles };

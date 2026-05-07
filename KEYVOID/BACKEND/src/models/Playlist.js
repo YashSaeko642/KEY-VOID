@@ -24,6 +24,11 @@ const playlistSchema = new mongoose.Schema(
         ref: "Audio"
       }
     ],
+    type: {
+      type: String,
+      enum: ["playlist", "liked"],
+      default: "playlist"
+    },
     isPublic: {
       type: Boolean,
       default: false
@@ -40,5 +45,7 @@ const playlistSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+playlistSchema.index({ userId: 1, type: 1 });
 
 module.exports = mongoose.model("Playlist", playlistSchema);

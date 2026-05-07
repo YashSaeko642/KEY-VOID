@@ -1,6 +1,15 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { addAudioTag, getApiErrorMessage, getAudioLibrary } from "../../services/api";
+import {
+  addAudioTag,
+  addTrackToPlaylist,
+  createPlaylist,
+  getApiErrorMessage,
+  getAudioLibrary,
+  getPlaylists,
+  toggleLikedTrack,
+  uploadAudioTracks
+} from "../../services/api";
 
 const PlayerContext = createContext(null);
 const MUSIC_PAGE_SIZE = 10;
@@ -33,12 +42,15 @@ export function PlayerProvider({ children }) {
   const [activeTrack, setActiveTrack] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [localTrack, setLocalTrack] = useState(null);
+  const localTrack = null;
   const [error, setError] = useState(null);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [pagination, setPagination] = useState(defaultPagination);
   const [isLibraryLoading, setIsLibraryLoading] = useState(false);
+  const [playlists, setPlaylists] = useState([]);
+  const [isPlaylistLoading, setIsPlaylistLoading] = useState(false);
+  const [isUploadingTracks, setIsUploadingTracks] = useState(false);
   const audioRef = useRef(null);
   const libraryCacheRef = useRef(new Map());
 
@@ -105,6 +117,61 @@ export function PlayerProvider({ children }) {
     loadLibraryPage(page);
   };
 
+  const loadPlaylists = useCallback(async () => {
+    try {
+      setIsPlaylistLoading(true);
+      const response = await getPlaylists();
+      setPlaylists(response.data.playlists || []);
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Unable to load playlists."));
+    } finally {
+      setIsPlaylistLoading(false);
+    }
+  }, []);
+
+  const createUserPlaylist = async ({ name, description = "", cover }) => {
+    const formData = new FormData();
+    formData.append("name", name);
+    formData.append("description", description);
+    if (cover) {
+      formData.append("cover", cover);
+    }
+
+    try {
+      const response = await createPlaylist(formData);
+      await loadPlaylists();
+      setError(null);
+      return response.data;
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Unable to create playlist."));
+      return null;
+    }
+  };
+
+  const addTrackToUserPlaylist = async (playlistId, trackId) => {
+    try {
+      await addTrackToPlaylist(playlistId, trackId);
+      await loadPlaylists();
+      setError(null);
+      return true;
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Unable to add song to playlist."));
+      return false;
+    }
+  };
+
+  const toggleTrackLike = async (trackId) => {
+    try {
+      const response = await toggleLikedTrack(trackId);
+      await loadPlaylists();
+      setError(null);
+      return response.data?.liked;
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Unable to update liked songs."));
+      return false;
+    }
+  };
+
   useEffect(() => {
     if (!audioRef.current) return;
 
@@ -119,14 +186,6 @@ export function PlayerProvider({ children }) {
       audioRef.current.pause();
     }
   }, [activeTrack, isPlaying]);
-
-  useEffect(() => {
-    return () => {
-      if (localTrack?.url) {
-        URL.revokeObjectURL(localTrack.url);
-      }
-    };
-  }, [localTrack]);
 
   const filteredLibrary = useMemo(() => {
     const results = [...library];
@@ -221,43 +280,41 @@ export function PlayerProvider({ children }) {
     setDuration(audioRef.current.duration || 0);
   };
 
-  const handleLocalFileChange = (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const handleLocalFileChange = async (event) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
 
-    if (!file.type.startsWith("audio/")) {
-      setError("Please select a valid audio file.");
+    const invalidFile = files.find((file) => !file.type.startsWith("audio/") || file.size > 30 * 1024 * 1024);
+    if (invalidFile) {
+      setError("Each upload must be an audio file smaller than 30 MB.");
+      event.target.value = "";
       return;
     }
 
-    if (file.size > 30 * 1024 * 1024) {
-      setError("Please select an audio file smaller than 30 MB.");
-      return;
+    const formData = new FormData();
+    files.forEach((file) => formData.append("tracks", file));
+
+    try {
+      setIsUploadingTracks(true);
+      const response = await uploadAudioTracks(formData);
+      const uploadedTracks = response.data.tracks || [];
+      libraryCacheRef.current.clear();
+      setLibrary((prevLibrary) => mergeTracks(uploadedTracks, prevLibrary));
+
+      if (uploadedTracks[0]) {
+        setActiveTrack(uploadedTracks[0]);
+        setIsPlaying(true);
+        setPosition(0);
+        setDuration(0);
+      }
+
+      setError(null);
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Unable to upload songs. Login and try again."));
+    } finally {
+      setIsUploadingTracks(false);
+      event.target.value = "";
     }
-
-    setError(null);
-
-    if (localTrack?.url) {
-      URL.revokeObjectURL(localTrack.url);
-    }
-
-    const previewUrl = URL.createObjectURL(file);
-    const customTrack = {
-      id: `local-${Date.now()}`,
-      title: file.name.replace(/\.[^.]+$/, ""),
-      artist: "Local Session",
-      url: previewUrl,
-      source: "local",
-      coverUrl: null,
-      genre: "Session"
-    };
-
-    setLocalTrack(customTrack);
-    setActiveTrack(customTrack);
-    setIsPlaying(true);
-    setPosition(0);
-    setDuration(0);
-    event.target.value = "";
   };
 
   return (
@@ -275,11 +332,18 @@ export function PlayerProvider({ children }) {
         filteredLibrary,
         pagination,
         isLibraryLoading,
+        playlists,
+        isPlaylistLoading,
+        isUploadingTracks,
         handleSelectTrack,
         setSearchQuery,
         refreshLibrary,
         handleLoadNextPage,
         handlePageChange,
+        loadPlaylists,
+        createUserPlaylist,
+        addTrackToUserPlaylist,
+        toggleTrackLike,
         handleLocalFileChange,
         handleTogglePlay,
         handleSkip,

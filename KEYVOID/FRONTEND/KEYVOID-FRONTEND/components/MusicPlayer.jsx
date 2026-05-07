@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Disc3, Pause, Play, RefreshCw, Search, SkipBack, SkipForward, Upload } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, Disc3, Heart, ListPlus, Menu, Pause, Play, Plus, RefreshCw, Search, SkipBack, SkipForward, Upload, X } from "lucide-react";
 import { usePlayer } from "../src/context/PlayerContext";
 import { useAuth } from "../src/context/useAuth";
 import "./MusicPlayer.css";
@@ -26,11 +26,18 @@ export default function MusicPlayer() {
     duration,
     pagination,
     isLibraryLoading,
+    playlists,
+    isPlaylistLoading,
+    isUploadingTracks,
     handleSelectTrack,
     setSearchQuery,
     refreshLibrary,
     handleLoadNextPage,
     handlePageChange,
+    loadPlaylists,
+    createUserPlaylist,
+    addTrackToUserPlaylist,
+    toggleTrackLike,
     handleLocalFileChange,
     handleTogglePlay,
     handleSkip,
@@ -38,8 +45,22 @@ export default function MusicPlayer() {
   } = usePlayer();
   const { isAuthenticated } = useAuth();
   const [tagInput, setTagInput] = useState("");
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [showCreatePlaylist, setShowCreatePlaylist] = useState(false);
+  const [playlistName, setPlaylistName] = useState("");
+  const [playlistCover, setPlaylistCover] = useState(null);
+  const [selectedPlaylistId, setSelectedPlaylistId] = useState("library");
+  const [openTrackMenuId, setOpenTrackMenuId] = useState("");
 
   const trackList = useMemo(() => [...filteredLibrary], [filteredLibrary]);
+  const selectedPlaylist = useMemo(() => {
+    return playlists.find((playlist) => getTrackId(playlist) === selectedPlaylistId);
+  }, [playlists, selectedPlaylistId]);
+
+  const visibleTracks = selectedPlaylist ? selectedPlaylist.tracks || [] : trackList;
+  const normalPlaylists = playlists.filter((playlist) => playlist.type !== "liked");
+  const likedPlaylist = playlists.find((playlist) => playlist.type === "liked");
+  const likedTrackIds = new Set((likedPlaylist?.tracks || []).map(getTrackId));
 
   const activeIndex = useMemo(() => {
     return trackList.findIndex((track) => getTrackId(track) === getTrackId(activeTrack));
@@ -50,6 +71,38 @@ export default function MusicPlayer() {
     if (!tagInput.trim()) return;
     await submitTrackTag(tagInput.trim());
     setTagInput("");
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadPlaylists();
+    }
+  }, [isAuthenticated, loadPlaylists]);
+
+  const handleCreatePlaylist = async (event) => {
+    event.preventDefault();
+    if (!playlistName.trim()) return;
+
+    const playlist = await createUserPlaylist({
+      name: playlistName.trim(),
+      cover: playlistCover
+    });
+
+    if (playlist) {
+      setPlaylistName("");
+      setPlaylistCover(null);
+      setShowCreatePlaylist(false);
+      setSelectedPlaylistId(playlist.id || playlist._id);
+    }
+  };
+
+  const handleAddToPlaylist = async (playlistId, trackId) => {
+    await addTrackToUserPlaylist(playlistId, trackId);
+    setOpenTrackMenuId("");
+  };
+
+  const handleLikeTrack = async (trackId) => {
+    await toggleTrackLike(trackId);
   };
 
   const pageNumbers = useMemo(() => {
@@ -82,8 +135,8 @@ export default function MusicPlayer() {
           </button>
           <label className="upload-field">
             <Upload size={16} />
-            <span>Local audio</span>
-            <input type="file" accept="audio/*" onChange={handleLocalFileChange} />
+            <span>Upload songs</span>
+            <input type="file" accept="audio/*" multiple onChange={handleLocalFileChange} />
           </label>
         </div>
       </section>
@@ -99,19 +152,29 @@ export default function MusicPlayer() {
                 Page {pagination.page || 1} of {pagination.totalPages || 1}
               </p>
             </div>
-            {isLibraryLoading ? <span className="loading-pill">Loading...</span> : null}
+            {isLibraryLoading || isPlaylistLoading || isUploadingTracks ? (
+              <span className="loading-pill">{isUploadingTracks ? "Uploading..." : "Loading..."}</span>
+            ) : null}
           </div>
 
           <div className="track-grid">
-            {trackList.length > 0 ? (
-              trackList.map((track) => {
+            {visibleTracks.length > 0 ? (
+              visibleTracks.map((track) => {
                 const active = getTrackId(activeTrack) === getTrackId(track);
+                const trackId = getTrackId(track);
                 return (
-                  <button
-                    key={getTrackId(track)}
-                    type="button"
+                  <div
+                    key={trackId}
+                    role="button"
+                    tabIndex={0}
                     className={`track-card ${active ? "active" : ""}`}
                     onClick={() => handleSelectTrack(track)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        handleSelectTrack(track);
+                      }
+                    }}
                   >
                     <span className="track-index">
                       {active && isPlaying ? <Pause size={16} /> : <Play size={16} />}
@@ -121,17 +184,55 @@ export default function MusicPlayer() {
                       <small>{track.artist || "Unknown Artist"}</small>
                     </span>
                     <span className="track-genre">{track.genre || "Library"}</span>
-                  </button>
+                    {isAuthenticated ? (
+                      <span className="track-row-actions" onClick={(event) => event.stopPropagation()}>
+                        <button
+                          type="button"
+                          className={`track-icon-btn ${likedTrackIds.has(trackId) ? "active" : ""}`}
+                          onClick={() => handleLikeTrack(trackId)}
+                          aria-label={likedTrackIds.has(trackId) ? "Unlike song" : "Like song"}
+                        >
+                          <Heart size={16} fill={likedTrackIds.has(trackId) ? "currentColor" : "none"} />
+                        </button>
+                        <button
+                          type="button"
+                          className="track-icon-btn"
+                          onClick={() => setOpenTrackMenuId(openTrackMenuId === trackId ? "" : trackId)}
+                          aria-label="Add to playlist"
+                        >
+                          <ListPlus size={16} />
+                        </button>
+                        {openTrackMenuId === trackId ? (
+                          <span className="playlist-menu">
+                            {normalPlaylists.length > 0 ? (
+                              normalPlaylists.map((playlist) => (
+                                <button
+                                  type="button"
+                                  key={getTrackId(playlist)}
+                                  onClick={() => handleAddToPlaylist(getTrackId(playlist), trackId)}
+                                >
+                                  {playlist.name}
+                                </button>
+                              ))
+                            ) : (
+                              <small>Create a playlist first</small>
+                            )}
+                          </span>
+                        ) : null}
+                      </span>
+                    ) : null}
+                  </div>
                 );
               })
             ) : (
               <div className="empty-library">
-                {isLibraryLoading ? "Loading songs..." : "No tracks match your search."}
+                {isLibraryLoading ? "Loading songs..." : selectedPlaylist ? "No songs in this playlist yet." : "No tracks match your search."}
               </div>
             )}
           </div>
 
-          <div className="pagination-bar" aria-label="Music pagination">
+          {!selectedPlaylist ? (
+            <div className="pagination-bar" aria-label="Music pagination">
             <button
               type="button"
               className="page-arrow"
@@ -168,7 +269,8 @@ export default function MusicPlayer() {
                 See more
               </button>
             ) : null}
-          </div>
+            </div>
+          ) : null}
         </section>
 
         <aside className="music-panel" aria-label="Now playing">
@@ -248,6 +350,50 @@ export default function MusicPlayer() {
           </div>
         </aside>
       </div>
+
+      <aside className={`playlist-dock ${isPanelOpen ? "open" : ""}`} onMouseEnter={() => setIsPanelOpen(true)} onMouseLeave={() => setIsPanelOpen(false)}>
+        <button type="button" className="playlist-dock-tab" onClick={() => setIsPanelOpen((open) => !open)} aria-label="Open playlists">
+          {isPanelOpen ? <X size={18} /> : <Menu size={18} />}
+        </button>
+        <div className="playlist-dock-content">
+          <h2>Playlists</h2>
+          {isAuthenticated ? (
+            <>
+              <button type="button" className="create-playlist-toggle" onClick={() => setShowCreatePlaylist((open) => !open)}>
+                <Plus size={16} />
+                Create playlist
+              </button>
+              {showCreatePlaylist ? (
+                <form className="create-playlist-form" onSubmit={handleCreatePlaylist}>
+                  <input value={playlistName} onChange={(event) => setPlaylistName(event.target.value)} placeholder="Playlist name" maxLength={100} />
+                  <label>
+                    Cover image
+                    <input type="file" accept="image/*" onChange={(event) => setPlaylistCover(event.target.files?.[0] || null)} />
+                  </label>
+                  <button type="submit">Create</button>
+                </form>
+              ) : null}
+              <button type="button" className={`playlist-dock-item ${selectedPlaylistId === "library" ? "active" : ""}`} onClick={() => setSelectedPlaylistId("library")}>
+                <span className="playlist-cover-placeholder"><Disc3 size={18} /></span>
+                <span>All songs<small>Music library</small></span>
+              </button>
+              {playlists.map((playlist) => (
+                <button
+                  type="button"
+                  key={getTrackId(playlist)}
+                  className={`playlist-dock-item ${selectedPlaylistId === getTrackId(playlist) ? "active" : ""}`}
+                  onClick={() => setSelectedPlaylistId(getTrackId(playlist))}
+                >
+                  {playlist.coverUrl ? <img src={playlist.coverUrl} alt="" /> : <span className="playlist-cover-placeholder">{playlist.type === "liked" ? <Heart size={17} /> : <Disc3 size={18} />}</span>}
+                  <span>{playlist.name}<small>{playlist.tracksCount || 0} songs</small></span>
+                </button>
+              ))}
+            </>
+          ) : (
+            <p className="playlist-login-note">Login to create playlists, like songs, and save uploads.</p>
+          )}
+        </div>
+      </aside>
     </div>
   );
 }
