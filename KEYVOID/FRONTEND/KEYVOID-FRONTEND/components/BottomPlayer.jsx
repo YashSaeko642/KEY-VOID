@@ -12,6 +12,7 @@ function formatTime(seconds = 0) {
 export default function BottomPlayer() {
   const {
     activeTrack,
+    audioSrc,
     isPlaying,
     audioRef,
     position,
@@ -89,7 +90,7 @@ export default function BottomPlayer() {
 
       <audio
         ref={audioRef}
-        src={activeTrack?.url || ""}
+        src={audioSrc || ""}
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
         onEnded={() => {

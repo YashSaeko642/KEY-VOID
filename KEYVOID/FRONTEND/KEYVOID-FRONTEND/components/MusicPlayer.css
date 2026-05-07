@@ -97,6 +97,33 @@
   white-space: nowrap;
 }
 
+.upload-tag-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.upload-tag-controls select,
+.upload-tag-controls input,
+.tag-input-form select {
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(128, 148, 214, 0.18);
+  background: rgba(16, 24, 43, 0.88);
+  color: #eef4ff;
+  outline: none;
+}
+
+.upload-tag-controls select,
+.tag-input-form select {
+  padding: 0 34px 0 12px;
+}
+
+.upload-tag-controls input {
+  width: 128px;
+  padding: 0 12px;
+}
+
 .upload-field input {
   display: none;
 }
@@ -473,7 +500,8 @@
   border: 1px solid rgba(99, 102, 241, 0.22);
 }
 
-.tag-input-form input {
+.tag-input-form input,
+.tag-input-form select {
   flex: 1;
   min-width: 150px;
   padding: 10px 12px;
@@ -482,6 +510,10 @@
   background: rgba(15, 23, 42, 0.96);
   color: #e2e8f0;
   outline: none;
+}
+
+.tag-input-form select {
+  flex: 0 1 150px;
 }
 
 @media (max-width: 1120px) {
@@ -513,6 +545,16 @@
 
   .music-toolbar-actions {
     flex-wrap: wrap;
+  }
+
+  .upload-tag-controls {
+    flex: 1 1 auto;
+  }
+
+  .upload-tag-controls select,
+  .upload-tag-controls input {
+    flex: 1;
+    min-width: 0;
   }
 
   .music-search {

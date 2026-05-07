@@ -4,15 +4,21 @@ import {
   addAudioTag,
   addTrackToPlaylist,
   createPlaylist,
+  deleteAudioTrack,
   getApiErrorMessage,
   getAudioLibrary,
   getPlaylists,
-  toggleLikedTrack,
-  uploadAudioTracks
+  streamAudioTrack,
+  updateAudioTrack,
+  toggleLikedTrack
 } from "../../services/api";
+import { useAuth } from "./useAuth";
 
 const PlayerContext = createContext(null);
 const MUSIC_PAGE_SIZE = 10;
+const LOCAL_MUSIC_DB = "keyvoid-local-music";
+const LOCAL_MUSIC_STORE = "tracks";
+const memoryLocalTracks = new Map();
 
 const defaultPagination = {
   page: 1,
@@ -27,6 +33,70 @@ function getTrackId(track) {
   return track?._id || track?.id || track?.url || "";
 }
 
+function isAudioFile(file) {
+  if (file.type?.startsWith("audio/")) return true;
+  return /\.(mp3|wav|flac|m4a|aac|ogg|opus|webm)$/i.test(file.name || "");
+}
+
+function openLocalMusicDb() {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === "undefined") {
+      reject(new Error("Local browser storage is unavailable."));
+      return;
+    }
+
+    const request = indexedDB.open(LOCAL_MUSIC_DB, 1);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(LOCAL_MUSIC_STORE)) {
+        const store = db.createObjectStore(LOCAL_MUSIC_STORE, { keyPath: "id" });
+        store.createIndex("ownerKey", "ownerKey", { unique: false });
+      }
+    };
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function runLocalMusicTransaction(mode, action) {
+  return openLocalMusicDb().then((db) =>
+    new Promise((resolve, reject) => {
+      const transaction = db.transaction(LOCAL_MUSIC_STORE, mode);
+      const store = transaction.objectStore(LOCAL_MUSIC_STORE);
+      const result = action(store);
+
+      transaction.oncomplete = () => {
+        db.close();
+        resolve(result?.result);
+      };
+      transaction.onerror = () => {
+        db.close();
+        reject(transaction.error);
+      };
+    })
+  );
+}
+
+function loadStoredLocalTracks(ownerKey) {
+  return runLocalMusicTransaction("readonly", (store) => store.index("ownerKey").getAll(ownerKey));
+}
+
+function saveStoredLocalTrack(track) {
+  return runLocalMusicTransaction("readwrite", (store) => store.put(track));
+}
+
+function loadMemoryLocalTracks(ownerKey) {
+  return memoryLocalTracks.get(ownerKey) || [];
+}
+
+function saveMemoryLocalTrack(track) {
+  const tracks = loadMemoryLocalTracks(track.ownerKey);
+  const nextTracks = [track, ...tracks.filter((item) => getTrackId(item) !== getTrackId(track))];
+  memoryLocalTracks.set(track.ownerKey, nextTracks);
+}
+
 function mergeTracks(currentTracks, nextTracks) {
   const seen = new Set();
   return [...currentTracks, ...nextTracks].filter((track) => {
@@ -38,11 +108,13 @@ function mergeTracks(currentTracks, nextTracks) {
 }
 
 export function PlayerProvider({ children }) {
+  const { user } = useAuth();
   const [library, setLibrary] = useState([]);
+  const [localTracks, setLocalTracks] = useState([]);
   const [activeTrack, setActiveTrack] = useState(null);
+  const [audioSrc, setAudioSrc] = useState("");
   const [isPlaying, setIsPlaying] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const localTrack = null;
   const [error, setError] = useState(null);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -52,7 +124,9 @@ export function PlayerProvider({ children }) {
   const [isPlaylistLoading, setIsPlaylistLoading] = useState(false);
   const [isUploadingTracks, setIsUploadingTracks] = useState(false);
   const audioRef = useRef(null);
+  const audioObjectUrlRef = useRef("");
   const libraryCacheRef = useRef(new Map());
+  const ownerKey = user?.id ? `user:${user.id}` : "guest";
 
   const getCacheKey = useCallback((page = 1) => `${searchQuery.trim().toLowerCase()}::${page}`, [searchQuery]);
 
@@ -101,6 +175,36 @@ export function PlayerProvider({ children }) {
 
     return () => window.clearTimeout(timeoutId);
   }, [loadLibraryPage]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadLocalTracks() {
+      try {
+        const tracks = await loadStoredLocalTracks(ownerKey);
+        if (!ignore) {
+          setLocalTracks((tracks || []).sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0)));
+        }
+      } catch {
+        if (!ignore) {
+          setLocalTracks(loadMemoryLocalTracks(ownerKey));
+        }
+      }
+    }
+
+    loadLocalTracks();
+
+    return () => {
+      ignore = true;
+    };
+  }, [ownerKey]);
+
+  useEffect(() => {
+    if (activeTrack?.source === "local" && activeTrack.ownerKey !== ownerKey) {
+      setActiveTrack(null);
+      setIsPlaying(false);
+    }
+  }, [activeTrack, ownerKey]);
 
   const refreshLibrary = () => {
     libraryCacheRef.current.clear();
@@ -173,9 +277,59 @@ export function PlayerProvider({ children }) {
   };
 
   useEffect(() => {
+    let ignore = false;
+
+    if (audioObjectUrlRef.current) {
+      URL.revokeObjectURL(audioObjectUrlRef.current);
+      audioObjectUrlRef.current = "";
+    }
+
+    setAudioSrc("");
+    setDuration(0);
+
+    async function loadAudioSource() {
+      if (!activeTrack?.url) return;
+
+      try {
+        const objectUrl = activeTrack.source === "local" && activeTrack.blob
+          ? URL.createObjectURL(activeTrack.blob)
+          : URL.createObjectURL((await streamAudioTrack(getTrackId(activeTrack))).data);
+
+        if (ignore) {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+
+        audioObjectUrlRef.current = objectUrl;
+        setAudioSrc(objectUrl);
+        setError(null);
+      } catch (err) {
+        if (!ignore) {
+          setIsPlaying(false);
+          setError(getApiErrorMessage(err, "Unable to load this track for playback."));
+        }
+      }
+    }
+
+    loadAudioSource();
+
+    return () => {
+      ignore = true;
+    };
+  }, [activeTrack]);
+
+  useEffect(() => {
+    return () => {
+      if (audioObjectUrlRef.current) {
+        URL.revokeObjectURL(audioObjectUrlRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (!audioRef.current) return;
 
-    if (activeTrack?.url && isPlaying) {
+    if (audioSrc && isPlaying) {
       audioRef.current
         .play()
         .catch((err) => {
@@ -185,25 +339,24 @@ export function PlayerProvider({ children }) {
     } else {
       audioRef.current.pause();
     }
-  }, [activeTrack, isPlaying]);
+  }, [audioSrc, isPlaying]);
 
   const filteredLibrary = useMemo(() => {
-    const results = [...library];
+    const results = [...localTracks, ...library];
     const query = searchQuery.trim().toLowerCase();
 
-    if (localTrack && `${localTrack.title}`.toLowerCase().includes(query)) {
-      return [localTrack, ...results];
+    if (query) {
+      return results.filter((track) =>
+        `${track.title || ""} ${track.artist || ""} ${track.genre || ""}`.toLowerCase().includes(query)
+      );
     }
 
     return results;
-  }, [library, localTrack, searchQuery]);
+  }, [library, localTracks, searchQuery]);
 
   const trackList = useMemo(() => {
-    if (localTrack) {
-      return [localTrack, ...library];
-    }
-    return [...library];
-  }, [library, localTrack]);
+    return [...localTracks, ...library];
+  }, [library, localTracks]);
 
   const activeIndex = useMemo(() => {
     return trackList.findIndex((track) => {
@@ -237,25 +390,49 @@ export function PlayerProvider({ children }) {
   };
 
   const submitTrackTag = async (tag) => {
-    if (!activeTrack || activeTrack.source === "local") {
-      setError("You can only tag tracks that are in the library.");
+    if (!activeTrack) {
+      setError("Pick a track before adding a tag.");
+      return;
+    }
+
+    if (activeTrack.source === "local") {
+      const nextTrack = {
+        ...activeTrack,
+        genre: tag,
+        audienceTags: [{ tag, count: 1 }]
+      };
+
+      try {
+        saveMemoryLocalTrack(nextTrack);
+        try {
+          await saveStoredLocalTrack(nextTrack);
+        } catch {
+          // The in-memory copy keeps the current session usable when browser storage is blocked.
+        }
+        setLocalTracks((prevTracks) => prevTracks.map((track) => getTrackId(track) === getTrackId(nextTrack) ? nextTrack : track));
+        setActiveTrack(nextTrack);
+        setError(null);
+      } catch {
+        setError("Unable to update the local track tag.");
+      }
       return;
     }
 
     try {
       const response = await addAudioTag(activeTrack.id || activeTrack._id, tag);
       const audienceTags = response.data.audienceTags || [];
+      const genre = response.data.genre || activeTrack.genre;
       setLibrary((prevLibrary) =>
         prevLibrary.map((track) =>
           (track.id === activeTrack.id || String(track.id) === String(activeTrack._id))
-            ? { ...track, audienceTags }
+            ? { ...track, audienceTags, genre }
             : track
         )
       );
       libraryCacheRef.current.clear();
       setActiveTrack((prevTrack) =>
         prevTrack && (prevTrack.id === activeTrack.id || String(prevTrack.id) === String(activeTrack._id))
-          ? { ...prevTrack, audienceTags }
+          ? { ...prevTrack, audienceTags, genre }
           : prevTrack
       );
       setError(null);
@@ -280,26 +457,51 @@ export function PlayerProvider({ children }) {
     setDuration(audioRef.current.duration || 0);
   };
 
-  const handleLocalFileChange = async (event) => {
+  const handleLocalFileChange = async (event, genre = "Uploads") => {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
 
-    const invalidFile = files.find((file) => !file.type.startsWith("audio/") || file.size > 30 * 1024 * 1024);
+    const invalidFile = files.find((file) => !isAudioFile(file) || file.size > 30 * 1024 * 1024);
     if (invalidFile) {
       setError("Each upload must be an audio file smaller than 30 MB.");
       event.target.value = "";
       return;
     }
 
-    const formData = new FormData();
-    files.forEach((file) => formData.append("tracks", file));
-
     try {
       setIsUploadingTracks(true);
-      const response = await uploadAudioTracks(formData);
-      const uploadedTracks = response.data.tracks || [];
-      libraryCacheRef.current.clear();
-      setLibrary((prevLibrary) => mergeTracks(uploadedTracks, prevLibrary));
+      const createdAt = Date.now();
+      const uploadedTracks = files.map((file, index) => {
+        const title = file.name.replace(/\.[^.]+$/, "") || "Untitled";
+
+        return {
+          id: `local:${ownerKey}:${createdAt}:${index}:${file.name}`,
+          _id: `local:${ownerKey}:${createdAt}:${index}:${file.name}`,
+          ownerKey,
+          title,
+          artist: "Local Files",
+          genre,
+          audienceTags: [{ tag: genre, count: 1 }],
+          duration: 0,
+          url: `local:${file.name}`,
+          filename: file.name,
+          fileSize: file.size,
+          mimeType: file.type || "audio/mpeg",
+          source: "local",
+          blob: file,
+          createdAt: createdAt + index
+        };
+      });
+
+      await Promise.all(uploadedTracks.map(async (track) => {
+        saveMemoryLocalTrack(track);
+        try {
+          await saveStoredLocalTrack(track);
+        } catch {
+          // The in-memory copy keeps the current session usable when browser storage is blocked.
+        }
+      }));
+      setLocalTracks((prevTracks) => mergeTracks(uploadedTracks, prevTracks));
 
       if (uploadedTracks[0]) {
         setActiveTrack(uploadedTracks[0]);
@@ -310,10 +512,54 @@ export function PlayerProvider({ children }) {
 
       setError(null);
     } catch (err) {
-      setError(getApiErrorMessage(err, "Unable to upload songs. Login and try again."));
+      setError(getApiErrorMessage(err, "Unable to add local songs."));
     } finally {
       setIsUploadingTracks(false);
       event.target.value = "";
+    }
+  };
+
+  const updateUploadedTrack = async (trackId, payload) => {
+    try {
+      const response = await updateAudioTrack(trackId, payload);
+      const updatedTrack = response.data.track;
+
+      setLibrary((prevLibrary) =>
+        prevLibrary.map((track) => getTrackId(track) === getTrackId(updatedTrack) ? updatedTrack : track)
+      );
+      setActiveTrack((prevTrack) =>
+        prevTrack && getTrackId(prevTrack) === getTrackId(updatedTrack) ? updatedTrack : prevTrack
+      );
+      libraryCacheRef.current.clear();
+      setError(null);
+      return updatedTrack;
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Unable to update this song."));
+      return null;
+    }
+  };
+
+  const deleteUploadedTrack = async (trackId) => {
+    try {
+      await deleteAudioTrack(trackId);
+      setLibrary((prevLibrary) => prevLibrary.filter((track) => getTrackId(track) !== trackId));
+      setPlaylists((prevPlaylists) =>
+        prevPlaylists.map((playlist) => ({
+          ...playlist,
+          tracks: (playlist.tracks || []).filter((track) => getTrackId(track) !== trackId),
+          tracksCount: Math.max(0, (playlist.tracksCount || 0) - ((playlist.tracks || []).some((track) => getTrackId(track) === trackId) ? 1 : 0))
+        }))
+      );
+      if (getTrackId(activeTrack) === trackId) {
+        setActiveTrack(null);
+        setIsPlaying(false);
+      }
+      libraryCacheRef.current.clear();
+      setError(null);
+      return true;
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Unable to delete this song."));
+      return false;
     }
   };
 
@@ -321,10 +567,11 @@ export function PlayerProvider({ children }) {
     <PlayerContext.Provider
       value={{
         library,
+        localTracks,
         activeTrack,
+        audioSrc,
         isPlaying,
         searchQuery,
-        localTrack,
         error,
         position,
         duration,
@@ -345,6 +592,8 @@ export function PlayerProvider({ children }) {
         addTrackToUserPlaylist,
         toggleTrackLike,
         handleLocalFileChange,
+        updateUploadedTrack,
+        deleteUploadedTrack,
         handleTogglePlay,
         handleSkip,
         submitTrackTag,
