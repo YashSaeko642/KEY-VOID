@@ -11,14 +11,50 @@ const formatAudienceTags = (tags = []) => {
     .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
 };
 
+const escapeRegex = (value) => String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 exports.getLibrary = async (req, res) => {
   try {
-    const tracks = await Audio.find({ isPublic: true })
-      .sort({ createdAt: -1 })
-      .lean();
+    const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 10, 1), 50);
+    const search = String(req.query.search || "").trim();
+    const skip = (page - 1) * limit;
+    const query = { isPublic: true };
 
-    if (tracks.length === 0) {
-      return res.json({ tracks: [], message: "Library is empty. Upload music files to get started." });
+    if (search) {
+      const searchRegex = new RegExp(escapeRegex(search), "i");
+      query.$or = [
+        { title: searchRegex },
+        { artist: searchRegex },
+        { genre: searchRegex },
+        { "audienceTags.tag": searchRegex }
+      ];
+    }
+
+    const [tracks, total] = await Promise.all([
+      Audio.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Audio.countDocuments(query)
+    ]);
+
+    res.setHeader("Cache-Control", "private, max-age=60");
+
+    if (total === 0) {
+      return res.json({
+        tracks: [],
+        pagination: {
+          page,
+          limit,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: page > 1
+        },
+        message: search ? "No tracks match your search." : "Library is empty. Upload music files to get started."
+      });
     }
 
     const tracksWithUrls = tracks.map((track) => ({
@@ -33,7 +69,17 @@ exports.getLibrary = async (req, res) => {
       source: "library"
     }));
 
-    return res.json({ tracks: tracksWithUrls });
+    return res.json({
+      tracks: tracksWithUrls,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: skip + tracks.length < total,
+        hasPrev: page > 1
+      }
+    });
   } catch (error) {
     console.error("Error fetching library:", error.message);
     return res.status(500).json({ msg: "Unable to fetch music library" });

@@ -1,7 +1,32 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import API, { addAudioTag, getApiErrorMessage } from "../../services/api";
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { addAudioTag, getApiErrorMessage, getAudioLibrary } from "../../services/api";
 
 const PlayerContext = createContext(null);
+const MUSIC_PAGE_SIZE = 10;
+
+const defaultPagination = {
+  page: 1,
+  limit: MUSIC_PAGE_SIZE,
+  total: 0,
+  totalPages: 0,
+  hasNext: false,
+  hasPrev: false
+};
+
+function getTrackId(track) {
+  return track?._id || track?.id || track?.url || "";
+}
+
+function mergeTracks(currentTracks, nextTracks) {
+  const seen = new Set();
+  return [...currentTracks, ...nextTracks].filter((track) => {
+    const trackId = getTrackId(track);
+    if (!trackId || seen.has(trackId)) return false;
+    seen.add(trackId);
+    return true;
+  });
+}
 
 export function PlayerProvider({ children }) {
   const [library, setLibrary] = useState([]);
@@ -12,20 +37,73 @@ export function PlayerProvider({ children }) {
   const [error, setError] = useState(null);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [pagination, setPagination] = useState(defaultPagination);
+  const [isLibraryLoading, setIsLibraryLoading] = useState(false);
   const audioRef = useRef(null);
+  const libraryCacheRef = useRef(new Map());
 
-  useEffect(() => {
-    async function loadLibrary() {
-      try {
-        const response = await API.get("/audio/library");
-        setLibrary(response.data.tracks || []);
-      } catch (err) {
-        setError(getApiErrorMessage(err, "Unable to load music library."));
-      }
+  const getCacheKey = useCallback((page = 1) => `${searchQuery.trim().toLowerCase()}::${page}`, [searchQuery]);
+
+  const loadLibraryPage = useCallback(async (page = 1, { append = false, force = false } = {}) => {
+    const nextPage = Math.max(Number(page) || 1, 1);
+    const cacheKey = getCacheKey(nextPage);
+    const cachedPage = libraryCacheRef.current.get(cacheKey);
+
+    if (cachedPage && !force) {
+      setLibrary((prevLibrary) => append ? mergeTracks(prevLibrary, cachedPage.tracks) : cachedPage.tracks);
+      setPagination(cachedPage.pagination);
+      setError(null);
+      return;
     }
 
-    loadLibrary();
-  }, []);
+    try {
+      setIsLibraryLoading(true);
+      const response = await getAudioLibrary({
+        page: nextPage,
+        limit: MUSIC_PAGE_SIZE,
+        search: searchQuery.trim()
+      });
+      const tracks = response.data.tracks || [];
+      const nextPagination = response.data.pagination || {
+        ...defaultPagination,
+        page: nextPage,
+        total: tracks.length,
+        totalPages: tracks.length ? nextPage : 0
+      };
+
+      libraryCacheRef.current.set(cacheKey, { tracks, pagination: nextPagination });
+      setLibrary((prevLibrary) => append ? mergeTracks(prevLibrary, tracks) : tracks);
+      setPagination(nextPagination);
+      setError(null);
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Unable to load music library."));
+    } finally {
+      setIsLibraryLoading(false);
+    }
+  }, [getCacheKey, searchQuery]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      loadLibraryPage(1);
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [loadLibraryPage]);
+
+  const refreshLibrary = () => {
+    libraryCacheRef.current.clear();
+    loadLibraryPage(pagination.page || 1, { force: true });
+  };
+
+  const handleLoadNextPage = () => {
+    if (!pagination.hasNext || isLibraryLoading) return;
+    loadLibraryPage(pagination.page + 1, { append: true });
+  };
+
+  const handlePageChange = (page) => {
+    if (page === pagination.page || isLibraryLoading) return;
+    loadLibraryPage(page);
+  };
 
   useEffect(() => {
     if (!audioRef.current) return;
@@ -51,23 +129,8 @@ export function PlayerProvider({ children }) {
   }, [localTrack]);
 
   const filteredLibrary = useMemo(() => {
+    const results = [...library];
     const query = searchQuery.trim().toLowerCase();
-    if (!query) {
-      return localTrack ? [localTrack, ...library] : library;
-    }
-
-    const results = library.filter((track) => {
-      const tagMatch = Array.isArray(track.audienceTags)
-        ? track.audienceTags.some((tag) => String(tag.tag || "").toLowerCase().includes(query))
-        : false;
-
-      return (
-        String(track.title || "").toLowerCase().includes(query) ||
-        String(track.artist || "").toLowerCase().includes(query) ||
-        String(track.genre || "").toLowerCase().includes(query) ||
-        tagMatch
-      );
-    });
 
     if (localTrack && `${localTrack.title}`.toLowerCase().includes(query)) {
       return [localTrack, ...results];
@@ -130,6 +193,7 @@ export function PlayerProvider({ children }) {
             : track
         )
       );
+      libraryCacheRef.current.clear();
       setActiveTrack((prevTrack) =>
         prevTrack && (prevTrack.id === activeTrack.id || String(prevTrack.id) === String(activeTrack._id))
           ? { ...prevTrack, audienceTags }
@@ -209,8 +273,13 @@ export function PlayerProvider({ children }) {
         duration,
         audioRef,
         filteredLibrary,
+        pagination,
+        isLibraryLoading,
         handleSelectTrack,
         setSearchQuery,
+        refreshLibrary,
+        handleLoadNextPage,
+        handlePageChange,
         handleLocalFileChange,
         handleTogglePlay,
         handleSkip,

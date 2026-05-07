@@ -24,10 +24,12 @@ html,
 body,
 #root {
   min-height: 100%;
+  width: 100%;
 }
 
 body {
   margin: 0;
+  overflow-x: hidden;
   background:
     radial-gradient(circle at top, rgba(54, 72, 130, 0.2), transparent 24%),
     linear-gradient(180deg, #03060d 0%, #060a15 42%, #0b1326 100%);
