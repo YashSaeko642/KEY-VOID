@@ -9,6 +9,7 @@ const {
   removeTrackTag,
   uploadUserTracks,
   getMyUploads,
+  getUserUploads,
   updateUserTrack,
   deleteUserTrack
 } = require("../controllers/audio-controller");
@@ -18,6 +19,7 @@ const router = express.Router();
 router.get("/library", optionalProtect, getLibrary);
 router.post("/upload", protect, authorizeRoles("creator"), audioUpload.array("songs", 10), handleUploadError, uploadUserTracks);
 router.get("/my-uploads", protect, authorizeRoles("creator"), getMyUploads);
+router.get("/user/:userId", optionalProtect, getUserUploads);
 router.get("/stream/:trackId", optionalProtect, streamTrack);
 router.get("/metadata/:trackId", optionalProtect, getTrackMetadata);
 router.post("/:trackId/tags", protect, addTrackTag);

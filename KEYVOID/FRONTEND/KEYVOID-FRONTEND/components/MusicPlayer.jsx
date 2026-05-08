@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Disc3, Heart, ListPlus, Menu, Pause, Play, Plus, RefreshCw, Search, SkipBack, SkipForward, Upload, X } from "lucide-react";
 import { usePlayer } from "../src/context/PlayerContext";
 import { useAuth } from "../src/context/useAuth";
+import { getAudioLibrary } from "../services/api";
 import "./MusicPlayer.css";
 
 function formatTime(seconds = 0) {
@@ -32,6 +33,91 @@ const DEFAULT_GENRE_TAGS = [
   "Ambient",
   "Indie"
 ];
+
+const PREFERENCE_STORAGE_KEY = "keyvoid_music_preferences";
+
+function readStoredPreferences() {
+  try {
+    return JSON.parse(localStorage.getItem(PREFERENCE_STORAGE_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function getTagCount(tag) {
+  return Number(tag?.count || tag?.voters?.length || 0);
+}
+
+function getTrackTagScore(track, selectedGenres) {
+  if (selectedGenres.size === 0) return 0;
+
+  const genre = String(track.genre || "").toLowerCase();
+  let score = selectedGenres.has(genre) ? 80 : 0;
+
+  (track.audienceTags || []).forEach((item) => {
+    const tag = String(item.tag || "").toLowerCase();
+    if (selectedGenres.has(tag)) {
+      score += 100 + Math.max(1, getTagCount(item)) * 10;
+    }
+  });
+
+  return score;
+}
+
+function getTrackTextScore(track, query) {
+  if (!query) return 0;
+
+  const title = String(track.title || "").toLowerCase();
+  const artist = String(track.artist || "").toLowerCase();
+  const genre = String(track.genre || "").toLowerCase();
+  let score = 0;
+
+  if (title === query) score += 120;
+  else if (title.startsWith(query)) score += 80;
+  else if (title.includes(query)) score += 45;
+
+  if (genre === query) score += 100;
+  else if (genre.includes(query)) score += 55;
+
+  (track.audienceTags || []).forEach((item) => {
+    const tag = String(item.tag || "").toLowerCase();
+    if (tag === query) score += 90 + Math.max(1, getTagCount(item)) * 8;
+    else if (tag.includes(query)) score += 42 + Math.max(1, getTagCount(item)) * 4;
+  });
+
+  if (artist === query) score += 50;
+  else if (artist.includes(query)) score += 25;
+
+  return score;
+}
+
+function mergeUniqueTracks(...trackGroups) {
+  const seen = new Set();
+  return trackGroups.flat().filter((track) => {
+    const trackId = getTrackId(track);
+    if (!trackId || seen.has(trackId)) return false;
+    seen.add(trackId);
+    return true;
+  });
+}
+
+async function fetchAllTracksForSearch(search) {
+  const limit = 50;
+  let page = 1;
+  let totalPages = 1;
+  const tracks = [];
+
+  do {
+    const response = await getAudioLibrary({ page, limit, search });
+    const nextTracks = response.data.tracks || [];
+    const pagination = response.data.pagination || {};
+    tracks.push(...nextTracks);
+    totalPages = Math.max(1, Number(pagination.totalPages) || 1);
+    page += 1;
+  } while (page <= totalPages);
+
+  return tracks;
+}
 
 export default function MusicPlayer() {
   const {
@@ -72,14 +158,48 @@ export default function MusicPlayer() {
   const [playlistName, setPlaylistName] = useState("");
   const [playlistCover, setPlaylistCover] = useState(null);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState("library");
-  const [openTrackMenuId, setOpenTrackMenuId] = useState("");
+  const [playlistPickerTrack, setPlaylistPickerTrack] = useState(null);
+  const [showPreferenceModal, setShowPreferenceModal] = useState(false);
+  const [hasPreferenceChoice, setHasPreferenceChoice] = useState(() => localStorage.getItem(PREFERENCE_STORAGE_KEY) !== null);
+  const [musicPreferences, setMusicPreferences] = useState(readStoredPreferences);
+  const [recommendationPool, setRecommendationPool] = useState([]);
+  const [isRecommendationLoading, setIsRecommendationLoading] = useState(false);
 
-  const trackList = useMemo(() => [...filteredLibrary], [filteredLibrary]);
+  const preferenceSet = useMemo(() => {
+    return new Set(musicPreferences.map((tag) => tag.toLowerCase()));
+  }, [musicPreferences]);
+
+  const getPreferenceRank = useCallback((track) => getTrackTagScore(track, preferenceSet), [preferenceSet]);
+
+  const trackList = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return [...filteredLibrary].sort((a, b) => (
+      getTrackTextScore(b, query) - getTrackTextScore(a, query)
+      || getPreferenceRank(b) - getPreferenceRank(a)
+    ));
+  }, [filteredLibrary, getPreferenceRank, searchQuery]);
   const selectedPlaylist = useMemo(() => {
     return playlists.find((playlist) => getTrackId(playlist) === selectedPlaylistId);
   }, [playlists, selectedPlaylistId]);
 
-  const visibleTracks = selectedPlaylist ? selectedPlaylist.tracks || [] : trackList;
+  const recommendedTracks = useMemo(() => {
+    if (musicPreferences.length === 0) return [];
+    const query = searchQuery.trim().toLowerCase();
+
+    return recommendationPool
+      .filter((track) => !query || getTrackTextScore(track, query) > 0)
+      .map((track) => ({ track, score: getPreferenceRank(track) }))
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score || getTrackTextScore(b.track, query) - getTrackTextScore(a.track, query))
+      .map((item) => item.track)
+      .slice(0, 30);
+  }, [getPreferenceRank, musicPreferences.length, recommendationPool, searchQuery]);
+  const exploreTracks = useMemo(() => {
+    if (musicPreferences.length === 0) return trackList;
+
+    return trackList.filter((track) => getPreferenceRank(track) === 0);
+  }, [getPreferenceRank, musicPreferences.length, trackList]);
+  const visibleTracks = selectedPlaylist ? selectedPlaylist.tracks || [] : exploreTracks;
   const normalPlaylists = playlists.filter((playlist) => playlist.type !== "liked");
   const likedPlaylist = playlists.find((playlist) => playlist.type === "liked");
   const likedTrackIds = new Set((likedPlaylist?.tracks || []).map(getTrackId));
@@ -107,6 +227,80 @@ export default function MusicPlayer() {
     }
   }, [isAuthenticated, loadPlaylists]);
 
+  useEffect(() => {
+    if (!hasPreferenceChoice) {
+      const timer = window.setTimeout(() => setShowPreferenceModal(true), 0);
+      return () => window.clearTimeout(timer);
+    }
+
+    return undefined;
+  }, [hasPreferenceChoice]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadRecommendations() {
+      if (musicPreferences.length === 0) {
+        setRecommendationPool([]);
+        return;
+      }
+
+      try {
+        setIsRecommendationLoading(true);
+        const remoteGroups = await Promise.all(
+          musicPreferences.map((genre) => fetchAllTracksForSearch(genre))
+        );
+        const localMatches = localTracks.filter((track) => getTrackTagScore(track, preferenceSet) > 0);
+        const mergedTracks = mergeUniqueTracks(localMatches, ...remoteGroups);
+
+        if (!ignore) {
+          setRecommendationPool(mergedTracks);
+        }
+      } catch (err) {
+        console.warn("Unable to load recommendation pool:", err);
+        if (!ignore) {
+          const localMatches = localTracks.filter((track) => getTrackTagScore(track, preferenceSet) > 0);
+          setRecommendationPool(localMatches);
+        }
+      } finally {
+        if (!ignore) {
+          setIsRecommendationLoading(false);
+        }
+      }
+    }
+
+    loadRecommendations();
+
+    return () => {
+      ignore = true;
+    };
+  }, [localTracks, musicPreferences, preferenceSet]);
+
+  const togglePreference = (genre) => {
+    setMusicPreferences((current) => {
+      const nextPreferences = current.includes(genre)
+        ? current.filter((item) => item !== genre)
+        : [...current, genre].slice(0, 8);
+
+      localStorage.setItem(PREFERENCE_STORAGE_KEY, JSON.stringify(nextPreferences));
+      setHasPreferenceChoice(true);
+      return nextPreferences;
+    });
+  };
+
+  const savePreferences = () => {
+    localStorage.setItem(PREFERENCE_STORAGE_KEY, JSON.stringify(musicPreferences));
+    setHasPreferenceChoice(true);
+    setShowPreferenceModal(false);
+  };
+
+  const skipPreferences = () => {
+    localStorage.setItem(PREFERENCE_STORAGE_KEY, "[]");
+    setMusicPreferences([]);
+    setHasPreferenceChoice(true);
+    setShowPreferenceModal(false);
+  };
+
   const handleCreatePlaylist = async (event) => {
     event.preventDefault();
     if (!playlistName.trim()) return;
@@ -125,8 +319,10 @@ export default function MusicPlayer() {
   };
 
   const handleAddToPlaylist = async (playlistId, trackId) => {
-    await addTrackToUserPlaylist(playlistId, trackId);
-    setOpenTrackMenuId("");
+    const added = await addTrackToUserPlaylist(playlistId, trackId);
+    if (added) {
+      setPlaylistPickerTrack(null);
+    }
   };
 
   const handleLikeTrack = async (trackId) => {
@@ -143,6 +339,36 @@ export default function MusicPlayer() {
 
   return (
     <div className="music-page">
+      {showPreferenceModal ? (
+        <div className="music-modal-overlay">
+          <div className="music-preference-modal">
+            <p className="player-kicker">Tune your discovery</p>
+            <h2>What do you want KeyVoid to surface first?</h2>
+            <p>Pick a few genres or moods. You can still explore everything.</p>
+            <div className="preference-chip-grid">
+              {DEFAULT_GENRE_TAGS.filter((tag) => tag !== "Uploads").map((genre) => (
+                <button
+                  key={genre}
+                  type="button"
+                  className={musicPreferences.includes(genre) ? "preference-chip active" : "preference-chip"}
+                  onClick={() => togglePreference(genre)}
+                >
+                  {genre}
+                </button>
+              ))}
+            </div>
+            <div className="music-modal-actions">
+              <button type="button" onClick={skipPreferences}>
+                Skip
+              </button>
+              <button type="button" className="primary" onClick={savePreferences}>
+                Save preferences
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <section className="music-toolbar" aria-label="Music library controls">
         <div className="music-title-block">
           <h1>Music Library</h1>
@@ -188,13 +414,60 @@ export default function MusicPlayer() {
 
       {error && <div className="error-banner">{error}</div>}
 
+      {!selectedPlaylist ? (
+        <section className="recommended-card" aria-label="Recommended tracks">
+          <div className="library-header">
+            <div>
+              <h2 className="library-title">Recommended for you</h2>
+              <p className="library-subtitle">
+                {musicPreferences.length ? musicPreferences.join(", ") : "Choose genres so KeyVoid can sort this section."}
+              </p>
+            </div>
+            <button type="button" className="see-more-button" onClick={() => setShowPreferenceModal(true)}>
+              Tune
+            </button>
+          </div>
+          <div className="preference-chip-grid compact" aria-label="Genre filters">
+            {DEFAULT_GENRE_TAGS.filter((tag) => tag !== "Uploads").map((genre) => (
+              <button
+                key={genre}
+                type="button"
+                className={musicPreferences.includes(genre) ? "preference-chip active" : "preference-chip"}
+                onClick={() => togglePreference(genre)}
+              >
+                {genre}
+              </button>
+            ))}
+          </div>
+          {isRecommendationLoading ? (
+            <div className="empty-library">Finding songs across the full library...</div>
+          ) : musicPreferences.length > 0 && recommendedTracks.length > 0 ? (
+            <div className="recommended-track-row">
+              {recommendedTracks.map((track) => (
+                <button key={getTrackId(track)} type="button" className="recommended-track" onClick={() => handleSelectTrack(track)}>
+                  <span className="recommended-cover">
+                    {track.coverUrl ? <img src={track.coverUrl} alt="" /> : <Disc3 size={22} />}
+                  </span>
+                  <strong>{track.title}</strong>
+                  <small>{track.artist || "Unknown Artist"}</small>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-library">
+              {musicPreferences.length ? "No tracks match those genres yet. Explore has the rest of the library." : "Pick one or more genres above to build recommendations."}
+            </div>
+          )}
+        </section>
+      ) : null}
+
       <div className="music-layout">
         <section className="library-card" aria-label="Songs">
           <div className="library-header">
             <div>
-              <h2 className="library-title">Songs</h2>
+              <h2 className="library-title">{selectedPlaylist ? selectedPlaylist.name : "Explore"}</h2>
               <p className="library-subtitle">
-                Page {pagination.page || 1} of {pagination.totalPages || 1}
+                {selectedPlaylist ? "Playlist songs" : musicPreferences.length ? "Everything outside your selected genres" : `Page ${pagination.page || 1} of ${pagination.totalPages || 1}`}
               </p>
             </div>
             {isLibraryLoading || isPlaylistLoading || isUploadingTracks ? (
@@ -243,28 +516,11 @@ export default function MusicPlayer() {
                         <button
                           type="button"
                           className="track-icon-btn"
-                          onClick={() => setOpenTrackMenuId(openTrackMenuId === trackId ? "" : trackId)}
+                          onClick={() => setPlaylistPickerTrack(track)}
                           aria-label="Add to playlist"
                         >
                           <ListPlus size={16} />
                         </button>
-                        {openTrackMenuId === trackId ? (
-                          <span className="playlist-menu">
-                            {normalPlaylists.length > 0 ? (
-                              normalPlaylists.map((playlist) => (
-                                <button
-                                  type="button"
-                                  key={getTrackId(playlist)}
-                                  onClick={() => handleAddToPlaylist(getTrackId(playlist), trackId)}
-                                >
-                                  {playlist.name}
-                                </button>
-                              ))
-                            ) : (
-                              <small>Create a playlist first</small>
-                            )}
-                          </span>
-                        ) : null}
                       </span>
                     ) : null}
                   </div>
@@ -452,6 +708,39 @@ export default function MusicPlayer() {
           )}
         </div>
       </aside>
+
+      {playlistPickerTrack ? (
+        <div className="music-modal-overlay" onMouseDown={() => setPlaylistPickerTrack(null)}>
+          <div className="playlist-picker-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="playlist-picker-header">
+              <div>
+                <p className="player-kicker">Add to playlist</p>
+                <h2>{playlistPickerTrack.title}</h2>
+              </div>
+              <button type="button" className="track-icon-btn" onClick={() => setPlaylistPickerTrack(null)} aria-label="Close playlist picker">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="playlist-picker-list">
+              {normalPlaylists.length > 0 ? (
+                normalPlaylists.map((playlist) => (
+                  <button
+                    type="button"
+                    key={getTrackId(playlist)}
+                    className="playlist-picker-item"
+                    onClick={() => handleAddToPlaylist(getTrackId(playlist), getTrackId(playlistPickerTrack))}
+                  >
+                    {playlist.coverUrl ? <img src={playlist.coverUrl} alt="" /> : <span className="playlist-cover-placeholder"><Disc3 size={18} /></span>}
+                    <span>{playlist.name}<small>{playlist.tracksCount || 0} songs</small></span>
+                  </button>
+                ))
+              ) : (
+                <div className="playlist-picker-empty">Create a playlist first, then come back to save this song.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

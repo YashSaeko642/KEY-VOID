@@ -2,10 +2,8 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Music, Save, Trash2, Video, Upload, Play } from "lucide-react";
 import API, {
-  deleteAudioTrack,
   getApiErrorMessage,
   getMyAudioUploads,
-  updateAudioTrack,
   uploadCreatorSongs
 } from "../services/api";
 import { useAuth } from "../src/context/useAuth";
@@ -34,7 +32,7 @@ function trackTagsToText(track) {
 
 export default function CreatorHub() {
   const { isAdmin, user } = useAuth();
-  const { refreshLibrary } = usePlayer();
+  const { refreshLibrary, updateUploadedTrack, deleteUploadedTrack } = usePlayer();
   const [status, setStatus] = useState("checking");
   const [message, setMessage] = useState("");
   const [songFiles, setSongFiles] = useState([]);
@@ -137,10 +135,12 @@ export default function CreatorHub() {
   const handleSaveUpload = async (trackId) => {
     try {
       const payload = uploadEdits[trackId];
-      await updateAudioTrack(trackId, payload);
+      const updatedTrack = await updateUploadedTrack(trackId, payload);
+      if (!updatedTrack) {
+        throw new Error("Unable to update song");
+      }
       setSongNotice({ type: "success", message: "Song details updated." });
       await loadMyUploads();
-      refreshLibrary();
     } catch (err) {
       setSongNotice({ type: "error", message: getApiErrorMessage(err, "Unable to update song.") });
     }
@@ -148,10 +148,12 @@ export default function CreatorHub() {
 
   const handleDeleteUpload = async (trackId) => {
     try {
-      await deleteAudioTrack(trackId);
+      const deleted = await deleteUploadedTrack(trackId);
+      if (!deleted) {
+        throw new Error("Unable to delete song");
+      }
       setSongNotice({ type: "success", message: "Song deleted from the music library." });
       await loadMyUploads();
-      refreshLibrary();
     } catch (err) {
       setSongNotice({ type: "error", message: getApiErrorMessage(err, "Unable to delete song.") });
     }

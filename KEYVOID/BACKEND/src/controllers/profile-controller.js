@@ -322,7 +322,7 @@ exports.searchProfiles = async (req, res) => {
           { displayName: searchRegex }
         ]
       })
-        .select("_id username displayName bio avatarUrl isCreator role")
+        .select("_id username displayName bio avatarUrl isCreator role followers following followersCount followingCount")
         .limit(pageLimit)
         .skip(pageSkip)
         .lean(),
@@ -336,14 +336,21 @@ exports.searchProfiles = async (req, res) => {
     ]);
 
     // Build profile payloads for results
-    const profiles = users.map(user => ({
-      id: user._id,
-      username: user.username,
-      displayName: user.displayName || user.username,
-      bio: user.bio || "",
-      avatarUrl: user.avatarUrl || "",
-      isCreator: user.role === "creator" || user.isCreator
-    }));
+    const profiles = users.map(user => {
+      const followersLength = Array.isArray(user.followers) ? user.followers.length : 0;
+      const followingLength = Array.isArray(user.following) ? user.following.length : 0;
+
+      return {
+        id: user._id,
+        username: user.username,
+        displayName: user.displayName || user.username,
+        bio: user.bio || "",
+        avatarUrl: user.avatarUrl || "",
+        isCreator: user.role === "creator" || user.isCreator,
+        followersCount: Math.max(Number(user.followersCount) || 0, followersLength),
+        followingCount: Math.max(Number(user.followingCount) || 0, followingLength)
+      };
+    });
 
     res.json({
       profiles,

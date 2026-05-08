@@ -1,0 +1,248 @@
+.roadmap-page {
+  min-height: 100vh;
+  padding: clamp(18px, 3vw, 42px);
+  color: #e5edf9;
+  background:
+    radial-gradient(circle at 12% 10%, rgba(99, 102, 241, 0.14), transparent 24%),
+    radial-gradient(circle at 88% 14%, rgba(20, 184, 166, 0.1), transparent 22%),
+    linear-gradient(180deg, #020617 0%, #0a1020 100%);
+}
+
+.roadmap-hero,
+.feedback-layout {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+}
+
+.roadmap-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 18px;
+  align-items: stretch;
+  margin-bottom: 18px;
+}
+
+.roadmap-hero > div,
+.version-panel,
+.roadmap-card,
+.feedback-form,
+.feedback-board {
+  border: 1px solid rgba(129, 150, 214, 0.14);
+  border-radius: 8px;
+  background: rgba(8, 13, 27, 0.78);
+  backdrop-filter: blur(18px);
+}
+
+.roadmap-hero > div:first-child {
+  padding: clamp(20px, 3vw, 34px);
+}
+
+.roadmap-kicker {
+  margin: 0 0 10px;
+  color: #7fc2ff;
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.roadmap-hero h1,
+.feedback-form h2,
+.feedback-board h2 {
+  margin: 0;
+  color: #f8fbff;
+}
+
+.roadmap-hero h1 {
+  max-width: 12ch;
+  font-size: clamp(2.1rem, 5vw, 4.2rem);
+  line-height: 1.02;
+}
+
+.roadmap-hero p:not(.roadmap-kicker),
+.roadmap-card p,
+.feedback-item p,
+.feedback-empty {
+  color: #97a6be;
+  line-height: 1.7;
+}
+
+.version-panel {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  padding: 20px;
+  color: #c7d2fe;
+}
+
+.version-panel strong {
+  color: #f8fbff;
+  font-size: 1.3rem;
+}
+
+.roadmap-grid {
+  width: min(1180px, 100%);
+  margin: 0 auto 18px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.roadmap-card {
+  min-height: 190px;
+  padding: 18px;
+}
+
+.roadmap-card span,
+.feedback-item span,
+.feedback-counts span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.14);
+  color: #c7d2fe;
+  font-size: 0.75rem;
+}
+
+.roadmap-card h2,
+.feedback-item h3 {
+  margin: 14px 0 0;
+  color: #f8fbff;
+  font-size: 1.05rem;
+}
+
+.feedback-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 420px) minmax(0, 1fr);
+  gap: 18px;
+}
+
+.feedback-form,
+.feedback-board {
+  padding: 18px;
+}
+
+.feedback-form {
+  display: grid;
+  gap: 12px;
+  align-self: start;
+}
+
+.feedback-type-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.feedback-type-row button,
+.feedback-submit,
+.feedback-item button {
+  border: 1px solid rgba(129, 150, 214, 0.18);
+  background: rgba(16, 24, 43, 0.88);
+  color: #eef4ff;
+  cursor: pointer;
+}
+
+.feedback-type-row button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 999px;
+}
+
+.feedback-type-row button.active {
+  border-color: rgba(129, 140, 248, 0.48);
+  background: rgba(49, 57, 103, 0.72);
+}
+
+.feedback-form input,
+.feedback-form textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(129, 150, 214, 0.18);
+  border-radius: 8px;
+  background: rgba(13, 20, 38, 0.86);
+  color: #f8fbff;
+  outline: none;
+}
+
+.feedback-form input {
+  min-height: 46px;
+  padding: 0 12px;
+}
+
+.feedback-form textarea {
+  resize: vertical;
+  padding: 12px;
+}
+
+.feedback-submit {
+  min-height: 44px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #4f46e5, #14b8a6);
+}
+
+.feedback-board-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.feedback-counts {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.feedback-list {
+  display: grid;
+  gap: 10px;
+}
+
+.feedback-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(129, 150, 214, 0.12);
+  border-radius: 8px;
+  background: rgba(13, 20, 38, 0.74);
+}
+
+.feedback-item p {
+  margin: 8px 0;
+}
+
+.feedback-item small {
+  color: #7fc2ff;
+}
+
+.feedback-item button {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+}
+
+.feedback-empty {
+  padding: 18px;
+  border: 1px dashed rgba(129, 150, 214, 0.22);
+  border-radius: 8px;
+  text-align: center;
+}
+
+@media (max-width: 960px) {
+  .roadmap-hero,
+  .feedback-layout,
+  .roadmap-grid {
+    grid-template-columns: 1fr;
+  }
+}

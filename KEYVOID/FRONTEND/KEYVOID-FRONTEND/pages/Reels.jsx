@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  ChevronDown,
-  ChevronUp,
   Heart,
   MessageCircle,
   Send,
@@ -9,7 +7,9 @@ import {
   Volume2,
   VolumeX,
   Play,
-  Pause
+  Pause,
+  ChevronUp,
+  ChevronDown
 } from "lucide-react";
 import { useAuth } from "../src/context/useAuth";
 import API, { getApiErrorMessage } from "../services/api";
@@ -365,11 +365,13 @@ export default function Reels() {
         const merged = pageNum === 1 ? newReels : [...prev, ...newReels];
         const seen = new Set();
 
-        return merged.filter((item) => {
+        const unique = merged.filter((item) => {
           if (!item?._id || seen.has(item._id)) return false;
           seen.add(item._id);
           return true;
         });
+
+        return unique;
       });
 
       setHasNext(pagination.hasNext || false);
@@ -385,56 +387,60 @@ export default function Reels() {
     }
   }, []);
 
-  const currentReel = reels[currentIndex];
-  const canGoPrevious = currentIndex > 0;
-  const canGoNext = currentIndex < reels.length - 1 || hasNext;
-
   useEffect(() => {
     fetchReels(1);
   }, [fetchReels]);
 
   useEffect(() => {
-    // Prefetch next batch when approaching end of cache
-    if (reels.length - currentIndex <= 2 && hasNext && !isLoading) {
-      fetchReels(page + 1);
+    if (currentIndex > Math.max(reels.length - 1, 0)) {
+      setCurrentIndex(Math.max(reels.length - 1, 0));
     }
-  }, [currentIndex, reels.length, hasNext, isLoading, page, fetchReels]);
+  }, [currentIndex, reels.length]);
 
-  const goToPreviousReel = useCallback(() => {
-    setCurrentIndex((index) => Math.max(index - 1, 0));
-  }, []);
+  const goToReel = useCallback(async (direction) => {
+    if (isLoading) return;
 
-  const goToNextReel = useCallback(async () => {
+    if (direction < 0) {
+      setCurrentIndex((index) => Math.max(0, index - 1));
+      return;
+    }
+
     if (currentIndex < reels.length - 1) {
       setCurrentIndex((index) => index + 1);
       return;
     }
 
-    if (!hasNext || isLoading) return;
-
-    const nextPageReels = await fetchReels(page + 1);
-    if (nextPageReels.length > 0) {
-      setCurrentIndex((index) => index + 1);
+    if (hasNext) {
+      const previousLength = reels.length;
+      const nextReels = await fetchReels(page + 1);
+      if (nextReels.length > 0) {
+        setCurrentIndex(previousLength);
+      }
     }
   }, [currentIndex, fetchReels, hasNext, isLoading, page, reels.length]);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        goToPreviousReel();
-      }
+      if (event.defaultPrevented) return;
+      const targetTag = event.target?.tagName?.toLowerCase();
+      if (targetTag === "input" || targetTag === "textarea" || targetTag === "select") return;
 
       if (event.key === "ArrowDown") {
         event.preventDefault();
-        goToNextReel();
+        goToReel(1);
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        goToReel(-1);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
-
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [goToNextReel, goToPreviousReel]);
+  }, [goToReel]);
+
+  const currentReel = reels[currentIndex];
 
   return (
     <div className="reels-page">
@@ -446,44 +452,37 @@ export default function Reels() {
           </div>
         )}
 
-        {currentReel && (
-          <div className="reels-stage">
+        {currentReel ? (
+          <section className="reels-stage">
             <ReelCard key={currentReel._id} reel={currentReel} />
-
-            <div className="reel-navigation" aria-label="Reel navigation">
+            <nav className="reel-navigation" aria-label="Reel navigation">
               <button
                 type="button"
-                onClick={goToPreviousReel}
-                disabled={!canGoPrevious}
                 className="reel-nav-btn"
+                onClick={() => goToReel(-1)}
+                disabled={currentIndex <= 0}
                 aria-label="Previous reel"
-                title="Previous reel"
               >
-                <ChevronUp size={28} />
+                <ChevronUp size={24} />
               </button>
-
-              <span className="reel-position">
-                {currentIndex + 1}/{Math.max(reels.length, currentIndex + 1)}
-              </span>
-
+              <span className="reel-position">{currentIndex + 1}/{reels.length}</span>
               <button
                 type="button"
-                onClick={goToNextReel}
-                disabled={!canGoNext || isLoading}
                 className="reel-nav-btn"
+                onClick={() => goToReel(1)}
+                disabled={isLoading || (!hasNext && currentIndex >= reels.length - 1)}
                 aria-label="Next reel"
-                title="Next reel"
               >
-                <ChevronDown size={28} />
+                <ChevronDown size={24} />
               </button>
-            </div>
-          </div>
-        )}
+            </nav>
+          </section>
+        ) : null}
 
         {isLoading && (
           <div className="reels-loading">
             <div className="loading-spinner"></div>
-            <p>Loading more reels...</p>
+            <p>Loading reel...</p>
           </div>
         )}
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useEnterVoid } from "../src/context/EnterVoidContext";
+import { useEnterVoid } from "../src/context/useEnterVoid";
 import "./EnterVoidModal.css";
 
 const GENRES = [

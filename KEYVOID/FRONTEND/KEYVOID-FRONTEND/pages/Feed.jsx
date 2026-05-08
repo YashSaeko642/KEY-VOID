@@ -20,8 +20,7 @@ function Feed() {
   const [hasNext, setHasNext] = useState(true);
   const loadMoreTrigger = useRef(null);
 
-  // 🔥 NEW: feed mode
-  const [mode, setMode] = useState("global"); // global | following
+  const [mode, setMode] = useState("global");
 
   const clearMedia = useCallback(() => {
     if (mediaPreviewUrl) {
@@ -31,7 +30,6 @@ function Feed() {
     setMediaPreviewUrl("");
   }, [mediaPreviewUrl]);
 
-  // 🔥 UPDATED: dynamic endpoint
   const fetchPosts = useCallback(async (pageNum = 1) => {
     try {
       setIsLoading(true);
@@ -84,7 +82,6 @@ function Feed() {
         setPostText("");
         clearMedia();
 
-        // 🔥 OPTIONAL IMPROVEMENT: instant UI update
         setPosts((prev) => [response.data, ...prev]);
       }
     } catch (err) {
@@ -157,56 +154,29 @@ function Feed() {
 
   return (
     <ErrorBoundary>
-      <div className="feed-container">
+      <div className="feed-container social-surface">
+        <div className="feed-shell">
+          <aside className="feed-sidebar">
+            <p className="feed-sidebar-kicker">Channels</p>
+            <button className={mode === "global" ? "feed-channel active" : "feed-channel"} onClick={() => setMode("global")}>
+              For You
+              <span>Fresh posts across KeyVoid</span>
+            </button>
+            <button className={mode === "following" ? "feed-channel active" : "feed-channel"} onClick={() => setMode("following")}>
+              Following
+              <span>Creators and listeners you follow</span>
+            </button>
+          </aside>
+
         <div className="feed-wrapper">
 
           {/* HEADER */}
           <div className="feed-header">
-            <h1 className="feed-title">Social Feed</h1>
+            <h1 className="feed-title">{mode === "following" ? "Following" : "For You"}</h1>
             <p className="feed-subtitle">
-              Share your thoughts with the world
+             Music discussions, updates, and media from the KeyVoid community.
             </p>
 
-            {/* 🔥 NEW: FEED TOGGLE */}
-            <div
-              style={{
-                display: "flex",
-                gap: "10px",
-                marginTop: "12px"
-              }}
-            >
-              <button
-                onClick={() => setMode("global")}
-                style={{
-                  padding: "6px 14px",
-                  borderRadius: "999px",
-                  border: "none",
-                  cursor: "pointer",
-                  background:
-                    mode === "global" ? "#6366f1" : "#1e293b",
-                  color: "white",
-                  fontSize: "13px"
-                }}
-              >
-                For You
-              </button>
-
-              <button
-                onClick={() => setMode("following")}
-                style={{
-                  padding: "6px 14px",
-                  borderRadius: "999px",
-                  border: "none",
-                  cursor: "pointer",
-                  background:
-                    mode === "following" ? "#6366f1" : "#1e293b",
-                  color: "white",
-                  fontSize: "13px"
-                }}
-              >
-                Following
-              </button>
-            </div>
           </div>
 
           {/* ERROR */}
@@ -323,6 +293,19 @@ function Feed() {
 
             <div ref={loadMoreTrigger} className="load-more-trigger" />
           </div>
+        </div>
+
+          <aside className="feed-sidebar feed-sidebar-right">
+            <p className="feed-sidebar-kicker">Community</p>
+            <div className="feed-tip">
+              <strong>Post prompts</strong>
+              <span>Share a track, ask for recs, post a clip, or start a genre debate.</span>
+            </div>
+            <div className="feed-tip">
+              <strong>Coming next</strong>
+              <span>Genre rooms, saved posts, notifications, and threaded replies.</span>
+            </div>
+          </aside>
         </div>
       </div>
     </ErrorBoundary>

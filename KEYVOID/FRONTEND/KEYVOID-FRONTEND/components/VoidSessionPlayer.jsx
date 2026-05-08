@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { useEnterVoid } from "../src/context/EnterVoidContext";
+import { useEnterVoid } from "../src/context/useEnterVoid";
 import "./VoidSessionPlayer.css";
 
 export default function VoidSessionPlayer() {
@@ -21,7 +21,6 @@ export default function VoidSessionPlayer() {
 
   const audioRef = useRef(null);
   const timerRef = useRef(null);
-  const trackTimeRef = useRef(null);
   const [isLoading, setIsLoading] = useState(false);
   const [canSkip, setCanSkip] = useState(false);
   const [skipCountdown, setSkipCountdown] = useState(0);

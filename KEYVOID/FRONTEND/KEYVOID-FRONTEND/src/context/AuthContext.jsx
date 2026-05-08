@@ -42,6 +42,10 @@ export function AuthProvider({ children }) {
           !originalRequest ||
           originalRequest._retry ||
           originalRequest.url?.includes("/auth/google") ||
+          originalRequest.url?.includes("/auth/login") ||
+          originalRequest.url?.includes("/auth/register") ||
+          originalRequest.url?.includes("/auth/forgot-password") ||
+          originalRequest.url?.includes("/auth/reset-password") ||
           originalRequest.url?.includes("/auth/refresh") ||
           originalRequest.url?.includes("/auth/logout")
         ) {
@@ -137,7 +141,9 @@ export function AuthProvider({ children }) {
     } catch (error) {
       return {
         success: false,
-        message: error.response?.data?.msg || "Login failed"
+        message: error.response?.data?.msg || "Login failed",
+        emailVerificationRequired: Boolean(error.response?.data?.emailVerificationRequired),
+        email: error.response?.data?.email
       };
     } finally {
       setLoading(false);
@@ -156,13 +162,24 @@ export function AuthProvider({ children }) {
         role
       });
 
+      if (data.emailVerificationRequired) {
+        return {
+          success: true,
+          emailVerificationRequired: true,
+          email: data.email,
+          message: data.msg
+        };
+      }
+
       setToken(data.token);
       setUser(data.user);
       return { success: true };
     } catch (error) {
       return {
         success: false,
-        message: error.response?.data?.msg || "Registration failed"
+        message: error.response?.data?.msg || "Registration failed",
+        emailVerificationRequired: Boolean(error.response?.data?.emailVerificationRequired),
+        email: error.response?.data?.email
       };
     } finally {
       setLoading(false);
@@ -179,6 +196,24 @@ export function AuthProvider({ children }) {
     } finally {
       setToken("");
       setUser(null);
+      setLoading(false);
+    }
+  }
+
+  async function deleteAccount() {
+    setLoading(true);
+
+    try {
+      await API.delete("/auth/account", { data: { confirmation: "DELETE" } });
+      setToken("");
+      setUser(null);
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.response?.data?.msg || "Account deletion failed"
+      };
+    } finally {
       setLoading(false);
     }
   }
@@ -210,6 +245,7 @@ export function AuthProvider({ children }) {
       localLogin,
       localRegister,
       updateUser,
+      deleteAccount,
       logout
     }),
     [token, user, loading, isBootstrapping]

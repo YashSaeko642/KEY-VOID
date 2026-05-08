@@ -134,6 +134,53 @@ async function savePostMediaLocally(file, userId, req, contentType = "post") {
   };
 }
 
+async function deleteLocalPostMedia(mediaUrl = "") {
+  try {
+    const url = new URL(mediaUrl);
+    const marker = "/uploads/posts/";
+    const markerIndex = url.pathname.indexOf(marker);
+    if (markerIndex === -1) return;
+
+    const relativePath = decodeURIComponent(url.pathname.slice(markerIndex + 1));
+    const uploadRoot = path.resolve(__dirname, "..", "..", "uploads", "posts");
+    const filePath = path.resolve(__dirname, "..", "..", relativePath);
+
+    if (!filePath.startsWith(uploadRoot)) return;
+    await fs.unlink(filePath);
+  } catch {
+    // Media cleanup should not block document deletion.
+  }
+}
+
+async function deletePostMedia(post) {
+  if (!post) return;
+
+  if (post.mediaPublicId && isCloudinaryConfigured()) {
+    try {
+      await cloudinary.uploader.destroy(post.mediaPublicId, {
+        resource_type: post.mediaType === "video" ? "video" : "image"
+      });
+    } catch (error) {
+      console.error("Cloudinary post media delete failed:", error.message);
+    }
+  }
+
+  if (!post.mediaPublicId && post.mediaUrl) {
+    await deleteLocalPostMedia(post.mediaUrl);
+  }
+}
+
+async function hardDeletePostDocument(post) {
+  await deletePostMedia(post);
+  await Post.deleteOne({ _id: post._id });
+}
+
+exports.hardDeletePostsByAuthor = async (userId) => {
+  const posts = await Post.find({ author: userId });
+  await Promise.all(posts.map((post) => hardDeletePostDocument(post)));
+  return posts.length;
+};
+
 // ✅ CREATE POST
 exports.createPost = async (req, res) => {
   try {
@@ -228,19 +275,46 @@ exports.getFeed = async (req, res) => {
 exports.getUserPosts = async (req, res) => {
   try {
     const { userId } = req.params;
-
-    // Validate ObjectId format
     if (!isValidObjectId(userId)) {
       return res.status(400).json({ message: "Invalid user ID" });
     }
 
-    const posts = await Post.find({ author: userId, isDeleted: false })
-      .populate("author", "username avatarUrl")
-      .populate("comments.author", "username avatarUrl")
-      .sort({ createdAt: -1 })
-      .lean();
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 10));
+    const skip = (page - 1) * limit;
+    const contentType = String(req.query.contentType || "").trim().toLowerCase();
 
-    res.json({ posts });
+    const query = {
+      author: userId,
+      isDeleted: false
+    };
+
+    if (contentType === "post" || contentType === "reel") {
+      query.contentType = contentType;
+    }
+
+    const [posts, total] = await Promise.all([
+      Post.find(query)
+        .populate("author", "username avatarUrl")
+        .populate("comments.author", "username avatarUrl")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Post.countDocuments(query)
+    ]);
+
+    res.json({
+      posts,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+        hasNext: page * limit < total,
+        hasPrev: page > 1
+      }
+    });
   } catch (err) {
     console.error("Get user posts error:", err);
     res.status(500).json({ message: "Failed to load user posts" });
@@ -351,11 +425,9 @@ exports.deletePost = async (req, res) => {
       return res.status(403).json({ message: "Unauthorized to delete this post" });
     }
 
-    // Soft delete - mark as deleted but keep in database
-    post.isDeleted = true;
-    await post.save();
+    await hardDeletePostDocument(post);
 
-    res.json({ message: "Post deleted successfully" });
+    res.json({ message: "Post permanently deleted" });
   } catch (err) {
     console.error("Delete post error:", err);
     res.status(500).json({ message: "Failed to delete post" });
@@ -425,7 +497,8 @@ exports.getFollowingFeed = async (req, res) => {
     const followingIds = [...user.following, userId];
 
     const posts = await Post.find({
-      author: { $in: followingIds }
+      author: { $in: followingIds },
+      isDeleted: false
     })
       .populate("author", "username avatarUrl")
       .sort({ createdAt: -1 });

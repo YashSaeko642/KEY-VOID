@@ -1,16 +1,28 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import API, { followUser, unfollowUser, getFollowStatus } from "../services/api";
+import API, { followUser, unfollowUser, getFollowStatus, getApiErrorMessage, getUserAudioUploads, getUserPosts } from "../services/api";
 import { useAuth } from "../src/context/useAuth";
+import { usePlayer } from "../src/context/PlayerContext";
+import PostCard from "../components/PostCard";
 
 export default function PublicProfile() {
   const { username } = useParams();
   const { user, isAuthenticated } = useAuth();
+  const { deleteUploadedTrack } = usePlayer();
   const [profile, setProfile] = useState(null);
   const [status, setStatus] = useState("loading");
   const [message, setMessage] = useState("");
   const [followStatus, setFollowStatus] = useState(null);
   const [isFollowLoading, setIsFollowLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState("uploads");
+  const [audioTracks, setAudioTracks] = useState([]);
+  const [audioPagination, setAudioPagination] = useState({ page: 1, limit: 10, total: 0, pages: 0, hasNext: false, hasPrev: false });
+  const [posts, setPosts] = useState([]);
+  const [postsPagination, setPostsPagination] = useState({ page: 1, limit: 6, total: 0, pages: 0, hasNext: false, hasPrev: false });
+  const [reels, setReels] = useState([]);
+  const [reelsPagination, setReelsPagination] = useState({ page: 1, limit: 6, total: 0, pages: 0, hasNext: false, hasPrev: false });
+  const [contentLoading, setContentLoading] = useState(false);
+  const [contentError, setContentError] = useState("");
 
   useEffect(() => {
     let ignore = false;
@@ -79,6 +91,100 @@ export default function PublicProfile() {
       console.error("Follow error:", err);
     } finally {
       setIsFollowLoading(false);
+    }
+  };
+
+  const loadProfileAudio = useCallback(async (page = 1, append = false) => {
+    if (!profile?.id) return;
+    setContentError("");
+    setContentLoading(true);
+
+    try {
+      const { data } = await getUserAudioUploads(profile.id, page, 10);
+      const nextTracks = data.tracks || [];
+      setAudioTracks((prev) => (append ? [...prev, ...nextTracks] : nextTracks));
+      setAudioPagination(data.pagination || {
+        page,
+        limit: 10,
+        total: nextTracks.length,
+        pages: 1,
+        hasNext: false,
+        hasPrev: page > 1
+      });
+    } catch (error) {
+      setContentError(getApiErrorMessage(error, "Unable to load audio uploads."));
+    } finally {
+      setContentLoading(false);
+    }
+  }, [profile?.id]);
+
+  const loadProfilePosts = useCallback(async (page = 1, contentType = "post", append = false) => {
+    if (!profile?.id) return;
+    setContentError("");
+    setContentLoading(true);
+
+    try {
+      const { data } = await getUserPosts(profile.id, page, 6, contentType);
+      const nextPosts = data.posts || [];
+      if (contentType === "reel") {
+        setReels((prev) => (append ? [...prev, ...nextPosts] : nextPosts));
+        setReelsPagination(data.pagination || {
+          page,
+          limit: 6,
+          total: nextPosts.length,
+          pages: 1,
+          hasNext: false,
+          hasPrev: page > 1
+        });
+      } else {
+        setPosts((prev) => (append ? [...prev, ...nextPosts] : nextPosts));
+        setPostsPagination(data.pagination || {
+          page,
+          limit: 6,
+          total: nextPosts.length,
+          pages: 1,
+          hasNext: false,
+          hasPrev: page > 1
+        });
+      }
+    } catch (error) {
+      setContentError(getApiErrorMessage(error, `Unable to load ${contentType === "reel" ? "reels" : "posts"}.`));
+    } finally {
+      setContentLoading(false);
+    }
+  }, [profile?.id]);
+
+  useEffect(() => {
+    if (!profile?.id) return;
+    loadProfileAudio();
+    loadProfilePosts(1, "post");
+    loadProfilePosts(1, "reel");
+  }, [profile?.id, loadProfileAudio, loadProfilePosts]);
+
+  const handleLoadMoreAudio = async () => {
+    if (!audioPagination.hasNext) return;
+    await loadProfileAudio(audioPagination.page + 1, true);
+  };
+
+  const handleLoadMorePosts = async () => {
+    if (!postsPagination.hasNext) return;
+    await loadProfilePosts(postsPagination.page + 1, "post", true);
+  };
+
+  const handleLoadMoreReels = async () => {
+    if (!reelsPagination.hasNext) return;
+    await loadProfilePosts(reelsPagination.page + 1, "reel", true);
+  };
+
+  const handleDeletePost = (postId) => {
+    setPosts((prev) => prev.filter((post) => post._id !== postId));
+    setReels((prev) => prev.filter((post) => post._id !== postId));
+  };
+
+  const handleDeleteAudio = async (trackId) => {
+    const deleted = await deleteUploadedTrack(trackId);
+    if (deleted) {
+      setAudioTracks((prev) => prev.filter((track) => track.id !== trackId));
     }
   };
 
@@ -376,6 +482,106 @@ export default function PublicProfile() {
               </div>
             </div>
           )}
+
+          <div style={{ marginBottom: "32px", padding: "24px", borderRadius: "20px", background: "rgba(15, 23, 42, 0.9)", border: "1px solid rgba(71, 85, 105, 0.3)" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", marginBottom: "22px" }}>
+              {[
+                { key: "uploads", label: `Music (${audioPagination.total})` },
+                { key: "posts", label: `Posts (${postsPagination.total})` },
+                { key: "reels", label: `Reels (${reelsPagination.total})` }
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActiveTab(tab.key)}
+                  style={{
+                    padding: "12px 20px",
+                    borderRadius: "999px",
+                    border: activeTab === tab.key ? "1px solid #818cf8" : "1px solid rgba(148, 163, 184, 0.24)",
+                    background: activeTab === tab.key ? "rgba(99, 102, 241, 0.18)" : "rgba(31, 41, 55, 0.8)",
+                    color: "#e2e8f0",
+                    cursor: "pointer"
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {contentError ? (
+              <p className="auth-error" style={{ marginBottom: "16px" }}>{contentError}</p>
+            ) : null}
+            {contentLoading ? (
+              <p style={{ color: "#cbd5e1", marginBottom: "16px" }}>Loading content...</p>
+            ) : null}
+
+            {activeTab === "uploads" && (
+              <div style={{ display: "grid", gap: "14px" }}>
+                {audioTracks.length > 0 ? (
+                  audioTracks.map((track) => (
+                    <div key={track.id} style={{ padding: "16px", borderRadius: "16px", border: "1px solid rgba(148, 163, 184, 0.12)", background: "rgba(15, 23, 42, 0.95)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: "1rem", color: "#f8fafc" }}>{track.title || "Untitled"}</div>
+                          <div style={{ color: "#94a3b8", fontSize: "0.95rem" }}>{track.artist || "Unknown artist"}</div>
+                        </div>
+                        {isOwnProfile && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteAudio(track.id)}
+                            style={{ padding: "10px 14px", borderRadius: "12px", background: "#7f1d1d", border: "none", color: "white", cursor: "pointer" }}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p style={{ color: "#cbd5e1" }}>No music uploads available.</p>
+                )}
+                {audioPagination.hasNext && (
+                  <button type="button" onClick={handleLoadMoreAudio} style={{ padding: "12px 20px", borderRadius: "12px", background: "#6366f1", border: "none", color: "white", cursor: "pointer", width: "fit-content" }}>
+                    Load more music
+                  </button>
+                )}
+              </div>
+            )}
+
+            {activeTab === "posts" && (
+              <div style={{ display: "grid", gap: "16px" }}>
+                {posts.length > 0 ? (
+                  posts.map((post) => (
+                    <PostCard key={post._id} post={post} onPostDeleted={handleDeletePost} />
+                  ))
+                ) : (
+                  <p style={{ color: "#cbd5e1" }}>No posts yet.</p>
+                )}
+                {postsPagination.hasNext && (
+                  <button type="button" onClick={handleLoadMorePosts} style={{ padding: "12px 20px", borderRadius: "12px", background: "#6366f1", border: "none", color: "white", cursor: "pointer", width: "fit-content" }}>
+                    Load more posts
+                  </button>
+                )}
+              </div>
+            )}
+
+            {activeTab === "reels" && (
+              <div style={{ display: "grid", gap: "16px" }}>
+                {reels.length > 0 ? (
+                  reels.map((post) => (
+                    <PostCard key={post._id} post={post} onPostDeleted={handleDeletePost} />
+                  ))
+                ) : (
+                  <p style={{ color: "#cbd5e1" }}>No reels yet.</p>
+                )}
+                {reelsPagination.hasNext && (
+                  <button type="button" onClick={handleLoadMoreReels} style={{ padding: "12px 20px", borderRadius: "12px", background: "#6366f1", border: "none", color: "white", cursor: "pointer", width: "fit-content" }}>
+                    Load more reels
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Action Buttons */}
           <div style={{display: "flex", gap: "16px", flexWrap: "wrap"}}>

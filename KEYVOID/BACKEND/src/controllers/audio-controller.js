@@ -63,6 +63,46 @@ const parseTags = (value, fallbackTag) => {
 
 const isUncategorized = (genre) => UNCATEGORIZED_GENRES.has(String(genre || "").trim().toLowerCase());
 
+const getTagVoteCount = (tag) => Array.isArray(tag?.voters) ? tag.voters.length : 0;
+
+const getDominantGenreFromTags = (tags = [], fallback = DEFAULT_GENRE) => {
+  const sortedTags = [...tags]
+    .filter((item) => item?.tag && getTagVoteCount(item) > 0)
+    .sort((a, b) => getTagVoteCount(b) - getTagVoteCount(a) || String(a.tag).localeCompare(String(b.tag)));
+
+  return sortedTags[0]?.tag || fallback;
+};
+
+const getSearchScore = (track, searchTerm) => {
+  if (!searchTerm) return 0;
+
+  const query = searchTerm.toLowerCase();
+  const title = String(track.title || "").toLowerCase();
+  const artist = String(track.artist || "").toLowerCase();
+  const genre = String(track.genre || "").toLowerCase();
+  const tags = track.audienceTags || [];
+  let score = 0;
+
+  if (title === query) score += 120;
+  else if (title.startsWith(query)) score += 80;
+  else if (title.includes(query)) score += 45;
+
+  if (genre === query) score += 100;
+  else if (genre.includes(query)) score += 55;
+
+  tags.forEach((item) => {
+    const tag = String(item.tag || "").toLowerCase();
+    const votes = Math.max(1, getTagVoteCount(item));
+    if (tag === query) score += 90 + votes * 8;
+    else if (tag.includes(query)) score += 42 + votes * 4;
+  });
+
+  if (artist === query) score += 50;
+  else if (artist.includes(query)) score += 25;
+
+  return score;
+};
+
 const canAccessTrack = (audio, user) => {
   return Boolean(audio.isPublic || (user && audio.uploadedBy && String(audio.uploadedBy) === String(user._id)));
 };
@@ -115,14 +155,15 @@ exports.getLibrary = async (req, res) => {
       });
     }
 
-    const [tracks, total] = await Promise.all([
-      Audio.find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      Audio.countDocuments(query)
-    ]);
+    const matchedTracks = await Audio.find(query).sort({ createdAt: -1 }).lean();
+    const rankedTracks = search
+      ? matchedTracks
+          .map((track) => ({ track, score: getSearchScore(track, search) }))
+          .sort((a, b) => b.score - a.score || new Date(b.track.createdAt) - new Date(a.track.createdAt))
+          .map((item) => item.track)
+      : matchedTracks;
+    const total = rankedTracks.length;
+    const tracks = rankedTracks.slice(skip, skip + limit);
 
     res.setHeader("Cache-Control", "private, max-age=60");
 
@@ -337,9 +378,7 @@ exports.addTrackTag = async (req, res) => {
       audio.audienceTags.push({ tag: normalizedTag, voters: [req.user._id] });
     }
 
-    if (isUncategorized(audio.genre)) {
-      audio.genre = normalizedTag;
-    }
+    audio.genre = getDominantGenreFromTags(audio.audienceTags, isUncategorized(audio.genre) ? normalizedTag : audio.genre);
 
     await audio.save();
 
@@ -390,9 +429,12 @@ exports.removeTrackTag = async (req, res) => {
       audio.audienceTags[tagIndex].voters = voters;
     }
 
+    audio.genre = getDominantGenreFromTags(audio.audienceTags, DEFAULT_GENRE);
+
     await audio.save();
 
     return res.json({
+      genre: audio.genre,
       audienceTags: formatAudienceTags(audio.audienceTags)
     });
   } catch (error) {
@@ -403,14 +445,68 @@ exports.removeTrackTag = async (req, res) => {
 
 exports.getMyUploads = async (req, res) => {
   try {
-    const tracks = await Audio.find({ uploadedBy: req.user._id })
-      .sort({ createdAt: -1 })
-      .lean();
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const skip = (page - 1) * limit;
 
-    return res.json({ tracks: tracks.map((track) => formatTrack(track, req.user)) });
+    const query = { uploadedBy: req.user._id };
+    const [tracks, total] = await Promise.all([
+      Audio.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      Audio.countDocuments(query)
+    ]);
+
+    const pagination = {
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit),
+      hasNext: page * limit < total,
+      hasPrev: page > 1
+    };
+
+    return res.json({ tracks: tracks.map((track) => formatTrack(track, req.user)), pagination });
   } catch (error) {
     console.error("Error fetching user uploads:", error.message);
     return res.status(500).json({ msg: "Unable to fetch your uploads" });
+  }
+};
+
+exports.getUserUploads = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ msg: "Invalid user ID" });
+    }
+
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const skip = (page - 1) * limit;
+
+    const isOwner = req.user && String(req.user._id) === String(userId);
+    const query = { uploadedBy: userId };
+
+    if (!isOwner) {
+      query.isPublic = true;
+    }
+
+    const [tracks, total] = await Promise.all([
+      Audio.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      Audio.countDocuments(query)
+    ]);
+
+    const pagination = {
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit),
+      hasNext: page * limit < total,
+      hasPrev: page > 1
+    };
+
+    return res.json({ tracks: tracks.map((track) => formatTrack(track, req.user)), pagination });
+  } catch (error) {
+    console.error("Error fetching user uploads:", error.message);
+    return res.status(500).json({ msg: "Unable to fetch user uploads" });
   }
 };
 
@@ -439,6 +535,7 @@ exports.updateUserTrack = async (req, res) => {
     if (req.body.tags !== undefined) {
       const tags = parseTags(req.body.tags, audio.genre);
       audio.audienceTags = tags.map((tag) => ({ tag, voters: [req.user._id] }));
+      audio.genre = getDominantGenreFromTags(audio.audienceTags, audio.genre);
     }
 
     await audio.save();
