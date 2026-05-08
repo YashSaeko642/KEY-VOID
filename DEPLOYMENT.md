@@ -15,7 +15,9 @@ Required Render env vars:
 - `MONGO_URI`
 - `JWT_SECRET`
 - `CLIENT_ORIGIN=https://your-vercel-domain.vercel.app`
+- `CLIENT_ORIGINS=https://your-vercel-domain.vercel.app,https://your-custom-domain.com` if you use more than one frontend domain
 - `FRONTEND_URL=https://your-vercel-domain.vercel.app`
+- `COOKIE_SAME_SITE=none` for the usual Vercel frontend + Render backend setup
 - `GOOGLE_CLIENT_ID`
 - `CLOUDINARY_CLOUD_NAME`
 - `CLOUDINARY_API_KEY`
@@ -36,5 +38,7 @@ Required Vercel env vars:
 
 - Add the final Vercel URL to the Google OAuth client allowed origins.
 - Add the final Vercel URL to `CLIENT_ORIGIN` and `FRONTEND_URL` on Render.
+- If you use both a Vercel preview URL and a custom domain, add both to `CLIENT_ORIGINS` on Render.
+- Local email signup requires email verification. If SMTP is not configured, Render logs the verification link instead of sending an email.
 - Use a strong `JWT_SECRET`; never reuse the local development value.
 - Configure SMTP before relying on forgot-password in production.

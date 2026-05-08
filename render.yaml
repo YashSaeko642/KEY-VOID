@@ -16,8 +16,12 @@ services:
         generateValue: true
       - key: CLIENT_ORIGIN
         sync: false
+      - key: CLIENT_ORIGINS
+        sync: false
       - key: FRONTEND_URL
         sync: false
+      - key: COOKIE_SAME_SITE
+        value: none
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: CLOUDINARY_CLOUD_NAME

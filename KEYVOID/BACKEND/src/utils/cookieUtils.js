@@ -2,11 +2,13 @@ const REFRESH_COOKIE_NAME = "keyvoid_refresh_token";
 
 function getCookieOptions() {
   const isProduction = process.env.NODE_ENV === "production";
+  const configuredSameSite = String(process.env.COOKIE_SAME_SITE || "").trim().toLowerCase();
+  const sameSite = configuredSameSite || (isProduction ? "none" : "lax");
 
   return {
     httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? "strict" : "lax",
+    secure: isProduction || sameSite === "none",
+    sameSite,
     path: "/",
 
     maxAge: Number(process.env.REFRESH_TOKEN_DAYS || 7) * 24 * 60 * 60 * 1000
