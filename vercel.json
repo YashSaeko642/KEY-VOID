@@ -1,6 +1,7 @@
 {
-  "buildCommand": "cd KEYVOID/FRONTEND/KEYVOID-FRONTEND && npm install && npm run build",
-  "outputDirectory": "KEYVOID/FRONTEND/KEYVOID-FRONTEND/dist",
+  "rootDirectory": "KEYVOID/FRONTEND/KEYVOID-FRONTEND",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
   "rewrites": [
     {
       "source": "/(.*)",
