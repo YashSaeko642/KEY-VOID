@@ -164,7 +164,7 @@ exports.getFollowers = async (req, res) => {
     const user = await User.findById(userId)
       .populate({
         path: "followers",
-        select: "-password -emailVerificationTokenHash -passwordResetTokenHash",
+        select: "-password -passwordResetTokenHash",
         options: { limit, skip }
       });
 
@@ -208,7 +208,7 @@ exports.getFollowing = async (req, res) => {
     const user = await User.findById(userId)
       .populate({
         path: "following",
-        select: "-password -emailVerificationTokenHash -passwordResetTokenHash",
+        select: "-password -passwordResetTokenHash",
         options: { limit, skip }
       });
 

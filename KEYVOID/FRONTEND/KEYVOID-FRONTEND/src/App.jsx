@@ -16,7 +16,6 @@ import Login from "../pages/Login";
 import Profile from "../pages/Profile";
 import PublicProfile from "../pages/PublicProfile";
 import ResetPassword from "../pages/ResetPassword";
-import VerifyEmail from "../pages/VerifyEmail";
 import Search from "../pages/Search";
 import Reels from "../pages/Reels";
 import Music from "../pages/Music";
@@ -28,7 +27,7 @@ import { EnterVoidProvider } from "./context/EnterVoidContext";
 import Feed from "../pages/Feed";
 import "./App.css";
 
-const AUTH_ROUTES = ["/login", "/reset-password", "/verify-email"];
+const AUTH_ROUTES = ["/login", "/reset-password"];
 
 const APP_ROUTES = ["/dashboard", "/creator", "/admin", "/profile", "/search","/feed", "/reels", "/music", "/roadmap"];
 const MotionDiv = motion.div;
@@ -70,7 +69,6 @@ function AppLayout() {
               <Route path="/" element={<Home />} />
               <Route path="/login" element={<Login />} />
               <Route path="/reset-password" element={<ResetPassword />} />
-              <Route path="/verify-email" element={<VerifyEmail />} />
               <Route
                 path="/dashboard"
                 element={

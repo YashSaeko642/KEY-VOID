@@ -33,8 +33,6 @@ export default function Login() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isSendingReset, setIsSendingReset] = useState(false);
-  const [isResendingVerification, setIsResendingVerification] = useState(false);
-  const [verificationEmail, setVerificationEmail] = useState("");
   const [pendingGoogleCredential, setPendingGoogleCredential] = useState("");
   const [formData, setFormData] = useState(INITIAL_FORM);
   const isCompletingProfile = Boolean(pendingGoogleCredential);
@@ -50,7 +48,6 @@ export default function Login() {
     setMode(newMode);
     setError("");
     setSuccess("");
-    setVerificationEmail("");
     setPendingGoogleCredential("");
     setFormData(INITIAL_FORM);
   }
@@ -140,20 +137,6 @@ export default function Login() {
 
       if (!result.success) {
         setError(result.message);
-        if (result.emailVerificationRequired) {
-          setVerificationEmail(result.email || formData.email);
-        }
-        return;
-      }
-
-      if (result.emailVerificationRequired) {
-        setSuccess(result.message || "Check your email to verify your account before signing in.");
-        setVerificationEmail(result.email || formData.email);
-        setMode("login");
-        setFormData((current) => ({
-          ...INITIAL_FORM,
-          email: current.email
-        }));
         return;
       }
     } else {
@@ -164,32 +147,11 @@ export default function Login() {
 
       if (!result.success) {
         setError(result.message);
-        if (result.emailVerificationRequired) {
-          setVerificationEmail(result.email || formData.email);
-        }
         return;
       }
     }
 
     navigate(location.state?.from?.pathname || "/feed", { replace: true });
-  }
-
-  async function handleResendVerification() {
-    const email = verificationEmail || formData.email;
-    if (!email || isResendingVerification) return;
-
-    setError("");
-    setSuccess("");
-    setIsResendingVerification(true);
-
-    try {
-      const { data } = await API.post("/auth/resend-verification", { email });
-      setSuccess(data.msg || "If the account exists and is not verified, a verification email has been sent.");
-    } catch (requestError) {
-      setError(requestError.response?.data?.msg || "Unable to send verification email right now");
-    } finally {
-      setIsResendingVerification(false);
-    }
   }
 
   return (
@@ -392,19 +354,6 @@ export default function Login() {
 
           {error ? <p className="auth-error">{error}</p> : null}
           {success ? <p className="auth-success">{success}</p> : null}
-          {verificationEmail ? (
-            <p className="auth-meta">
-              Need a new verification link?{" "}
-              <button
-                type="button"
-                className="auth-link"
-                onClick={handleResendVerification}
-                disabled={isResendingVerification}
-              >
-                {isResendingVerification ? "Sending..." : "Resend verification email"}
-              </button>
-            </p>
-          ) : null}
 
           {isForgotPassword ? (
             <>

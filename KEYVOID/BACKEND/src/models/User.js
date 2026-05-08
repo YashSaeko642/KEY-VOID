@@ -31,18 +31,6 @@ const userSchema = new mongoose.Schema(
       enum: ["local", "google"],
       default: "local"
     },
-    emailVerified: {
-      type: Boolean,
-      default: false
-    },
-    emailVerificationTokenHash: {
-      type: String,
-      default: ""
-    },
-    emailVerificationExpiresAt: {
-      type: Date,
-      default: null
-    },
     password: {
       type: String,
       required() {

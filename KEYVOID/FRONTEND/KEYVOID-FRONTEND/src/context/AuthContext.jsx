@@ -141,9 +141,7 @@ export function AuthProvider({ children }) {
     } catch (error) {
       return {
         success: false,
-        message: error.response?.data?.msg || "Login failed",
-        emailVerificationRequired: Boolean(error.response?.data?.emailVerificationRequired),
-        email: error.response?.data?.email
+        message: error.response?.data?.msg || "Login failed"
       };
     } finally {
       setLoading(false);
@@ -162,24 +160,13 @@ export function AuthProvider({ children }) {
         role
       });
 
-      if (data.emailVerificationRequired) {
-        return {
-          success: true,
-          emailVerificationRequired: true,
-          email: data.email,
-          message: data.msg
-        };
-      }
-
       setToken(data.token);
       setUser(data.user);
       return { success: true };
     } catch (error) {
       return {
         success: false,
-        message: error.response?.data?.msg || "Registration failed",
-        emailVerificationRequired: Boolean(error.response?.data?.emailVerificationRequired),
-        email: error.response?.data?.email
+        message: error.response?.data?.msg || "Registration failed"
       };
     } finally {
       setLoading(false);

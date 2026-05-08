@@ -52,38 +52,6 @@ async function sendPasswordResetEmail({ to, resetUrl }) {
   return { sent: true };
 }
 
-async function sendVerificationEmail({ to, verifyUrl }) {
-  const from = process.env.EMAIL_FROM || process.env.SMTP_USER || "KeyVoid <no-reply@keyvoid.local>";
-  const smtpConfig = getSmtpConfig();
-
-  if (!smtpConfig) {
-    console.log("Email verification link:", verifyUrl);
-    return { sent: false, preview: verifyUrl };
-  }
-
-  const transporter = nodemailer.createTransport(smtpConfig);
-
-  await transporter.sendMail({
-    from,
-    to,
-    subject: "Verify your KeyVoid email",
-    text: [
-      "Use this link to verify your KeyVoid email:",
-      verifyUrl,
-      "",
-      "This link expires soon. If you did not create a KeyVoid account, you can ignore this email."
-    ].join("\n"),
-    html: `
-      <p>Use this link to verify your KeyVoid email:</p>
-      <p><a href="${verifyUrl}">${verifyUrl}</a></p>
-      <p>This link expires soon. If you did not create a KeyVoid account, you can ignore this email.</p>
-    `
-  });
-
-  return { sent: true };
-}
-
 module.exports = {
-  sendPasswordResetEmail,
-  sendVerificationEmail
+  sendPasswordResetEmail
 };
