@@ -1,10 +1,5 @@
 {
   "buildCommand": "cd KEYVOID/FRONTEND/KEYVOID-FRONTEND && npm install && npm run build",
   "outputDirectory": "KEYVOID/FRONTEND/KEYVOID-FRONTEND/dist",
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
-  ]
+  "installCommand": "echo 'skip root install'"
 }
