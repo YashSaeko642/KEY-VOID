@@ -17,13 +17,40 @@ const { securityHeaders, validateInput } = require("./src/middleware/securityMid
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:5173";
-const CLIENT_ORIGINS = [CLIENT_ORIGIN, "http://127.0.0.1:5173"];
+
+function getAllowedOrigins() {
+  const configuredOrigins = [
+    process.env.CLIENT_ORIGINS,
+    process.env.CLIENT_ORIGIN,
+    process.env.FRONTEND_URL,
+    "http://localhost:5173",
+    "http://127.0.0.1:5173"
+  ];
+
+  return [
+    ...new Set(
+      configuredOrigins
+        .flatMap((value) => String(value || "").split(","))
+        .map((origin) => origin.trim().replace(/\/+$/, ""))
+        .filter(Boolean)
+    )
+  ];
+}
+
+const CLIENT_ORIGINS = getAllowedOrigins();
 
 // Middleware
 app.use(
   cors({
-    origin: CLIENT_ORIGINS,
+    origin(origin, callback) {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      const normalizedOrigin = origin.replace(/\/+$/, "");
+      callback(null, CLIENT_ORIGINS.includes(normalizedOrigin));
+    },
     credentials: true,
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"]
