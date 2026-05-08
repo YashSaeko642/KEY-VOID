@@ -3,7 +3,7 @@ import { Bug, Lightbulb, MessageSquarePlus, Rocket, Trash2 } from "lucide-react"
 import "./RoadmapFeedback.css";
 
 const FEEDBACK_STORAGE_KEY = "keyvoid_product_feedback";
-const CURRENT_VERSION = "v0.4.0 alpha";
+const CURRENT_VERSION = "v0.4.1";
 
 const nextFeatures = [
   {

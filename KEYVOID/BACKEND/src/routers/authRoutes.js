@@ -5,8 +5,6 @@ const {
   googleAuth,
   localLogin,
   localRegister,
-  verifyEmail,
-  resendVerificationEmail,
   forgotPassword,
   resetPassword,
   refreshSession,
@@ -22,8 +20,6 @@ const { protect, authorizeRoles } = require("../middleware/authMiddleware");
 router.post("/login", authRateLimiter, localLogin);
 router.post("/register", authRateLimiter, localRegister);
 router.post("/google", authRateLimiter, googleAuth);
-router.post("/verify-email", authRateLimiter, verifyEmail);
-router.post("/resend-verification", authRateLimiter, resendVerificationEmail);
 router.post("/forgot-password", authRateLimiter, forgotPassword);
 router.post("/reset-password", authRateLimiter, resetPassword);
 router.post("/refresh", refreshSession);

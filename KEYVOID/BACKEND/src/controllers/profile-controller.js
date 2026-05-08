@@ -36,7 +36,6 @@ function buildProfilePayload(user, { includePrivate = false } = {}) {
   // Include sensitive fields only for authenticated user viewing their own profile
   if (includePrivate) {
     payload.email = user.email;
-    payload.emailVerified = user.emailVerified;
     payload.isAdmin = role === "admin";
   }
 

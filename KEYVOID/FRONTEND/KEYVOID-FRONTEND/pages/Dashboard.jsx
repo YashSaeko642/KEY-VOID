@@ -192,11 +192,11 @@ export default function Dashboard() {
             }}
           >
             <div style={{marginBottom: "20px", fontSize: "32px"}}>✉️</div>
-            <p style={{fontSize: "12px", letterSpacing: "2px", color: "#86efac", textTransform: "uppercase", marginBottom: "16px", fontWeight: "600"}}>Email Status</p>
+            <p style={{fontSize: "12px", letterSpacing: "2px", color: "#86efac", textTransform: "uppercase", marginBottom: "16px", fontWeight: "600"}}>Account Access</p>
             <h3 style={{fontSize: "36px", fontWeight: "700", color: "#f1f5f9", marginBottom: "8px"}}>
-              {user?.emailVerified ? "Verified" : "Pending"}
+              Active
             </h3>
-            <p style={{fontSize: "14px", color: "#cbd5e1"}}>Email verification status</p>
+            <p style={{fontSize: "14px", color: "#cbd5e1"}}>Ready to use</p>
           </div>
 
           {/* Card 4 */}

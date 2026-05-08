@@ -28,7 +28,7 @@ const {
   getRefreshTokenExpiryDate
 } = require("../utils/tokenUtils");
 const { syncSystemRole } = require("../utils/roleUtils");
-const { sendPasswordResetEmail, sendVerificationEmail } = require("../utils/emailUtils");
+const { sendPasswordResetEmail } = require("../utils/emailUtils");
 const {
   REFRESH_COOKIE_NAME,
   setRefreshTokenCookie,
@@ -38,7 +38,6 @@ const {
 
 const PASSWORD_SALT_ROUNDS = 12;
 const PASSWORD_RESET_TOKEN_MINUTES = 15;
-const EMAIL_VERIFICATION_TOKEN_MINUTES = Number(process.env.EMAIL_VERIFICATION_TOKEN_MINUTES || 60 * 24);
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -52,7 +51,6 @@ function buildUserPayload(user) {
     role,
     isCreator: role === "creator",
     isAdmin: role === "admin",
-    emailVerified: user.emailVerified,
     bio: user.bio || "",
     location: user.location || "",
     website: user.website || "",
@@ -227,25 +225,6 @@ function buildPasswordResetUrl(rawResetToken) {
   return `${clientOrigin}/reset-password?token=${encodeURIComponent(rawResetToken)}`;
 }
 
-function buildEmailVerificationUrl(rawVerificationToken) {
-  const clientOrigin = getClientOrigin().replace(/\/+$/, "");
-  return `${clientOrigin}/verify-email?token=${encodeURIComponent(rawVerificationToken)}`;
-}
-
-async function createEmailVerification(user) {
-  const rawVerificationToken = generateOpaqueToken();
-  user.emailVerificationTokenHash = hashToken(rawVerificationToken);
-  user.emailVerificationExpiresAt = new Date(Date.now() + EMAIL_VERIFICATION_TOKEN_MINUTES * 60 * 1000);
-  await user.save();
-
-  await sendVerificationEmail({
-    to: user.email,
-    verifyUrl: buildEmailVerificationUrl(rawVerificationToken)
-  });
-
-  return rawVerificationToken;
-}
-
 async function verifyGoogleCredential(credential) {
   if (!credential) {
     return { valid: false, msg: "Google credential is required" };
@@ -299,7 +278,6 @@ exports.googleAuth = async (req, res) => {
     if (user) {
       user.googleId = user.googleId || googleId;
       user.authProvider = "google";
-      user.emailVerified = true;
 
       await user.save();
     } else {
@@ -339,7 +317,6 @@ exports.googleAuth = async (req, res) => {
         email,
         googleId,
         authProvider: "google",
-        emailVerified: true,
         role: requestedRole
       });
     }
@@ -388,14 +365,6 @@ exports.localLogin = async (req, res) => {
 
     if (!passwordMatch) {
       return res.status(401).json({ msg: "Invalid email or password" });
-    }
-
-    if (!user.emailVerified) {
-      return res.status(403).json({
-        msg: "Please verify your email before signing in.",
-        emailVerificationRequired: true,
-        email: user.email
-      });
     }
 
     const sessionPayload = await issueSession(user, req, res);
@@ -460,28 +429,23 @@ exports.localRegister = async (req, res) => {
       email: normalizedEmail,
       password: passwordHash,
       authProvider: "local",
-      emailVerified: false,
       role: requestedRole
     });
 
-    await createEmailVerification(user);
+    const sessionPayload = await issueSession(user, req, res);
 
     await logAuthEvent({
       user: user._id,
       email: user.email,
-      action: "register_verification_sent",
+      action: "register_success",
       success: true,
       req,
       metadata: {
-        role: user.role
+        role: sessionPayload.user.role
       }
     });
 
-    return res.status(201).json({
-      msg: "Account created. Check your email to verify your account before signing in.",
-      emailVerificationRequired: true,
-      email: user.email
-    });
+    return res.status(201).json(sessionPayload);
   } catch (error) {
     console.error("Local registration failed:", error.message);
 
@@ -491,76 +455,6 @@ exports.localRegister = async (req, res) => {
     }
 
     return res.status(500).json({ msg: "Unable to create account right now" });
-  }
-};
-
-exports.verifyEmail = async (req, res) => {
-  try {
-    const rawVerificationToken = String(req.body?.token || "").trim();
-
-    if (!rawVerificationToken) {
-      return res.status(400).json({ msg: "Verification token is required" });
-    }
-
-    const user = await User.findOne({
-      emailVerificationTokenHash: hashToken(rawVerificationToken),
-      emailVerificationExpiresAt: { $gt: new Date() }
-    });
-
-    if (!user) {
-      return res.status(400).json({ msg: "Verification link is invalid or expired" });
-    }
-
-    user.emailVerified = true;
-    user.emailVerificationTokenHash = "";
-    user.emailVerificationExpiresAt = null;
-    await user.save();
-
-    await logAuthEvent({
-      user: user._id,
-      email: user.email,
-      action: "email_verified",
-      success: true,
-      req
-    });
-
-    return res.json({ msg: "Email verified. You can now sign in." });
-  } catch (error) {
-    console.error("Email verification failed:", error.message);
-    return res.status(500).json({ msg: "Unable to verify email right now" });
-  }
-};
-
-exports.resendVerificationEmail = async (req, res) => {
-  const publicMessage = "If the account exists and is not verified, a verification email has been sent.";
-
-  try {
-    const emailValidation = validateEmail(req.body?.email || "");
-
-    if (!emailValidation.valid) {
-      return res.status(400).json({ msg: emailValidation.msg });
-    }
-
-    const user = await User.findOne({ email: emailValidation.value });
-
-    if (!user || user.emailVerified || user.authProvider === "google") {
-      return res.json({ msg: publicMessage });
-    }
-
-    await createEmailVerification(user);
-
-    await logAuthEvent({
-      user: user._id,
-      email: user.email,
-      action: "email_verification_resent",
-      success: true,
-      req
-    });
-
-    return res.json({ msg: publicMessage });
-  } catch (error) {
-    console.error("Resend verification failed:", error.message);
-    return res.status(500).json({ msg: "Unable to send verification email right now" });
   }
 };
 
