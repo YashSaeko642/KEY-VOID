@@ -1,5 +1,4 @@
 {
-  "rootDirectory": "KEYVOID/FRONTEND/KEYVOID-FRONTEND",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
