@@ -7,7 +7,10 @@
     radial-gradient(circle at 80% 10%, rgba(99, 102, 241, 0.12), transparent 22%),
     linear-gradient(180deg, #050816 0%, #02030b 100%);
   overflow: hidden;
-  overscroll-behavior: contain;
+}
+
+.reels-page::-webkit-scrollbar {
+  display: none;
 }
 
 .reels-page::before {
@@ -23,32 +26,31 @@
 .reels-container {
   position: relative;
   z-index: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0;
+  display: grid;
+  place-items: center;
   width: 100%;
-  padding: 24px 0 40px;
+  min-height: calc(100vh - 96px);
+  padding: 24px;
 }
 
 .reels-stage {
   position: relative;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 460px) 58px;
   align-items: center;
   justify-content: center;
+  gap: 16px;
   width: min(100%, 560px);
 }
 
 .reel-navigation {
-  position: absolute;
-  right: 0;
-  top: 50%;
+  position: static;
   z-index: 20;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  transform: translate(78px, -50%);
+  transform: none;
 }
 
 .reel-nav-btn {
@@ -92,7 +94,7 @@
 .reel-card {
   position: relative;
   width: min(100%, 460px);
-  min-height: calc(100vh - 96px);
+  min-height: min(780px, calc(100vh - 132px));
   background: rgba(8, 12, 22, 0.92);
   border: 1px solid rgba(99, 102, 241, 0.18);
   border-radius: 32px;
@@ -100,8 +102,6 @@
   box-shadow: 0 28px 80px rgba(15, 23, 42, 0.45);
   display: flex;
   flex-direction: column;
-  scroll-snap-align: start;
-  scroll-snap-stop: always;
 }
 
 /* Video Container */
@@ -492,19 +492,19 @@
 
 /* Mobile Responsiveness */
 @media (max-width: 768px) {
-  .reels-page {
-    overflow-y: auto;
-  }
-
   .reels-container {
     padding: 0;
   }
 
   .reels-stage {
+    grid-template-columns: minmax(0, 1fr);
     width: 100%;
+    min-height: 100vh;
+    padding: 0;
   }
 
   .reel-navigation {
+    position: absolute;
     right: 14px;
     top: 50%;
     transform: translateY(-50%);
@@ -523,7 +523,7 @@
 
   .reel-card {
     width: 100vw;
-    min-height: calc(100vh - 2rem);
+    min-height: 100vh;
     border-radius: 0;
   }
 
@@ -568,4 +568,14 @@
 .reel-comments-panel {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+.reel-placeholder {
+  opacity: 0.2;
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.reels-load-sentinel {
+  width: 100%;
+  height: 2px;
 }

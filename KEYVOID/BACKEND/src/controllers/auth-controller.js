@@ -1,12 +1,24 @@
 const bcrypt = require("bcrypt");
+const mongoose = require("mongoose");
 const { OAuth2Client } = require("google-auth-library");
 const User = require("../models/User");
 const RefreshToken = require("../models/RefreshToken");
+const Post = require("../models/Post");
+const Audio = require("../models/Audio");
+const Playlist = require("../models/Playlist");
+const { getGridFSBucket } = require("../utils/gridfsUtils");
+const {
+  cloudinary,
+  isCloudinaryConfigured
+} = require("../config/cloudinary");
+const { hardDeletePostsByAuthor } = require("./post-controller");
 const { logAuthEvent } = require("../utils/auditLogger");
 const {
   validateGoogleProfileInput,
+  validateEmail,
   validateLocalLogin,
-  validateLocalRegistration
+  validateLocalRegistration,
+  validatePassword
 } = require("../utils/authValidation");
 const {
   ACCESS_TOKEN_TTL,
@@ -16,6 +28,7 @@ const {
   getRefreshTokenExpiryDate
 } = require("../utils/tokenUtils");
 const { syncSystemRole } = require("../utils/roleUtils");
+const { sendPasswordResetEmail, sendVerificationEmail } = require("../utils/emailUtils");
 const {
   REFRESH_COOKIE_NAME,
   setRefreshTokenCookie,
@@ -24,6 +37,8 @@ const {
 } = require("../utils/cookieUtils");
 
 const PASSWORD_SALT_ROUNDS = 12;
+const PASSWORD_RESET_TOKEN_MINUTES = 15;
+const EMAIL_VERIFICATION_TOKEN_MINUTES = Number(process.env.EMAIL_VERIFICATION_TOKEN_MINUTES || 60 * 24);
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -150,6 +165,85 @@ function buildFallbackUsername(profile = {}) {
 
 function escapeRegex(value = "") {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function deleteCloudinaryImage(publicId) {
+  if (!publicId || !isCloudinaryConfigured()) return;
+
+  try {
+    await cloudinary.uploader.destroy(publicId, { resource_type: "image" });
+  } catch (error) {
+    console.error("Cloudinary profile image delete failed:", error.message);
+  }
+}
+
+async function deleteUserAudioUploads(userId) {
+  const tracks = await Audio.find({ uploadedBy: userId });
+  const bucket = getGridFSBucket();
+
+  await Promise.allSettled(
+    tracks.map(async (track) => {
+      if (track.gridFsId && mongoose.Types.ObjectId.isValid(track.gridFsId)) {
+        await bucket.delete(new mongoose.Types.ObjectId(track.gridFsId));
+      }
+    })
+  );
+
+  const trackIds = tracks.map((track) => track._id);
+  if (trackIds.length > 0) {
+    await Playlist.updateMany({ tracks: { $in: trackIds } }, { $pull: { tracks: { $in: trackIds } } });
+    await Audio.deleteMany({ _id: { $in: trackIds } });
+  }
+
+  return tracks.length;
+}
+
+function getDuplicateKeyMessage(error) {
+  if (error?.code !== 11000) {
+    return "";
+  }
+
+  if (error.keyPattern?.email || error.keyValue?.email) {
+    return "That email is already registered";
+  }
+
+  if (error.keyPattern?.username || error.keyValue?.username) {
+    return "That display name is already taken";
+  }
+
+  if (error.keyPattern?.googleId || error.keyValue?.googleId === null) {
+    return "Unable to create account because a saved auth index is stale. Please try again.";
+  }
+
+  return "That account already exists";
+}
+
+function getClientOrigin() {
+  return process.env.FRONTEND_URL || process.env.CLIENT_ORIGIN || "http://localhost:5173";
+}
+
+function buildPasswordResetUrl(rawResetToken) {
+  const clientOrigin = getClientOrigin().replace(/\/+$/, "");
+  return `${clientOrigin}/reset-password?token=${encodeURIComponent(rawResetToken)}`;
+}
+
+function buildEmailVerificationUrl(rawVerificationToken) {
+  const clientOrigin = getClientOrigin().replace(/\/+$/, "");
+  return `${clientOrigin}/verify-email?token=${encodeURIComponent(rawVerificationToken)}`;
+}
+
+async function createEmailVerification(user) {
+  const rawVerificationToken = generateOpaqueToken();
+  user.emailVerificationTokenHash = hashToken(rawVerificationToken);
+  user.emailVerificationExpiresAt = new Date(Date.now() + EMAIL_VERIFICATION_TOKEN_MINUTES * 60 * 1000);
+  await user.save();
+
+  await sendVerificationEmail({
+    to: user.email,
+    verifyUrl: buildEmailVerificationUrl(rawVerificationToken)
+  });
+
+  return rawVerificationToken;
 }
 
 async function verifyGoogleCredential(credential) {
@@ -296,6 +390,14 @@ exports.localLogin = async (req, res) => {
       return res.status(401).json({ msg: "Invalid email or password" });
     }
 
+    if (!user.emailVerified) {
+      return res.status(403).json({
+        msg: "Please verify your email before signing in.",
+        emailVerificationRequired: true,
+        email: user.email
+      });
+    }
+
     const sessionPayload = await issueSession(user, req, res);
 
     await logAuthEvent({
@@ -358,27 +460,201 @@ exports.localRegister = async (req, res) => {
       email: normalizedEmail,
       password: passwordHash,
       authProvider: "local",
-      emailVerified: true,
+      emailVerified: false,
       role: requestedRole
     });
 
-    const sessionPayload = await issueSession(user, req, res);
+    await createEmailVerification(user);
 
     await logAuthEvent({
       user: user._id,
       email: user.email,
-      action: "register_success",
+      action: "register_verification_sent",
       success: true,
       req,
       metadata: {
-        role: sessionPayload.user.role
+        role: user.role
       }
     });
 
-    return res.status(201).json(sessionPayload);
+    return res.status(201).json({
+      msg: "Account created. Check your email to verify your account before signing in.",
+      emailVerificationRequired: true,
+      email: user.email
+    });
   } catch (error) {
     console.error("Local registration failed:", error.message);
+
+    const duplicateMessage = getDuplicateKeyMessage(error);
+    if (duplicateMessage) {
+      return res.status(409).json({ msg: duplicateMessage });
+    }
+
     return res.status(500).json({ msg: "Unable to create account right now" });
+  }
+};
+
+exports.verifyEmail = async (req, res) => {
+  try {
+    const rawVerificationToken = String(req.body?.token || "").trim();
+
+    if (!rawVerificationToken) {
+      return res.status(400).json({ msg: "Verification token is required" });
+    }
+
+    const user = await User.findOne({
+      emailVerificationTokenHash: hashToken(rawVerificationToken),
+      emailVerificationExpiresAt: { $gt: new Date() }
+    });
+
+    if (!user) {
+      return res.status(400).json({ msg: "Verification link is invalid or expired" });
+    }
+
+    user.emailVerified = true;
+    user.emailVerificationTokenHash = "";
+    user.emailVerificationExpiresAt = null;
+    await user.save();
+
+    await logAuthEvent({
+      user: user._id,
+      email: user.email,
+      action: "email_verified",
+      success: true,
+      req
+    });
+
+    return res.json({ msg: "Email verified. You can now sign in." });
+  } catch (error) {
+    console.error("Email verification failed:", error.message);
+    return res.status(500).json({ msg: "Unable to verify email right now" });
+  }
+};
+
+exports.resendVerificationEmail = async (req, res) => {
+  const publicMessage = "If the account exists and is not verified, a verification email has been sent.";
+
+  try {
+    const emailValidation = validateEmail(req.body?.email || "");
+
+    if (!emailValidation.valid) {
+      return res.status(400).json({ msg: emailValidation.msg });
+    }
+
+    const user = await User.findOne({ email: emailValidation.value });
+
+    if (!user || user.emailVerified || user.authProvider === "google") {
+      return res.json({ msg: publicMessage });
+    }
+
+    await createEmailVerification(user);
+
+    await logAuthEvent({
+      user: user._id,
+      email: user.email,
+      action: "email_verification_resent",
+      success: true,
+      req
+    });
+
+    return res.json({ msg: publicMessage });
+  } catch (error) {
+    console.error("Resend verification failed:", error.message);
+    return res.status(500).json({ msg: "Unable to send verification email right now" });
+  }
+};
+
+exports.forgotPassword = async (req, res) => {
+  const publicMessage = "If an account exists for that email, a password reset link has been sent.";
+
+  try {
+    const emailValidation = validateEmail(req.body?.email || "");
+
+    if (!emailValidation.valid) {
+      return res.status(400).json({ msg: emailValidation.msg });
+    }
+
+    const user = await User.findOne({ email: emailValidation.value }).select("+password");
+
+    if (!user || user.authProvider === "google" || !user.password) {
+      return res.json({ msg: publicMessage });
+    }
+
+    const rawResetToken = generateOpaqueToken();
+    user.passwordResetTokenHash = hashToken(rawResetToken);
+    user.passwordResetExpiresAt = new Date(Date.now() + PASSWORD_RESET_TOKEN_MINUTES * 60 * 1000);
+    await user.save();
+
+    await sendPasswordResetEmail({
+      to: user.email,
+      resetUrl: buildPasswordResetUrl(rawResetToken)
+    });
+
+    await logAuthEvent({
+      user: user._id,
+      email: user.email,
+      action: "password_reset_requested",
+      success: true,
+      req
+    });
+
+    return res.json({ msg: publicMessage });
+  } catch (error) {
+    console.error("Forgot password failed:", error.message);
+    return res.status(500).json({ msg: "Unable to start password reset right now" });
+  }
+};
+
+exports.resetPassword = async (req, res) => {
+  try {
+    const rawResetToken = String(req.body?.token || "").trim();
+    const password = String(req.body?.password || "");
+    const confirmPassword = String(req.body?.confirmPassword || "");
+    const passwordValidation = validatePassword(password);
+
+    if (!rawResetToken) {
+      return res.status(400).json({ msg: "Reset token is required" });
+    }
+
+    if (!passwordValidation.valid) {
+      return res.status(400).json({ msg: passwordValidation.msg });
+    }
+
+    if (password !== confirmPassword) {
+      return res.status(400).json({ msg: "Passwords do not match" });
+    }
+
+    const user = await User.findOne({
+      passwordResetTokenHash: hashToken(rawResetToken),
+      passwordResetExpiresAt: { $gt: new Date() }
+    }).select("+password");
+
+    if (!user || user.authProvider === "google") {
+      return res.status(400).json({ msg: "Reset link is invalid or expired" });
+    }
+
+    user.password = await bcrypt.hash(passwordValidation.value, PASSWORD_SALT_ROUNDS);
+    user.passwordResetTokenHash = "";
+    user.passwordResetExpiresAt = null;
+    await user.save();
+
+    await RefreshToken.updateMany(
+      { user: user._id, revokedAt: null },
+      { $set: { revokedAt: new Date() } }
+    );
+
+    await logAuthEvent({
+      user: user._id,
+      email: user.email,
+      action: "password_reset_success",
+      success: true,
+      req
+    });
+
+    return res.json({ msg: "Password reset successfully. You can sign in with your new password." });
+  } catch (error) {
+    console.error("Reset password failed:", error.message);
+    return res.status(500).json({ msg: "Unable to reset password right now" });
   }
 };
 
@@ -422,6 +698,58 @@ exports.logout = async (req, res) => {
   } catch (error) {
     clearRefreshTokenCookie(res);
     return res.status(500).json({ msg: "Unable to log out right now" });
+  }
+};
+
+exports.deleteAccount = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      clearRefreshTokenCookie(res);
+      return res.status(404).json({ msg: "Account not found" });
+    }
+
+    const confirmation = String(req.body?.confirmation || "").trim().toUpperCase();
+    if (confirmation !== "DELETE") {
+      return res.status(400).json({ msg: "Type DELETE to confirm account deletion" });
+    }
+
+    const userId = user._id;
+    const [deletedPosts, deletedAudio] = await Promise.all([
+      hardDeletePostsByAuthor(userId),
+      deleteUserAudioUploads(userId),
+      deleteCloudinaryImage(user.avatarPublicId),
+      deleteCloudinaryImage(user.bannerPublicId)
+    ]);
+
+    await Promise.all([
+      Playlist.deleteMany({ userId }),
+      RefreshToken.updateMany({ user: userId, revokedAt: null }, { $set: { revokedAt: new Date() } }),
+      Post.updateMany({ likes: userId }, { $pull: { likes: userId } }),
+      Post.updateMany({ "comments.author": userId }, { $set: { "comments.$[comment].isDeleted": true } }, { arrayFilters: [{ "comment.author": userId }] }),
+      User.updateMany({ followers: userId }, { $pull: { followers: userId }, $inc: { followersCount: -1 } }),
+      User.updateMany({ following: userId }, { $pull: { following: userId }, $inc: { followingCount: -1 } })
+    ]);
+
+    await User.updateMany({ followersCount: { $lt: 0 } }, { $set: { followersCount: 0 } });
+    await User.updateMany({ followingCount: { $lt: 0 } }, { $set: { followingCount: 0 } });
+    await User.deleteOne({ _id: userId });
+    clearRefreshTokenCookie(res);
+
+    await logAuthEvent({
+      user: userId,
+      email: user.email,
+      action: "account_deleted",
+      success: true,
+      req,
+      metadata: { deletedPosts, deletedAudio }
+    });
+
+    return res.json({ msg: "Account deleted", deletedPosts, deletedAudio });
+  } catch (error) {
+    console.error("Delete account failed:", error.message);
+    return res.status(500).json({ msg: "Unable to delete account right now" });
   }
 };
 

@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import GoogleAuthButton from "../components/GoogleAuthButton";
+import API from "../services/api";
 import { useAuth } from "../src/context/useAuth";
 
 const ROLE_OPTIONS = [
@@ -30,10 +31,15 @@ export default function Login() {
   const { googleAuth, localLogin, localRegister, loading } = useAuth();
   const [mode, setMode] = useState("login");
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [isSendingReset, setIsSendingReset] = useState(false);
+  const [isResendingVerification, setIsResendingVerification] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState("");
   const [pendingGoogleCredential, setPendingGoogleCredential] = useState("");
   const [formData, setFormData] = useState(INITIAL_FORM);
   const isCompletingProfile = Boolean(pendingGoogleCredential);
   const isSignup = mode === "signup";
+  const isForgotPassword = mode === "forgot";
 
   function handleChange(event) {
     const { name, value } = event.target;
@@ -43,6 +49,8 @@ export default function Login() {
   function resetForm(newMode) {
     setMode(newMode);
     setError("");
+    setSuccess("");
+    setVerificationEmail("");
     setPendingGoogleCredential("");
     setFormData(INITIAL_FORM);
   }
@@ -75,6 +83,7 @@ export default function Login() {
   async function handleGoogleProfileSubmit(event) {
     event.preventDefault();
     setError("");
+    setSuccess("");
 
     if (!pendingGoogleCredential) {
       setError("Please continue with Google first.");
@@ -93,6 +102,22 @@ export default function Login() {
     }
 
     navigate(location.state?.from?.pathname || "/feed", { replace: true });
+  }
+
+  async function handleForgotPasswordSubmit(event) {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+    setIsSendingReset(true);
+
+    try {
+      const { data } = await API.post("/auth/forgot-password", { email: formData.email });
+      setSuccess(data.msg || "If an account exists for that email, a password reset link has been sent.");
+    } catch (requestError) {
+      setError(requestError.response?.data?.msg || "Unable to start password reset right now");
+    } finally {
+      setIsSendingReset(false);
+    }
   }
 
   async function handleLocalSubmit(event) {
@@ -115,6 +140,20 @@ export default function Login() {
 
       if (!result.success) {
         setError(result.message);
+        if (result.emailVerificationRequired) {
+          setVerificationEmail(result.email || formData.email);
+        }
+        return;
+      }
+
+      if (result.emailVerificationRequired) {
+        setSuccess(result.message || "Check your email to verify your account before signing in.");
+        setVerificationEmail(result.email || formData.email);
+        setMode("login");
+        setFormData((current) => ({
+          ...INITIAL_FORM,
+          email: current.email
+        }));
         return;
       }
     } else {
@@ -125,11 +164,32 @@ export default function Login() {
 
       if (!result.success) {
         setError(result.message);
+        if (result.emailVerificationRequired) {
+          setVerificationEmail(result.email || formData.email);
+        }
         return;
       }
     }
 
     navigate(location.state?.from?.pathname || "/feed", { replace: true });
+  }
+
+  async function handleResendVerification() {
+    const email = verificationEmail || formData.email;
+    if (!email || isResendingVerification) return;
+
+    setError("");
+    setSuccess("");
+    setIsResendingVerification(true);
+
+    try {
+      const { data } = await API.post("/auth/resend-verification", { email });
+      setSuccess(data.msg || "If the account exists and is not verified, a verification email has been sent.");
+    } catch (requestError) {
+      setError(requestError.response?.data?.msg || "Unable to send verification email right now");
+    } finally {
+      setIsResendingVerification(false);
+    }
   }
 
   return (
@@ -160,6 +220,8 @@ export default function Login() {
           <h1 className="font-['Michroma'] text-[clamp(2rem,4vw,3.4rem)] leading-tight text-slate-50">
             {isCompletingProfile
               ? "Finish your KeyVoid profile"
+              : isForgotPassword
+                ? "Reset your KeyVoid password"
               : isSignup
                 ? "Create your KeyVoid account"
                 : "Sign in to KeyVoid"}
@@ -168,6 +230,8 @@ export default function Login() {
           <p className="text-slate-300/80">
             {isCompletingProfile
               ? "Choose the name people will see and whether this account is for listening or creating."
+              : isForgotPassword
+                ? "Enter your email and we will send a reset link if the account exists."
               : isSignup
                 ? "Sign up with email or continue with Google to join as a listener or creator."
                 : "Sign in with email or Google to continue."}
@@ -176,7 +240,13 @@ export default function Login() {
 
         <form
           className="auth-form auth-form-onboard"
-          onSubmit={isCompletingProfile ? handleGoogleProfileSubmit : handleLocalSubmit}
+          onSubmit={
+            isCompletingProfile
+              ? handleGoogleProfileSubmit
+              : isForgotPassword
+                ? handleForgotPasswordSubmit
+                : handleLocalSubmit
+          }
         >
           {isCompletingProfile ? (
             <>
@@ -219,6 +289,19 @@ export default function Login() {
                 })}
               </div>
             </>
+          ) : isForgotPassword ? (
+            <label className="auth-field">
+              <span className="text-sm text-slate-300/80">Email address</span>
+              <input
+                autoComplete="email"
+                name="email"
+                onChange={handleChange}
+                placeholder="you@example.com"
+                required
+                type="email"
+                value={formData.email}
+              />
+            </label>
           ) : (
             <>
               <label className="auth-field">
@@ -308,12 +391,42 @@ export default function Login() {
           )}
 
           {error ? <p className="auth-error">{error}</p> : null}
+          {success ? <p className="auth-success">{success}</p> : null}
+          {verificationEmail ? (
+            <p className="auth-meta">
+              Need a new verification link?{" "}
+              <button
+                type="button"
+                className="auth-link"
+                onClick={handleResendVerification}
+                disabled={isResendingVerification}
+              >
+                {isResendingVerification ? "Sending..." : "Resend verification email"}
+              </button>
+            </p>
+          ) : null}
 
-          {!isCompletingProfile ? (
+          {isForgotPassword ? (
+            <>
+              <button className="auth-submit" disabled={isSendingReset} type="submit">
+                {isSendingReset ? "Sending..." : "Send reset link"}
+              </button>
+
+              <p className="auth-meta">
+                Remembered it? <button type="button" className="auth-link" onClick={() => resetForm("login")}>Sign in</button>.
+              </p>
+            </>
+          ) : !isCompletingProfile ? (
             <>
               <button className="auth-submit" disabled={loading} type="submit">
                 {loading ? "Working..." : isSignup ? "Create account" : "Sign in"}
               </button>
+
+              {!isSignup ? (
+                <p className="auth-meta">
+                  <button type="button" className="auth-link" onClick={() => resetForm("forgot")}>Forgot password?</button>
+                </p>
+              ) : null}
 
               <div className="auth-divider auth-divider-compact">
                 <span />

@@ -1,7 +1,6 @@
-import { createContext, useContext, useRef, useState } from "react";
+import { useState } from "react";
 import API from "../../services/api";
-
-const EnterVoidContext = createContext(null);
+import { EnterVoidContext } from "./enterVoidContextInstance";
 
 export function EnterVoidProvider({ children }) {
   const [session, setSession] = useState(null);
@@ -113,12 +112,4 @@ export function EnterVoidProvider({ children }) {
       {children}
     </EnterVoidContext.Provider>
   );
-}
-
-export function useEnterVoid() {
-  const context = useContext(EnterVoidContext);
-  if (!context) {
-    throw new Error("useEnterVoid must be used within EnterVoidProvider");
-  }
-  return context;
 }

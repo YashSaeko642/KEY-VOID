@@ -10,6 +10,7 @@ const baseNavItems = [
   { path: "/music", label: "Music" },
   { path: "/feed", label: "Feed" },
   { path: "/reels", label: "Reels" },
+  { path: "/roadmap", label: "Roadmap" },
   { path: "/search", label: "Search" },
   { path: "/profile", label: "Profile" }
 ];
@@ -23,6 +24,7 @@ export default function AppHeader() {
 
   async function handleLogout() {
     await logout();
+    navigate("/login", { replace: true });
   }
 
   const handleVoidSessionStart = () => {

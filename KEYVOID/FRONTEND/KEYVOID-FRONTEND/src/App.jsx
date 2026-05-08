@@ -1,5 +1,7 @@
 import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
 import { GoogleOAuthProvider } from "@react-oauth/google";
+import { AnimatePresence, motion } from "framer-motion";
+import { useState } from "react";
 import AdminHub from "../pages/AdminHub";
 import AppHeader from "../components/AppHeader";
 import AuthHeader from "../components/AuthHeader";
@@ -13,9 +15,12 @@ import Home from "../pages/Home";
 import Login from "../pages/Login";
 import Profile from "../pages/Profile";
 import PublicProfile from "../pages/PublicProfile";
+import ResetPassword from "../pages/ResetPassword";
+import VerifyEmail from "../pages/VerifyEmail";
 import Search from "../pages/Search";
 import Reels from "../pages/Reels";
 import Music from "../pages/Music";
+import RoadmapFeedback from "../pages/RoadmapFeedback";
 import VoidSessionPlayer from "../components/VoidSessionPlayer";
 import { AuthProvider } from "./context/AuthContext";
 import { PlayerProvider } from "./context/PlayerContext";
@@ -23,8 +28,11 @@ import { EnterVoidProvider } from "./context/EnterVoidContext";
 import Feed from "../pages/Feed";
 import "./App.css";
 
-const AUTH_ROUTES = ["/login"];
-const APP_ROUTES = ["/dashboard", "/creator", "/admin", "/profile", "/search","/feed", "/reels", "/music"];
+const AUTH_ROUTES = ["/login", "/reset-password", "/verify-email"];
+
+const APP_ROUTES = ["/dashboard", "/creator", "/admin", "/profile", "/search","/feed", "/reels", "/music", "/roadmap"];
+const MotionDiv = motion.div;
+const MotionP = motion.p;
 
 function AppLayout() {
   const location = useLocation();
@@ -49,53 +57,67 @@ function AppLayout() {
       {!isAuthRoute && !isAppRoute ? <Navbar /> : null}
 
       <main className={mainClassName}>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/login" element={<Login />} />
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/creator"
-            element={
-              <ProtectedRoute allowedRoles={["creator", "admin"]}>
-                <CreatorHub />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute allowedRoles={["admin"]}>
-                <AdminHub />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/profile"
-            element={
-              <ProtectedRoute>
-                <Profile />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="/search" element={<Search />} />
-          <Route path="/u/:username" element={<PublicProfile />} />
-          <Route path="/feed"
-            element={
-              <ProtectedRoute>
-                <Feed />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="/music" element={<Music />} />
-          <Route path="/reels" element={<Reels />} />
-        </Routes>
+        <AnimatePresence mode="wait">
+          <MotionDiv
+            key={location.pathname}
+            className="page-transition"
+            initial={{ opacity: 0, y: 16, filter: "blur(10px)" }}
+            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+            exit={{ opacity: 0, y: -10, filter: "blur(8px)" }}
+            transition={{ duration: 0.32, ease: "easeOut" }}
+          >
+            <Routes location={location}>
+              <Route path="/" element={<Home />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/verify-email" element={<VerifyEmail />} />
+              <Route
+                path="/dashboard"
+                element={
+                  <ProtectedRoute>
+                    <Dashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/creator"
+                element={
+                  <ProtectedRoute allowedRoles={["creator", "admin"]}>
+                    <CreatorHub />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute allowedRoles={["admin"]}>
+                    <AdminHub />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/profile"
+                element={
+                  <ProtectedRoute>
+                    <Profile />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="/search" element={<Search />} />
+              <Route path="/u/:username" element={<PublicProfile />} />
+              <Route path="/feed"
+                element={
+                  <ProtectedRoute>
+                    <Feed />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="/music" element={<Music />} />
+              <Route path="/reels" element={<Reels />} />
+              <Route path="/roadmap" element={<RoadmapFeedback />} />
+            </Routes>
+          </MotionDiv>
+        </AnimatePresence>
       </main>
       <BottomPlayer />
       <VoidSessionPlayer />
@@ -103,9 +125,60 @@ function AppLayout() {
   );
 }
 
+function SplashScreen({ onOpen, isOpening }) {
+  return (
+    <button
+      type="button"
+      className={`splash-screen ${isOpening ? "opening" : ""}`}
+      onClick={onOpen}
+      aria-label="Open KeyVoid"
+    >
+      <span className="splash-orb-field" aria-hidden="true">
+        {Array.from({ length: 16 }, (_, index) => (
+          <span
+            key={index}
+            className="splash-bubble"
+            style={{
+              left: `${8 + ((index * 19) % 84)}%`,
+              top: `${10 + ((index * 29) % 76)}%`,
+              width: `${64 + (index % 5) * 34}px`,
+              animationDelay: `${(index % 8) * -0.6}s`
+            }}
+          />
+        ))}
+      </span>
+      <span className="splash-main-orb" aria-hidden="true" />
+      <span className="splash-drop" aria-hidden="true" />
+      <span className="splash-ripple splash-ripple-one" aria-hidden="true" />
+      <span className="splash-ripple splash-ripple-two" aria-hidden="true" />
+      <MotionP
+        className="splash-wordmark"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2, duration: 0.45 }}
+      >
+        KeyVoid
+      </MotionP>
+      <span className="splash-hint">Click to enter</span>
+    </button>
+  );
+}
+
 function App() {
+  const [showSplash, setShowSplash] = useState(true);
+  const [isOpeningSplash, setIsOpeningSplash] = useState(false);
   const googleClientId = String(import.meta.env.VITE_GOOGLE_CLIENT_ID || "").trim();
   const isGoogleConfigured = googleClientId.includes(".apps.googleusercontent.com");
+
+  const openSplash = () => {
+    if (isOpeningSplash) return;
+    setIsOpeningSplash(true);
+    window.setTimeout(() => {
+      setShowSplash(false);
+      setIsOpeningSplash(false);
+    }, 1200);
+  };
+
   const appTree = (
     <AuthProvider>
       <PlayerProvider>
@@ -119,11 +192,19 @@ function App() {
   );
 
   if (!isGoogleConfigured) {
-    return appTree;
+    return (
+      <>
+        {appTree}
+        {showSplash ? <SplashScreen onOpen={openSplash} isOpening={isOpeningSplash} /> : null}
+      </>
+    );
   }
 
   return (
-    <GoogleOAuthProvider clientId={googleClientId}>{appTree}</GoogleOAuthProvider>
+    <GoogleOAuthProvider clientId={googleClientId}>
+      {appTree}
+      {showSplash ? <SplashScreen onOpen={openSplash} isOpening={isOpeningSplash} /> : null}
+    </GoogleOAuthProvider>
   );
 }
 

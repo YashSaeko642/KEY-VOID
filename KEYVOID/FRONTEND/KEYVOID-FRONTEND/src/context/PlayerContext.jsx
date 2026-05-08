@@ -107,6 +107,55 @@ function mergeTracks(currentTracks, nextTracks) {
   });
 }
 
+function getTagVoteCount(tag) {
+  return Number(tag?.count || tag?.voters?.length || 0);
+}
+
+function getDominantGenre(track, fallback = "Uploads") {
+  const topTag = [...(track?.audienceTags || [])]
+    .filter((tag) => tag?.tag)
+    .sort((a, b) => getTagVoteCount(b) - getTagVoteCount(a) || String(a.tag).localeCompare(String(b.tag)))[0];
+
+  return topTag?.tag || track?.genre || fallback;
+}
+
+function getTrackSearchText(track) {
+  return [
+    track?.title,
+    track?.artist,
+    track?.genre,
+    ...(track?.audienceTags || []).map((item) => item.tag)
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function getTrackSearchScore(track, query) {
+  if (!query) return 0;
+
+  const title = String(track?.title || "").toLowerCase();
+  const artist = String(track?.artist || "").toLowerCase();
+  const genre = String(track?.genre || "").toLowerCase();
+  let score = 0;
+
+  if (title === query) score += 120;
+  else if (title.startsWith(query)) score += 80;
+  else if (title.includes(query)) score += 45;
+
+  if (genre === query) score += 100;
+  else if (genre.includes(query)) score += 55;
+
+  (track?.audienceTags || []).forEach((item) => {
+    const tag = String(item.tag || "").toLowerCase();
+    const votes = Math.max(1, getTagVoteCount(item));
+    if (tag === query) score += 90 + votes * 8;
+    else if (tag.includes(query)) score += 42 + votes * 4;
+  });
+
+  if (artist === query) score += 50;
+  else if (artist.includes(query)) score += 25;
+
+  return score;
+}
+
 export function PlayerProvider({ children }) {
   const { user } = useAuth();
   const [library, setLibrary] = useState([]);
@@ -346,9 +395,9 @@ export function PlayerProvider({ children }) {
     const query = searchQuery.trim().toLowerCase();
 
     if (query) {
-      return results.filter((track) =>
-        `${track.title || ""} ${track.artist || ""} ${track.genre || ""}`.toLowerCase().includes(query)
-      );
+      return results
+        .filter((track) => getTrackSearchText(track).includes(query))
+        .sort((a, b) => getTrackSearchScore(b, query) - getTrackSearchScore(a, query));
     }
 
     return results;
@@ -396,10 +445,15 @@ export function PlayerProvider({ children }) {
     }
 
     if (activeTrack.source === "local") {
+      const currentTags = activeTrack.audienceTags || [];
+      const existingTag = currentTags.find((item) => String(item.tag).toLowerCase() === String(tag).toLowerCase());
+      const nextTags = existingTag
+        ? currentTags.map((item) => String(item.tag).toLowerCase() === String(tag).toLowerCase() ? { ...item, count: getTagVoteCount(item) + 1 } : item)
+        : [...currentTags, { tag, count: 1 }];
       const nextTrack = {
         ...activeTrack,
-        genre: tag,
-        audienceTags: [{ tag, count: 1 }]
+        audienceTags: nextTags,
+        genre: getDominantGenre({ ...activeTrack, audienceTags: nextTags }, tag)
       };
 
       try {

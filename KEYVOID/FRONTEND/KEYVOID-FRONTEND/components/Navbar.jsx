@@ -1,19 +1,20 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../src/context/useAuth";
 import EnterVoidModal from "./EnterVoidModal";
 import "./Navbar.css";
 
 export default function Navbar() {
   const { hasRole, isAdmin, isAuthenticated, logout, user } = useAuth();
+  const navigate = useNavigate();
   const [showVoidModal, setShowVoidModal] = useState(false);
 
   async function handleLogout() {
     await logout();
+    navigate("/", { replace: true });
   }
 
-  const handleVoidSessionStart = (sessionId) => {
-    // Session has started, modal will close automatically
+  const handleVoidSessionStart = () => {
     setShowVoidModal(false);
   };
 

@@ -34,7 +34,12 @@ export const addAudioTag = (trackId, tag) => API.post(`/audio/${trackId}/tags`, 
 export const removeAudioTag = (trackId, tag) => API.delete(`/audio/${trackId}/tags`, { data: { tag } });
 export const uploadCreatorSongs = (formData) =>
   API.post("/audio/upload", formData, { headers: { "Content-Type": "multipart/form-data" } });
-export const getMyAudioUploads = () => API.get("/audio/my-uploads");
+export const getMyAudioUploads = (page = 1, limit = 20) =>
+  API.get("/audio/my-uploads", { params: { page, limit } });
+export const getUserAudioUploads = (userId, page = 1, limit = 10) =>
+  API.get(`/audio/user/${userId}`, { params: { page, limit } });
+export const getUserPosts = (userId, page = 1, limit = 10, contentType = "") =>
+  API.get(`/posts/user/${userId}`, { params: { page, limit, contentType } });
 export const updateAudioTrack = (trackId, payload) => API.patch(`/audio/${trackId}`, payload);
 export const deleteAudioTrack = (trackId) => API.delete(`/audio/${trackId}`);
 export const getPlaylists = () => API.get("/playlists");

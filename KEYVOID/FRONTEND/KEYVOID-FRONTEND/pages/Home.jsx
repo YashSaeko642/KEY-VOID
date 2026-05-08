@@ -1,47 +1,24 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../src/context/useAuth";
 import EnterVoidModal from "../components/EnterVoidModal";
+import { useState } from "react";
 
-const rainDrops = Array.from({ length: 120 }, (_, index) => ({
-  id: index,
-  style: {
-    left: `${(index * 3.1) % 100}%`,
-    animationDelay: `${(index % 14) * 0.16}s`,
-    animationDuration: `${1.1 + (index % 7) * 0.16}s`,
-    opacity: 0.12 + (index % 6) * 0.06,
-    height: `${50 + (index % 7) * 18}px`
-  }
-}));
-
-const hoverCards = [
+const featureBlocks = [
   {
-    title: "Why KeyVoid",
-    eyebrow: "The aim",
-    summary: "Give rising artists room to be found before popularity decides everything.",
-    detail:
-      "KeyVoid is built for discovery first, helping listeners break out of repetitive recommendation loops while giving creators a real shot at visibility."
+    title: "Social listening",
+    text: "Posts, reels, comments, follows, and music activity in one place."
   },
   {
-    title: "What You Can Do",
-    eyebrow: "Core features",
-    summary: "Profiles, posts, creator upgrades, discussions, and music-centered sharing.",
-    detail:
-      "The platform will connect social features with artist tools so fans can explore, interact, and follow a music journey instead of just consuming isolated uploads."
+    title: "Discovery sessions",
+    text: "Step outside your usual loop with guided genre and mood exploration."
   },
   {
-    title: "The Key Void",
-    eyebrow: "Discovery mode",
-    summary: "A controlled-randomness session that nudges people into new sounds, moods, and genres.",
-    detail:
-      "Instead of feeding users the same familiar loop, Key Void will use tags like mood, energy, and genre to create intentional exploration sessions."
+    title: "Creator space",
+    text: "Upload tracks, grow a following, and turn releases into conversations."
   },
   {
-    title: "How We Build It",
-    eyebrow: "Development",
-    summary: "Functionality first, immersive polish after the real product flow works.",
-    detail:
-      "We are starting with auth, profiles, posts, creator tools, and player support. Then we can layer in After Effects visuals, Three.js scenes, and richer motion."
+    title: "Community taste",
+    text: "Audience tags, likes, playlists, and follows shape what rises next."
   }
 ];
 
@@ -58,21 +35,12 @@ export default function Home() {
     }
   };
 
-  const handleVoidSessionStart = (sessionId) => {
+  const handleVoidSessionStart = () => {
     setShowVoidModal(false);
   };
 
   return (
     <section className="home-hero overflow-hidden">
-      <div className="rain-layer" aria-hidden="true">
-        {rainDrops.map((drop) => (
-          <span key={drop.id} className="rain-drop" style={drop.style} />
-        ))}
-      </div>
-      <div className="cloud cloud-one" aria-hidden="true" />
-      <div className="cloud cloud-two" aria-hidden="true" />
-      <div className="cloud cloud-three" aria-hidden="true" />
-
       <div className="orb orb-one" aria-hidden="true" />
       <div className="orb orb-two" aria-hidden="true" />
       <div className="orb orb-three" aria-hidden="true" />
@@ -117,25 +85,25 @@ export default function Home() {
             >
               Enter The Void
             </button>
-            <button type="button" className="secondary-action">
-              Read The Vision
+            <button type="button" className="secondary-action" onClick={() => document.getElementById("about")?.scrollIntoView({ behavior: "smooth" })}>
+              Explore The Vision
             </button>
           </div>
         </div>
       </div>
 
-      <div className="overview-strip">
+      <div className="overview-strip" id="about">
         <div className="overview-item">
-          <span className="overview-label">Current focus</span>
-          <span className="overview-value">Build the functional MVP first</span>
+          <span className="overview-label">Listen</span>
+          <span className="overview-value">Play tracks, save favorites, and build playlists.</span>
         </div>
         <div className="overview-item">
-          <span className="overview-label">Core stack</span>
-          <span className="overview-value">React, Node.js, MongoDB, JWT</span>
+          <span className="overview-label">Post</span>
+          <span className="overview-value">Share reactions, clips, images, and music culture.</span>
         </div>
         <div className="overview-item">
-          <span className="overview-label">Future polish</span>
-          <span className="overview-value">After Effects, Three.js, deeper motion</span>
+          <span className="overview-label">Discover</span>
+          <span className="overview-value">Follow creators and find tracks outside your loop.</span>
         </div>
       </div>
 
@@ -145,22 +113,25 @@ export default function Home() {
         <span />
       </div>
 
-      <div className="info-grid" id="vision">
-        {hoverCards.map((card) => (
-          <article
-            key={card.title}
-            className="info-card bg-slate-950/40 text-slate-50 backdrop-blur-xl"
-          >
-            <p className="card-eyebrow text-[11px] uppercase tracking-[0.18em] text-cyan-300/90">
-              {card.eyebrow}
-            </p>
-            <h3 className="font-['Michroma'] text-xl leading-tight">{card.title}</h3>
-            <p className="card-summary text-sm leading-7 text-slate-300/80">{card.summary}</p>
-            <div className="card-popup">
-              <p className="text-sm leading-7 text-slate-100/90">{card.detail}</p>
-            </div>
-          </article>
-        ))}
+      <div className="home-story" id="vision">
+        <div className="home-story-copy">
+          <p className="eyebrow">About KeyVoid</p>
+          <h2>Music discovery should feel social, alive, and a little unpredictable.</h2>
+          <p>
+            KeyVoid blends the velocity of short-form media with the depth of community discussion.
+            Listeners can drift through reels, collect songs, follow creators, and talk around the
+            sounds they love before popularity turns them obvious.
+          </p>
+        </div>
+        <div className="feature-grid">
+          {featureBlocks.map((feature) => (
+            <article key={feature.title} className="feature-tile">
+              <span />
+              <h3>{feature.title}</h3>
+              <p>{feature.text}</p>
+            </article>
+          ))}
+        </div>
       </div>
 
       <EnterVoidModal
