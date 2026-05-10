@@ -1,4 +1,3 @@
-// Dependencies
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const { roleAllows, syncSystemRole } = require("../utils/roleUtils");
@@ -6,7 +5,6 @@ const { roleAllows, syncSystemRole } = require("../utils/roleUtils");
 /**
  * Authentication middleware - Protects routes by verifying JWT tokens
  * Extracts user from token and attaches to req.user
- * @middleware
  */
 async function protect(req, res, next) {
   try {
@@ -22,7 +20,6 @@ async function protect(req, res, next) {
       return res.status(500).json({ msg: "JWT secret is not configured" });
     }
 
-    // Verify and decode JWT token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.id);
 
@@ -30,7 +27,6 @@ async function protect(req, res, next) {
       return res.status(401).json({ msg: "User no longer exists" });
     }
 
-    // Sync system role (admin check) and attach to request
     req.user = await syncSystemRole(user);
     next();
   } catch (error) {
@@ -66,10 +62,8 @@ async function optionalProtect(req, res, next) {
 }
 
 /**
- * Role authorization middleware - Restricts routes to specific roles
- * Must be used after protect() middleware
- * @middleware
- * @param {...string} allowedRoles - Roles that are allowed access
+ * Role authorization middleware
+ * Must be used after protect()
  */
 function authorizeRoles(...allowedRoles) {
   return (req, res, next) => {
