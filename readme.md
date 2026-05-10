@@ -170,6 +170,6 @@ CLIENT_URL=http://localhost:5173
 If you notice any issues with this README or need updates to reflect new features, please open an issue or submit a PR.
 
 <div style="display: flex; gap: 10px;">
-  <a href="https://github.com/your-org/keyvoid" target="_blank" style="display: inline-block; padding: 5px 10px; border: 1px solid #ccc; background: #f5f5f5; border-radius: 4px; text-decoration: none; color: #333;">GitHub</a>
+  <a href="https://github.com/YashSaeko642/KEY-VOID" target="_blank" style="display: inline-block; padding: 5px 10px; border: 1px solid #ccc; background: #f5f5f5; border-radius: 4px; text-decoration: none; color: #333;">GitHub</a>
   <a href="#" style="display: inline-block; padding: 5px 10px; border: 1px solid #ccc; background: #f5f5f5; border-radius: 4px; text-decoration: none; color: #333;">Documentation</a>
 </div>
