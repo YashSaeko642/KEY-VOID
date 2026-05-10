@@ -39,23 +39,43 @@ function getAllowedOrigins() {
 
 const CLIENT_ORIGINS = getAllowedOrigins();
 
-// Middleware
-app.use(
-  cors({
-    origin(origin, callback) {
-      if (!origin) {
-        callback(null, true);
-        return;
-      }
+// Log allowed origins on startup (helpful for debugging)
+console.log("Allowed CORS origins:", CLIENT_ORIGINS);
 
-      const normalizedOrigin = origin.replace(/\/+$/, "");
-      callback(null, CLIENT_ORIGINS.includes(normalizedOrigin));
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"]
-  })
-);
+// CORS — must be first, before all other middleware and routes
+const corsOptions = {
+  origin(origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, Render health checks)
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    const normalizedOrigin = origin.replace(/\/+$/, "");
+
+    if (CLIENT_ORIGINS.includes(normalizedOrigin)) {
+      callback(null, true);
+    } else {
+      console.warn("Blocked by CORS:", origin);
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "x-keyvoid-viewer"  // custom header used by frontend
+  ],
+  exposedHeaders: ["X-RateLimit-Remaining"]
+};
+
+app.use(cors(corsOptions));
+
+// Handle preflight OPTIONS requests for all routes
+// Note: use "/{*path}" for Express 5 / path-to-regexp v8+, not "*"
+app.options("/{*path}", cors(corsOptions));
+
 app.use(express.json({ limit: "6mb" }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
@@ -72,8 +92,13 @@ app.use("/api/audio", audioRoutes);
 app.use("/api/playlists", playlistRoutes);
 app.use("/api/void", voidSessionRoutes);
 
+// Health check — Render needs this to confirm the service is alive
 app.get("/", (req, res) => {
-  res.send("KeyVoid API Running");
+  res.status(200).json({ status: "ok", service: "KeyVoid API" });
+});
+
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok" });
 });
 
 const startServer = async () => {
