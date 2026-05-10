@@ -98,6 +98,26 @@
   height: 40px;
 }
 
+.post-insight-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px;
+  color: #93a4bd;
+  font-size: 12px;
+}
+
+.post-insight-row span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 5px 8px;
+  border: 1px solid rgba(129, 140, 248, 0.14);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.52);
+}
+
 /* ACTIONS */
 .post-actions {
   display: flex;
@@ -363,6 +383,42 @@
   border-radius: 24px;
   padding: 28px;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+}
+
+.safety-modal {
+  border-color: rgba(251, 191, 36, 0.22);
+}
+
+.report-field {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+  color: #cbd5e1;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.report-field select,
+.report-field textarea {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #e2e8f0;
+  padding: 10px 12px;
+  outline: none;
+  font: inherit;
+}
+
+.report-field textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.report-notice {
+  margin: 0 0 14px;
+  color: #bfdbfe;
+  font-size: 13px;
 }
 
 .delete-modal-header {

@@ -4,6 +4,8 @@ import {
   MessageCircle,
   Send,
   Share2,
+  Eye,
+  Flag,
   Volume2,
   VolumeX,
   Play,
@@ -12,7 +14,7 @@ import {
   ChevronDown
 } from "lucide-react";
 import { useAuth } from "../src/context/useAuth";
-import API, { getApiErrorMessage } from "../services/api";
+import API, { getApiErrorMessage, reportPost, trackPostView } from "../services/api";
 import { getRelativeTime } from "../src/utils/formatters";
 import "./Reels.css";
 
@@ -22,6 +24,7 @@ function ReelCard({ reel }) {
   const reelId = reel?._id;
 
   const [likes, setLikes] = useState(reel.likes?.length || 0);
+  const [views, setViews] = useState(reel.viewCount || 0);
   const [liked, setLiked] = useState(false);
   const [isLiking, setIsLiking] = useState(false);
   const [comments, setComments] = useState(
@@ -31,6 +34,7 @@ function ReelCard({ reel }) {
   const [commentText, setCommentText] = useState("");
   const [isCommenting, setIsCommenting] = useState(false);
   const [commentError, setCommentError] = useState("");
+  const [reportNotice, setReportNotice] = useState("");
 
   // Video controls
   const [isPlaying, setIsPlaying] = useState(false);
@@ -60,6 +64,10 @@ function ReelCard({ reel }) {
   }, [reel.comments]);
 
   useEffect(() => {
+    setViews(reel.viewCount || 0);
+  }, [reel.viewCount]);
+
+  useEffect(() => {
     const video = videoRef.current;
 
     setIsPlaying(false);
@@ -71,6 +79,28 @@ function ReelCard({ reel }) {
       video.pause();
       video.currentTime = 0;
     }
+  }, [reelId]);
+
+  useEffect(() => {
+    if (!reelId) return;
+
+    const seenKey = `keyvoid_viewed_post_${reelId}`;
+    if (sessionStorage.getItem(seenKey)) return;
+
+    const timer = window.setTimeout(() => {
+      sessionStorage.setItem(seenKey, "1");
+      trackPostView(reelId)
+        .then((response) => {
+          if (typeof response.data?.viewCount === "number") {
+            setViews(response.data.viewCount);
+          }
+        })
+        .catch(() => {
+          sessionStorage.removeItem(seenKey);
+        });
+    }, 900);
+
+    return () => window.clearTimeout(timer);
   }, [reelId]);
 
   // Video controls
@@ -177,6 +207,19 @@ function ReelCard({ reel }) {
     }
   };
 
+  const handleReport = async () => {
+    if (!isAuthenticated || !reelId) return;
+
+    try {
+      await reportPost(reelId, { reason: "Other", details: "Reported from Reels" });
+      setReportNotice("Sent to moderation");
+      window.setTimeout(() => setReportNotice(""), 2500);
+    } catch (err) {
+      setReportNotice(getApiErrorMessage(err, "Unable to report"));
+      window.setTimeout(() => setReportNotice(""), 2500);
+    }
+  };
+
   return (
     <div className="reel-card">
       {/* Video Container */}
@@ -249,6 +292,12 @@ function ReelCard({ reel }) {
           </div>
         )}
 
+        <div className="reel-insights">
+          <span><Eye size={15} /> {views} views</span>
+          {reel.recommendationReason && <span>{reel.recommendationReason}</span>}
+          {reportNotice && <span>{reportNotice}</span>}
+        </div>
+
         {/* Action Buttons */}
         <div className="reel-actions">
           <button
@@ -274,6 +323,15 @@ function ReelCard({ reel }) {
 
           <button className="reel-action-btn">
             <Share2 size={28} />
+          </button>
+
+          <button
+            className="reel-action-btn"
+            onClick={handleReport}
+            disabled={!isAuthenticated}
+            title="Report reel"
+          >
+            <Flag size={24} />
           </button>
         </div>
 

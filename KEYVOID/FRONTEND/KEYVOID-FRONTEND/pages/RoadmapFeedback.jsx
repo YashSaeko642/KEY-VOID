@@ -3,7 +3,10 @@ import { Bug, Lightbulb, MessageSquarePlus, Rocket, Trash2 } from "lucide-react"
 import "./RoadmapFeedback.css";
 
 const FEEDBACK_STORAGE_KEY = "keyvoid_product_feedback";
-const CURRENT_VERSION = "v0.4.1";
+const CURRENT_VERSION = "v0.4.2";
+
+const isBrowser = () => typeof window !== "undefined";
+
 
 const nextFeatures = [
   {
@@ -17,24 +20,32 @@ const nextFeatures = [
     detail: "A lighter reel viewer with explicit arrow navigation, media unloading, and a cleaner comment drawer."
   },
   {
-    title: "Creator growth tools",
+    title: "Profile gating (listeners vs creators)",
     status: "Planned",
-    detail: "Creator analytics, release pages, upload drafts, and profile activity sections for tracks and reels."
+    detail: "Hide creator-only panels and avoid loading creator endpoints for listener accounts."
   },
   {
-    title: "Community safety",
+    title: "Better social media features such as sharing and embeds",
     status: "Planned",
-    detail: "Dedicated reporting, moderation queues, blocking, and bug/feature feedback separate from the social feed."
+    detail: "Easier sharing of tracks, playlists, and profiles to other platforms, and richer embeds when KeyVoid links are shared on social media."
+  },
+  {
+    title: "Better animated UI",
+    status: "Planned",
+    detail: "More microinteractions and animated transitions throughout the app to make it feel more alive and polished."
   }
 ];
 
+
 function readFeedback() {
   try {
+    if (!isBrowser()) return [];
     return JSON.parse(localStorage.getItem(FEEDBACK_STORAGE_KEY) || "[]");
   } catch {
     return [];
   }
 }
+
 
 export default function RoadmapFeedback() {
   const [items, setItems] = useState(readFeedback);
@@ -53,8 +64,10 @@ export default function RoadmapFeedback() {
 
   const saveItems = (nextItems) => {
     setItems(nextItems);
+    if (!isBrowser()) return;
     localStorage.setItem(FEEDBACK_STORAGE_KEY, JSON.stringify(nextItems));
   };
+
 
   const handleSubmit = (event) => {
     event.preventDefault();

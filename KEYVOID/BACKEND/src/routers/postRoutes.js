@@ -11,7 +11,10 @@ const {
   deletePost,
   getFollowingFeed,
   getReels,
-  createReel
+  createReel,
+  trackPostView,
+  reportPost,
+  getCreatorInsights
 } = require("../controllers/post-controller");
 
 const { protect } = require("../middleware/authMiddleware");
@@ -23,10 +26,13 @@ router.post("/reel", protect, postCreationRateLimit, reelMediaUpload.single("med
 
 router.get("/", getFeed);
 router.get("/reels", getReels);
+router.get("/creator/insights", protect, getCreatorInsights);
 router.get("/user/:userId", getUserPosts);
 router.get("/following", protect, getFollowingFeed);
 
 router.patch("/:postId/like", protect, likeRateLimit, toggleLike);
+router.post("/:postId/view", trackPostView);
+router.post("/:postId/report", protect, reportPost);
 
 router.post("/:postId/comments", protect, addComment);
 router.post("/:postId/comment", protect, addComment);

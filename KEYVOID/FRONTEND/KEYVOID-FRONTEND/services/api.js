@@ -5,6 +5,20 @@ const API = axios.create({
   withCredentials: true
 });
 
+API.interceptors.request.use((config) => {
+  if (typeof window === "undefined") return config;
+
+  let viewerId = localStorage.getItem("keyvoid_viewer_id");
+  if (!viewerId) {
+    viewerId = crypto.randomUUID();
+    localStorage.setItem("keyvoid_viewer_id", viewerId);
+  }
+
+  config.headers = config.headers || {};
+  config.headers["x-keyvoid-viewer"] = viewerId;
+  return config;
+});
+
 export function getApiErrorMessage(error, fallback = "Request failed") {
   return (
     error.response?.data?.message ||
@@ -40,6 +54,9 @@ export const getUserAudioUploads = (userId, page = 1, limit = 10) =>
   API.get(`/audio/user/${userId}`, { params: { page, limit } });
 export const getUserPosts = (userId, page = 1, limit = 10, contentType = "") =>
   API.get(`/posts/user/${userId}`, { params: { page, limit, contentType } });
+export const getCreatorInsights = () => API.get("/posts/creator/insights");
+export const trackPostView = (postId) => API.post(`/posts/${postId}/view`);
+export const reportPost = (postId, payload) => API.post(`/posts/${postId}/report`, payload);
 export const updateAudioTrack = (trackId, payload) => API.patch(`/audio/${trackId}`, payload);
 export const deleteAudioTrack = (trackId) => API.delete(`/audio/${trackId}`);
 export const getPlaylists = () => API.get("/playlists");

@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
-import { Heart, MessageCircle, Send, Share2, Trash2 } from "lucide-react";
+import { useRef, useState, useEffect } from "react";
+import { Eye, Flag, Heart, MessageCircle, Send, Share2, Trash2, TrendingUp } from "lucide-react";
 import { Link } from "react-router-dom";
-import API, { getApiErrorMessage } from "../services/api";
+import API, { getApiErrorMessage, reportPost, trackPostView } from "../services/api";
 import { useAuth } from "../src/context/useAuth";
 import { getRelativeTime } from "../src/utils/formatters";
 import "./PostCard.css";
@@ -13,7 +13,9 @@ function PostCard({ post, onPostDeleted }) {
   const authorUsername = post?.author?.username || "unknown";
   const postText = typeof post?.text === "string" ? post.text : "";
 
+  const cardRef = useRef(null);
   const [likes, setLikes] = useState(post.likes?.length || 0);
+  const [views, setViews] = useState(post.viewCount || 0);
   const [liked, setLiked] = useState(false);
   const [isLiking, setIsLiking] = useState(false);
   const [showLikeAnimation, setShowLikeAnimation] = useState(false);
@@ -26,6 +28,11 @@ function PostCard({ post, onPostDeleted }) {
   const [commentText, setCommentText] = useState("");
   const [isCommenting, setIsCommenting] = useState(false);
   const [commentError, setCommentError] = useState("");
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState("Spam");
+  const [reportDetails, setReportDetails] = useState("");
+  const [reportNotice, setReportNotice] = useState("");
+  const [isReporting, setIsReporting] = useState(false);
 
   // Check if current user is post owner
   const isPostOwner = Boolean(userId && post?.author?._id === userId);
@@ -47,6 +54,40 @@ function PostCard({ post, onPostDeleted }) {
   useEffect(() => {
     setComments((post.comments || []).filter((comment) => !comment.isDeleted));
   }, [post.comments]);
+
+  useEffect(() => {
+    setViews(post.viewCount || 0);
+  }, [post.viewCount]);
+
+  useEffect(() => {
+    const node = cardRef.current;
+    if (!node || !postId) return undefined;
+
+    const seenKey = `keyvoid_viewed_post_${postId}`;
+    if (sessionStorage.getItem(seenKey)) return undefined;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting) return;
+
+        sessionStorage.setItem(seenKey, "1");
+        observer.disconnect();
+        trackPostView(postId)
+          .then((response) => {
+            if (typeof response.data?.viewCount === "number") {
+              setViews(response.data.viewCount);
+            }
+          })
+          .catch(() => {
+            sessionStorage.removeItem(seenKey);
+          });
+      },
+      { threshold: 0.55 }
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [postId]);
 
   // SMOOTH LIKE TOGGLE WITH OPTIMISTIC UPDATES
   const handleLike = async () => {
@@ -160,8 +201,29 @@ function PostCard({ post, onPostDeleted }) {
     }
   };
 
+  const handleReportPost = async () => {
+    if (!postId || isReporting) return;
+
+    setIsReporting(true);
+    setReportNotice("");
+
+    try {
+      await reportPost(postId, {
+        reason: reportReason,
+        details: reportDetails
+      });
+      setReportNotice("Thanks. This post was sent to moderation.");
+      setReportDetails("");
+      window.setTimeout(() => setShowReportModal(false), 1200);
+    } catch (err) {
+      setReportNotice(getApiErrorMessage(err, "Unable to report this post."));
+    } finally {
+      setIsReporting(false);
+    }
+  };
+
   return (
-    <div className="post-card">
+    <div className="post-card" ref={cardRef}>
       {/* DELETE MODAL */}
       {showDeleteModal && (
         <div className="delete-modal-overlay" onClick={() => setShowDeleteModal(false)}>
@@ -192,6 +254,41 @@ function PostCard({ post, onPostDeleted }) {
         </div>
       )}
 
+      {showReportModal && (
+        <div className="delete-modal-overlay" onClick={() => setShowReportModal(false)}>
+          <div className="delete-modal safety-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="delete-modal-header">
+              <span className="delete-modal-title">Report Post</span>
+              <span className="delete-modal-status">Reports help keep recommendations safe.</span>
+            </div>
+            <label className="report-field">
+              Reason
+              <select value={reportReason} onChange={(event) => setReportReason(event.target.value)}>
+                {["Spam", "Harassment", "Hate speech", "Self-harm", "Violence", "Sexual content", "Misinformation", "Other"].map((reason) => (
+                  <option key={reason} value={reason}>{reason}</option>
+                ))}
+              </select>
+            </label>
+            <label className="report-field">
+              Details
+              <textarea
+                value={reportDetails}
+                onChange={(event) => setReportDetails(event.target.value)}
+                maxLength={500}
+                placeholder="Add context for moderators"
+              />
+            </label>
+            {reportNotice && <p className="report-notice">{reportNotice}</p>}
+            <div className="modal-actions">
+              <button className="modal-cancel" onClick={() => setShowReportModal(false)}>Cancel</button>
+              <button className="modal-delete" onClick={handleReportPost} disabled={isReporting}>
+                {isReporting ? "Sending..." : "Send Report"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* HEADER */}
       <div className="post-header">
         <div className="post-avatar">
@@ -214,6 +311,15 @@ function PostCard({ post, onPostDeleted }) {
             title="Delete post"
           >
             <Trash2 size={16} />
+          </button>
+        )}
+        {!isPostOwner && isAuthenticated && (
+          <button
+            className="post-delete-btn"
+            onClick={() => setShowReportModal(true)}
+            title="Report post"
+          >
+            <Flag size={16} />
           </button>
         )}
       </div>
@@ -241,6 +347,15 @@ function PostCard({ post, onPostDeleted }) {
       )}
 
       {/* ACTIONS */}
+      <div className="post-insight-row">
+        <span><Eye size={15} /> {views} views</span>
+        {post.recommendationReason && (
+          <span><TrendingUp size={15} /> {post.recommendationReason}</span>
+        )}
+        {post.safetyStatus && post.safetyStatus !== "clear" && (
+          <span><Flag size={15} /> {post.safetyStatus.replace("_", " ")}</span>
+        )}
+      </div>
       <div className="post-actions">
         {/* LIKE BUTTON */}
         <button
