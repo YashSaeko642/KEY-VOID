@@ -272,10 +272,17 @@ export default function Profile() {
 
   useEffect(() => {
     if (status !== "ready") return;
-    loadUserAudioUploads();
+
+    // Only creators should see uploads + reels.
+    // Listeners should only see posts.
+    if (user?.role === "creator" || user?.role === "admin") {
+      loadUserAudioUploads();
+      loadUserReels();
+    }
+
     loadUserPosts();
-    loadUserReels();
-  }, [status, loadUserAudioUploads, loadUserPosts, loadUserReels]);
+  }, [status, loadUserAudioUploads, loadUserPosts, loadUserReels, user?.role]);
+
 
   const handleDeletePost = (postId) => {
     setPosts((prev) => prev.filter((post) => post._id !== postId));

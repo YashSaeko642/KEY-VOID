@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Music, Save, Trash2, Video, Upload, Play } from "lucide-react";
+import { BarChart3, Eye, Heart, MessageCircle, Music, Save, Shield, Trash2, TrendingUp, Video, Upload, Play } from "lucide-react";
 import API, {
+  getCreatorInsights,
   getApiErrorMessage,
   getMyAudioUploads,
   uploadCreatorSongs
@@ -45,6 +46,8 @@ export default function CreatorHub() {
   const [songNotice, setSongNotice] = useState({ type: "", message: "" });
   const [myUploads, setMyUploads] = useState([]);
   const [uploadEdits, setUploadEdits] = useState({});
+  const [creatorInsights, setCreatorInsights] = useState(null);
+  const [insightsNotice, setInsightsNotice] = useState("");
 
   // Reel creation state
   const [reelText, setReelText] = useState("");
@@ -72,6 +75,16 @@ export default function CreatorHub() {
       ])));
     } catch (err) {
       setSongNotice({ type: "error", message: getApiErrorMessage(err, "Unable to load your song uploads.") });
+    }
+  };
+
+  const loadCreatorInsights = async () => {
+    try {
+      const { data } = await getCreatorInsights();
+      setCreatorInsights(data);
+      setInsightsNotice("");
+    } catch (err) {
+      setInsightsNotice(getApiErrorMessage(err, "Unable to load creator insights."));
     }
   };
 
@@ -250,6 +263,7 @@ export default function CreatorHub() {
 
     checkCreatorAccess();
     loadMyUploads();
+    loadCreatorInsights();
 
     return () => {
       ignore = true;
@@ -303,6 +317,60 @@ export default function CreatorHub() {
               </Link>
             </div>
           </div>
+        </div>
+
+        <div className="dashboard-card" style={{ marginTop: "2rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
+            <BarChart3 size={24} color="#38bdf8" />
+            <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: "600" }}>Growth & Recommendations</h2>
+          </div>
+          {insightsNotice && <p style={{ color: "#fca5a5", marginTop: 0 }}>{insightsNotice}</p>}
+          {creatorInsights ? (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "12px", marginBottom: "18px" }}>
+                {[
+                  ["Views", creatorInsights.totals?.views || 0, <Eye key="views" size={18} />],
+                  ["Likes", creatorInsights.totals?.likes || 0, <Heart key="likes" size={18} />],
+                  ["Comments", creatorInsights.totals?.comments || 0, <MessageCircle key="comments" size={18} />],
+                  ["Engagement", `${creatorInsights.engagementRate || 0}%`, <TrendingUp key="engagement" size={18} />]
+                ].map(([label, value, icon]) => (
+                  <div key={label} style={{ display: "grid", gap: "8px", padding: "14px", borderRadius: "8px", border: "1px solid rgba(148, 163, 184, 0.16)", background: "rgba(15, 23, 42, 0.55)" }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", color: "#93c5fd", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.12em" }}>{icon}{label}</span>
+                    <strong style={{ color: "#f8fafc", fontSize: "1.7rem" }}>{value}</strong>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.3fr) minmax(220px, 0.7fr)", gap: "16px" }}>
+                <div style={{ display: "grid", gap: "10px" }}>
+                  <h3 style={{ margin: 0, color: "#e5e7eb", fontSize: "1rem" }}>Top content</h3>
+                  {creatorInsights.topPosts?.length ? creatorInsights.topPosts.map((post) => (
+                    <div key={post._id} style={{ display: "grid", gap: "8px", padding: "12px", borderRadius: "8px", border: "1px solid rgba(148, 163, 184, 0.14)", background: "rgba(17, 24, 39, 0.74)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", color: "#f8fafc" }}>
+                        <strong>{post.contentType === "reel" ? "Reel" : "Post"}</strong>
+                        <span style={{ color: "#93c5fd" }}>{post.viewCount} views</span>
+                      </div>
+                      <p style={{ margin: 0, color: "#cbd5e1", fontSize: "14px" }}>{post.text || `${post.mediaType || "Media"} content`}</p>
+                      <small style={{ color: "#94a3b8" }}>{post.recommendationReason}</small>
+                    </div>
+                  )) : (
+                    <p style={{ color: "#9ca3af", margin: 0 }}>Post or create a reel to start collecting insights.</p>
+                  )}
+                </div>
+                <div style={{ display: "grid", gap: "10px", alignContent: "start" }}>
+                  <h3 style={{ margin: 0, color: "#e5e7eb", fontSize: "1rem" }}>Growth prompts</h3>
+                  {(creatorInsights.recommendations || []).map((tip) => (
+                    <div key={tip} style={{ display: "flex", gap: "8px", padding: "10px", borderRadius: "8px", background: "rgba(14, 165, 233, 0.1)", color: "#cbd5e1", fontSize: "13px" }}>
+                      <Shield size={16} color="#7dd3fc" />
+                      <span>{tip}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            <p style={{ color: "#9ca3af", margin: 0 }}>Loading growth insights...</p>
+          )}
         </div>
 
         <div className="dashboard-card" style={{ marginTop: "2rem" }}>

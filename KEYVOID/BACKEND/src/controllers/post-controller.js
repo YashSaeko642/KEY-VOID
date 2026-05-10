@@ -1,4 +1,5 @@
 const Post = require("../models/Post");
+const User = require("../models/User");
 const fs = require("fs/promises");
 const path = require("path");
 const {
@@ -10,6 +11,16 @@ const { validateAndSanitizeText } = require("../utils/sanitization");
 
 const ALLOWED_MEDIA_TYPES = new Set(["", "image", "video", "audio"]);
 const HTTPS_URL_PATTERN = /^https:\/\/[^\s/$.?#].[^\s]*$/i;
+const REPORT_REASONS = new Set([
+  "Spam",
+  "Harassment",
+  "Hate speech",
+  "Self-harm",
+  "Violence",
+  "Sexual content",
+  "Misinformation",
+  "Other"
+]);
 
 // File size limits
 const FILE_SIZE_LIMITS = {
@@ -27,6 +38,61 @@ const FILE_SIZE_LIMITS = {
 
 function isValidObjectId(id) {
   return /^[0-9a-fA-F]{24}$/.test(String(id || ""));
+}
+
+function compactNumber(value = 0) {
+  const count = Number(value) || 0;
+  if (count >= 1000000) return `${(count / 1000000).toFixed(count >= 10000000 ? 0 : 1)}M`;
+  if (count >= 1000) return `${(count / 1000).toFixed(count >= 10000 ? 0 : 1)}K`;
+  return String(count);
+}
+
+function getRecommendationScore(post) {
+  const createdAt = new Date(post.createdAt || Date.now()).getTime();
+  const ageHours = Math.max(1, (Date.now() - createdAt) / 36e5);
+  const likes = Array.isArray(post.likes) ? post.likes.length : 0;
+  const comments = Array.isArray(post.comments)
+    ? post.comments.filter((comment) => !comment.isDeleted).length
+    : 0;
+  const views = Number(post.viewCount) || 0;
+  const mediaBoost = post.mediaUrl ? 6 : 0;
+  const reelBoost = post.contentType === "reel" ? 8 : 0;
+  const safetyPenalty = post.safetyStatus === "under_review" ? 20 : post.safetyStatus === "reported" ? 8 : 0;
+  const engagement = likes * 5 + comments * 8 + Math.log10(views + 1) * 10;
+
+  return engagement + mediaBoost + reelBoost - safetyPenalty + 24 / ageHours;
+}
+
+function getRecommendationReason(post) {
+  const likes = Array.isArray(post.likes) ? post.likes.length : 0;
+  const comments = Array.isArray(post.comments)
+    ? post.comments.filter((comment) => !comment.isDeleted).length
+    : 0;
+  const views = Number(post.viewCount) || 0;
+
+  if (post.contentType === "reel") return "Recommended because Reels perform well";
+  if (views >= 100) return `Recommended because ${compactNumber(views)} people viewed it`;
+  if (likes + comments >= 8) return "Recommended because people are engaging with it";
+  if (post.mediaUrl) return "Recommended because media posts get more discovery";
+  return "Recommended because it is fresh";
+}
+
+function attachRecommendationMeta(posts = []) {
+  return posts.map((post) => ({
+    ...post,
+    recommendationScore: Number(getRecommendationScore(post).toFixed(2)),
+    recommendationReason: getRecommendationReason(post)
+  }));
+}
+
+function getViewerKey(req) {
+  const userId = req.user?.id;
+  if (userId) return `user:${userId}`;
+
+  const headerKey = String(req.get("x-keyvoid-viewer") || "").trim().slice(0, 120);
+  if (headerKey) return `anon:${headerKey}`;
+
+  return `ip:${req.ip || req.socket?.remoteAddress || "unknown"}`;
 }
 
 function validateMediaInput(mediaUrl = "", mediaType = "") {
@@ -241,22 +307,33 @@ exports.getFeed = async (req, res) => {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
     const skip = (page - 1) * limit;
+    const sortMode = String(req.query.sort || "recommended").toLowerCase();
+    const baseQuery = {
+      isDeleted: false,
+      safetyStatus: { $ne: "restricted" }
+    };
 
     // Get posts and total count
     const [posts, total] = await Promise.all([
-      Post.find({ isDeleted: false })
+      Post.find(baseQuery)
         .populate("author", "username avatarUrl")
         .populate("comments.author", "username avatarUrl")
         .sort({ createdAt: -1 })
-        .limit(limit)
+        .limit(sortMode === "recent" ? limit : Math.min(100, limit * 5))
         .skip(skip)
         .lean(),
-      Post.countDocuments({ isDeleted: false })
+      Post.countDocuments(baseQuery)
     ]);
+
+    const rankedPosts = sortMode === "recent"
+      ? attachRecommendationMeta(posts)
+      : attachRecommendationMeta(posts)
+          .sort((a, b) => b.recommendationScore - a.recommendationScore)
+          .slice(0, limit);
 
     // Return consistent response format
     res.json({
-      posts: posts,
+      posts: rankedPosts,
       pagination: {
         page,
         limit,
@@ -498,12 +575,14 @@ exports.getFollowingFeed = async (req, res) => {
 
     const posts = await Post.find({
       author: { $in: followingIds },
-      isDeleted: false
+      isDeleted: false,
+      safetyStatus: { $ne: "restricted" }
     })
       .populate("author", "username avatarUrl")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
-    res.json(posts);
+    res.json(attachRecommendationMeta(posts));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -517,19 +596,19 @@ exports.getReels = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const [posts, total] = await Promise.all([
-      Post.find({ contentType: "reel", isDeleted: false })
+      Post.find({ contentType: "reel", isDeleted: false, safetyStatus: { $ne: "restricted" } })
         .populate("author", "username avatarUrl role favoriteGenres")
         .populate("comments.author", "username avatarUrl")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
-      Post.countDocuments({ contentType: "reel", isDeleted: false })
+      Post.countDocuments({ contentType: "reel", isDeleted: false, safetyStatus: { $ne: "restricted" } })
     ]);
 
     // Return consistent response format
     res.json({
-      posts: posts,
+      posts: attachRecommendationMeta(posts),
       pagination: {
         page,
         limit,
@@ -595,5 +674,161 @@ exports.createReel = async (req, res) => {
   } catch (err) {
     console.error("Create reel error:", err);
     res.status(500).json({ message: err.message || "Failed to create reel" });
+  }
+};
+
+exports.trackPostView = async (req, res) => {
+  try {
+    const { postId } = req.params;
+
+    if (!isValidObjectId(postId)) {
+      return res.status(400).json({ message: "Invalid post ID" });
+    }
+
+    const viewerKey = getViewerKey(req);
+    const post = await Post.findOne({ _id: postId, isDeleted: false }).select("+uniqueViewers");
+
+    if (!post) {
+      return res.status(404).json({ message: "Post not found" });
+    }
+
+    const hasViewed = post.uniqueViewers.includes(viewerKey);
+    post.viewCount += 1;
+    post.lastViewedAt = new Date();
+
+    if (!hasViewed && post.uniqueViewers.length < 5000) {
+      post.uniqueViewers.push(viewerKey);
+    }
+
+    await post.save();
+
+    res.json({
+      viewCount: post.viewCount,
+      uniqueViewCount: post.uniqueViewers.length,
+      recommendationScore: Number(getRecommendationScore(post.toObject()).toFixed(2))
+    });
+  } catch (err) {
+    console.error("Track post view error:", err);
+    res.status(500).json({ message: "Failed to record view" });
+  }
+};
+
+exports.reportPost = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const reporterId = req.user.id;
+
+    if (!isValidObjectId(postId)) {
+      return res.status(400).json({ message: "Invalid post ID" });
+    }
+
+    const reason = REPORT_REASONS.has(req.body?.reason) ? req.body.reason : "Other";
+    let details = "";
+    if (req.body?.details) {
+      const detailsValidation = validateAndSanitizeText(req.body.details, {
+        maxLength: 500,
+        minLength: 1
+      });
+
+      if (!detailsValidation.valid) {
+        return res.status(400).json({ message: detailsValidation.error });
+      }
+
+      details = detailsValidation.text;
+    }
+
+    const post = await Post.findOne({ _id: postId, isDeleted: false });
+
+    if (!post) {
+      return res.status(404).json({ message: "Post not found" });
+    }
+
+    const alreadyReported = post.reports.some((report) => String(report.reporter) === String(reporterId));
+    if (alreadyReported) {
+      return res.status(409).json({ message: "You already reported this post" });
+    }
+
+    post.reports.push({
+      reporter: reporterId,
+      reason,
+      details
+    });
+    post.reportCount = post.reports.length;
+    post.safetyStatus = post.reportCount >= 3 ? "under_review" : "reported";
+
+    await post.save();
+
+    res.status(201).json({
+      message: "Report sent to moderation",
+      reportCount: post.reportCount,
+      safetyStatus: post.safetyStatus
+    });
+  } catch (err) {
+    console.error("Report post error:", err);
+    res.status(500).json({ message: "Failed to report post" });
+  }
+};
+
+exports.getCreatorInsights = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const account = await User.findById(userId).select("role followersCount followingCount");
+
+    if (!account || (account.role !== "creator" && account.role !== "admin")) {
+      return res.status(403).json({ message: "Creator access required" });
+    }
+
+    const posts = await Post.find({ author: userId, isDeleted: false })
+      .populate("author", "username avatarUrl")
+      .populate("comments.author", "username avatarUrl")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const totals = posts.reduce((summary, post) => {
+      const commentsCount = (post.comments || []).filter((comment) => !comment.isDeleted).length;
+      summary.posts += post.contentType === "post" ? 1 : 0;
+      summary.reels += post.contentType === "reel" ? 1 : 0;
+      summary.views += post.viewCount || 0;
+      summary.likes += (post.likes || []).length;
+      summary.comments += commentsCount;
+      return summary;
+    }, { posts: 0, reels: 0, views: 0, likes: 0, comments: 0 });
+
+    const topPosts = attachRecommendationMeta(posts)
+      .sort((a, b) => ((b.viewCount || 0) + b.recommendationScore) - ((a.viewCount || 0) + a.recommendationScore))
+      .slice(0, 5)
+      .map((post) => ({
+        _id: post._id,
+        text: post.text,
+        contentType: post.contentType,
+        mediaType: post.mediaType,
+        viewCount: post.viewCount || 0,
+        likesCount: (post.likes || []).length,
+        commentsCount: (post.comments || []).filter((comment) => !comment.isDeleted).length,
+        recommendationScore: post.recommendationScore,
+        recommendationReason: post.recommendationReason,
+        safetyStatus: post.safetyStatus,
+        createdAt: post.createdAt
+      }));
+
+    const engagementRate = totals.views > 0
+      ? Number((((totals.likes + totals.comments) / totals.views) * 100).toFixed(1))
+      : 0;
+
+    res.json({
+      totals,
+      followersCount: account.followersCount || 0,
+      followingCount: account.followingCount || 0,
+      engagementRate,
+      topPosts,
+      recommendations: [
+        "Post reels with strong opening visuals for better For You ranking.",
+        "Ask a simple question in captions to lift comment signals.",
+        "Keep reported content clear quickly so recommendations are not reduced."
+      ]
+    });
+  } catch (err) {
+    console.error("Creator insights error:", err);
+    res.status(500).json({ message: "Failed to load creator insights" });
   }
 };

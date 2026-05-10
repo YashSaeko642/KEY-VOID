@@ -21,6 +21,7 @@ function Feed() {
   const loadMoreTrigger = useRef(null);
 
   const [mode, setMode] = useState("global");
+  const [sort, setSort] = useState("recommended");
 
   const clearMedia = useCallback(() => {
     if (mediaPreviewUrl) {
@@ -39,7 +40,7 @@ function Feed() {
         mode === "following" ? "/posts/following" : "/posts";
 
       const res = await API.get(endpoint, {
-        params: { page: pageNum, limit: 10 }
+        params: { page: pageNum, limit: 10, sort }
       });
 
       const postsData = res.data.posts || res.data;
@@ -60,7 +61,7 @@ function Feed() {
     } finally {
       setIsLoading(false);
     }
-  }, [mode]);
+  }, [mode, sort]);
 
   const handleCreatePost = async () => {
     if (!postText.trim() || isCreating) return;
@@ -125,7 +126,7 @@ function Feed() {
     setHasNext(true);
     setPage(1);
     fetchPosts(1);
-  }, [mode, fetchPosts]);
+  }, [mode, sort, fetchPosts]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -160,7 +161,7 @@ function Feed() {
             <p className="feed-sidebar-kicker">Channels</p>
             <button className={mode === "global" ? "feed-channel active" : "feed-channel"} onClick={() => setMode("global")}>
               For You
-              <span>Fresh posts across KeyVoid</span>
+              <span>Recommended by views, engagement, media, and freshness</span>
             </button>
             <button className={mode === "following" ? "feed-channel active" : "feed-channel"} onClick={() => setMode("following")}>
               Following
@@ -176,6 +177,14 @@ function Feed() {
             <p className="feed-subtitle">
              Music discussions, updates, and media from the KeyVoid community.
             </p>
+            <div className="feed-sort-row" aria-label="Feed ranking">
+              <button className={sort === "recommended" ? "active" : ""} onClick={() => setSort("recommended")}>
+                Recommended
+              </button>
+              <button className={sort === "recent" ? "active" : ""} onClick={() => setSort("recent")}>
+                Recent
+              </button>
+            </div>
 
           </div>
 
@@ -302,8 +311,12 @@ function Feed() {
               <span>Share a track, ask for recs, post a clip, or start a genre debate.</span>
             </div>
             <div className="feed-tip">
-              <strong>Coming next</strong>
-              <span>Genre rooms, saved posts, notifications, and threaded replies.</span>
+              <strong>How recommendations work</strong>
+              <span>Views, likes, comments, recency, media quality, and safety status shape For You ranking.</span>
+            </div>
+            <div className="feed-tip">
+              <strong>Safety tools</strong>
+              <span>Report harmful posts from the flag button. Reviewed content is reduced in recommendations.</span>
             </div>
           </aside>
         </div>
