@@ -3,12 +3,16 @@ const UserListeningHistory = require("../models/UserListeningHistory");
 const Audio = require("../models/Audio");
 
 /**
+ * Returns the full base URL of the backend API.
+ * In production this comes from BACKEND_URL env var.
+ * Falls back to localhost for development.
+ */
+function getApiBaseUrl() {
+  return (process.env.BACKEND_URL || "http://localhost:5000").replace(/\/+$/, "");
+}
+
+/**
  * Start a void session
- * @param {Object} user - User object from auth middleware
- * @param {String} mode - "familiar" | "mixed" | "explore"
- * @param {String} genre - Optional genre filter
- * @param {Number} durationMinutes - Session duration (5-180)
- * @param {Number} skipDelay - Seconds before can skip
  */
 exports.startSession = async (req, res) => {
   try {
@@ -26,13 +30,13 @@ exports.startSession = async (req, res) => {
     // Check if selected genre has tracks
     let genreAvailable = true;
     let genreWarning = null;
-    
+
     if (genre && genre !== "All Genres") {
-      const genreTrackCount = await Audio.countDocuments({ 
-        genre: genre, 
-        isPublic: true 
+      const genreTrackCount = await Audio.countDocuments({
+        genre: genre,
+        isPublic: true
       });
-      
+
       if (genreTrackCount === 0) {
         genreAvailable = false;
         genreWarning = `The "${genre}" genre isn't available right now. We're always discovering new artists in this category. Your session will play from all available genres instead! 🎵`;
@@ -96,13 +100,16 @@ exports.getNextTrack = async (req, res) => {
     } else if (session.mode === "mixed") {
       track = await getTrackMixed(userId, session);
     } else {
-      // explore - completely random
       track = await getTrackExplore(userId, session);
     }
 
     if (!track) {
       return res.status(200).json({ track: null, msg: "No more tracks available" });
     }
+
+    // FIX: use full absolute URL so the browser's <audio> element can reach
+    // the Render backend directly, not try to load from the Vercel frontend domain
+    const baseUrl = getApiBaseUrl();
 
     return res.json({
       track: {
@@ -111,7 +118,7 @@ exports.getNextTrack = async (req, res) => {
         artist: track.artist,
         genre: track.genre,
         duration: track.duration,
-        url: `/api/audio/stream/${track._id}`,
+        url: `${baseUrl}/api/audio/stream/${track._id}`,  // ← full URL
         filename: track.filename
       }
     });
@@ -125,7 +132,6 @@ exports.getNextTrack = async (req, res) => {
  * Get familiar tracks (similar to user's history)
  */
 async function getTrackFamiliar(userId, session) {
-  // Get genres user has listened to most
   const listeningHistory = await UserListeningHistory.find({ user: userId })
     .sort({ playCount: -1 })
     .limit(20);
@@ -137,7 +143,6 @@ async function getTrackFamiliar(userId, session) {
   const genresLiked = [...new Set(listeningHistory.map(h => h.genre))];
   const tracksAlreadyPlayed = session.playedTracks.map(t => t.track.toString());
 
-  // Find tracks in same genres user has listened to
   const query = {
     genre: { $in: genresLiked },
     _id: { $nin: tracksAlreadyPlayed },
@@ -153,16 +158,13 @@ async function getTrackFamiliar(userId, session) {
 }
 
 /**
- * Get mixed tracks (some familiar, some new)
+ * Get mixed tracks (60% familiar, 40% explore)
  */
 async function getTrackMixed(userId, session) {
-  // 60% familiar, 40% explore
   const isExploreTime = Math.random() < 0.4;
-
   if (isExploreTime) {
     return getTrackExplore(userId, session);
   }
-
   return getTrackFamiliar(userId, session);
 }
 
@@ -181,7 +183,6 @@ async function getTrackExplore(userId, session) {
     query.genre = session.genre;
   }
 
-  // Get random track using MongoDB aggregation
   const pipeline = [
     { $match: query },
     { $sample: { size: 1 } }
@@ -211,7 +212,6 @@ exports.logTrackPlay = async (req, res) => {
       timeListened
     });
 
-    // Update or create listening history
     const track = await Audio.findById(trackId);
     if (track) {
       await UserListeningHistory.findOneAndUpdate(
