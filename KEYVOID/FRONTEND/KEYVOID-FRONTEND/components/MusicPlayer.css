@@ -996,3 +996,25 @@
   border-color: transparent;
   background: linear-gradient(135deg, #6366f1, #8b5cf6);
 }
+/* Wrapper for recommended cards to position action buttons */
+.recommended-track-wrapper {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Like + playlist buttons that appear on recommended cards */
+.recommended-track-actions {
+  display: flex;
+  gap: 0.3rem;
+  margin-top: 0.3rem;
+  justify-content: center;
+}
+
+/* Like + playlist buttons in the now-playing panel */
+.now-playing-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}

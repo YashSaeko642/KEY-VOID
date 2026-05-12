@@ -44,9 +44,7 @@ function openLocalMusicDb() {
       reject(new Error("Local browser storage is unavailable."));
       return;
     }
-
     const request = indexedDB.open(LOCAL_MUSIC_DB, 1);
-
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains(LOCAL_MUSIC_STORE)) {
@@ -54,7 +52,6 @@ function openLocalMusicDb() {
         store.createIndex("ownerKey", "ownerKey", { unique: false });
       }
     };
-
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
@@ -66,15 +63,8 @@ function runLocalMusicTransaction(mode, action) {
       const transaction = db.transaction(LOCAL_MUSIC_STORE, mode);
       const store = transaction.objectStore(LOCAL_MUSIC_STORE);
       const result = action(store);
-
-      transaction.oncomplete = () => {
-        db.close();
-        resolve(result?.result);
-      };
-      transaction.onerror = () => {
-        db.close();
-        reject(transaction.error);
-      };
+      transaction.oncomplete = () => { db.close(); resolve(result?.result); };
+      transaction.onerror = () => { db.close(); reject(transaction.error); };
     })
   );
 }
@@ -115,7 +105,6 @@ function getDominantGenre(track, fallback = "Uploads") {
   const topTag = [...(track?.audienceTags || [])]
     .filter((tag) => tag?.tag)
     .sort((a, b) => getTagVoteCount(b) - getTagVoteCount(a) || String(a.tag).localeCompare(String(b.tag)))[0];
-
   return topTag?.tag || track?.genre || fallback;
 }
 
@@ -130,29 +119,23 @@ function getTrackSearchText(track) {
 
 function getTrackSearchScore(track, query) {
   if (!query) return 0;
-
   const title = String(track?.title || "").toLowerCase();
   const artist = String(track?.artist || "").toLowerCase();
   const genre = String(track?.genre || "").toLowerCase();
   let score = 0;
-
   if (title === query) score += 120;
   else if (title.startsWith(query)) score += 80;
   else if (title.includes(query)) score += 45;
-
   if (genre === query) score += 100;
   else if (genre.includes(query)) score += 55;
-
   (track?.audienceTags || []).forEach((item) => {
     const tag = String(item.tag || "").toLowerCase();
     const votes = Math.max(1, getTagVoteCount(item));
     if (tag === query) score += 90 + votes * 8;
     else if (tag.includes(query)) score += 42 + votes * 4;
   });
-
   if (artist === query) score += 50;
   else if (artist.includes(query)) score += 25;
-
   return score;
 }
 
@@ -175,6 +158,13 @@ export function PlayerProvider({ children }) {
   const audioRef = useRef(null);
   const audioObjectUrlRef = useRef("");
   const libraryCacheRef = useRef(new Map());
+
+  // KEY FIX for Bug 1:
+  // Track the ID of the last track we actually loaded audio for.
+  // When setActiveTrack is called with a same-ID track (metadata update from tag),
+  // we skip reloading the audio so the song doesn't restart.
+  const loadedTrackIdRef = useRef("");
+
   const ownerKey = user?.id ? `user:${user.id}` : "guest";
 
   const getCacheKey = useCallback((page = 1) => `${searchQuery.trim().toLowerCase()}::${page}`, [searchQuery]);
@@ -185,7 +175,7 @@ export function PlayerProvider({ children }) {
     const cachedPage = libraryCacheRef.current.get(cacheKey);
 
     if (cachedPage && !force) {
-      setLibrary((prevLibrary) => append ? mergeTracks(prevLibrary, cachedPage.tracks) : cachedPage.tracks);
+      setLibrary((prev) => append ? mergeTracks(prev, cachedPage.tracks) : cachedPage.tracks);
       setPagination(cachedPage.pagination);
       setError(null);
       return;
@@ -193,21 +183,14 @@ export function PlayerProvider({ children }) {
 
     try {
       setIsLibraryLoading(true);
-      const response = await getAudioLibrary({
-        page: nextPage,
-        limit: MUSIC_PAGE_SIZE,
-        search: searchQuery.trim()
-      });
+      const response = await getAudioLibrary({ page: nextPage, limit: MUSIC_PAGE_SIZE, search: searchQuery.trim() });
       const tracks = response.data.tracks || [];
       const nextPagination = response.data.pagination || {
-        ...defaultPagination,
-        page: nextPage,
-        total: tracks.length,
-        totalPages: tracks.length ? nextPage : 0
+        ...defaultPagination, page: nextPage,
+        total: tracks.length, totalPages: tracks.length ? nextPage : 0
       };
-
       libraryCacheRef.current.set(cacheKey, { tracks, pagination: nextPagination });
-      setLibrary((prevLibrary) => append ? mergeTracks(prevLibrary, tracks) : tracks);
+      setLibrary((prev) => append ? mergeTracks(prev, tracks) : tracks);
       setPagination(nextPagination);
       setError(null);
     } catch (err) {
@@ -218,34 +201,22 @@ export function PlayerProvider({ children }) {
   }, [getCacheKey, searchQuery]);
 
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      loadLibraryPage(1);
-    }, 250);
-
-    return () => window.clearTimeout(timeoutId);
+    const id = window.setTimeout(() => loadLibraryPage(1), 250);
+    return () => window.clearTimeout(id);
   }, [loadLibraryPage]);
 
   useEffect(() => {
     let ignore = false;
-
-    async function loadLocalTracks() {
+    async function loadLocal() {
       try {
         const tracks = await loadStoredLocalTracks(ownerKey);
-        if (!ignore) {
-          setLocalTracks((tracks || []).sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0)));
-        }
+        if (!ignore) setLocalTracks((tracks || []).sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0)));
       } catch {
-        if (!ignore) {
-          setLocalTracks(loadMemoryLocalTracks(ownerKey));
-        }
+        if (!ignore) setLocalTracks(loadMemoryLocalTracks(ownerKey));
       }
     }
-
-    loadLocalTracks();
-
-    return () => {
-      ignore = true;
-    };
+    loadLocal();
+    return () => { ignore = true; };
   }, [ownerKey]);
 
   useEffect(() => {
@@ -286,10 +257,7 @@ export function PlayerProvider({ children }) {
     const formData = new FormData();
     formData.append("name", name);
     formData.append("description", description);
-    if (cover) {
-      formData.append("cover", cover);
-    }
-
+    if (cover) formData.append("cover", cover);
     try {
       const response = await createPlaylist(formData);
       await loadPlaylists();
@@ -325,7 +293,17 @@ export function PlayerProvider({ children }) {
     }
   };
 
+  // BUG 1 FIX: Only reload audio when the track ID actually changes.
+  // When submitTrackTag calls setActiveTrack with updated metadata (same ID),
+  // this effect skips the reload so the song keeps playing uninterrupted.
   useEffect(() => {
+    const incomingId = getTrackId(activeTrack);
+
+    // Same track ID = metadata update only (tags, genre etc.) — don't reload audio
+    if (incomingId && incomingId === loadedTrackIdRef.current) {
+      return;
+    }
+
     let ignore = false;
 
     if (audioObjectUrlRef.current) {
@@ -335,6 +313,7 @@ export function PlayerProvider({ children }) {
 
     setAudioSrc("");
     setDuration(0);
+    setIsPlaying(false);
 
     async function loadAudioSource() {
       if (!activeTrack?.url) return;
@@ -349,8 +328,10 @@ export function PlayerProvider({ children }) {
           return;
         }
 
+        loadedTrackIdRef.current = incomingId; // mark this ID as loaded
         audioObjectUrlRef.current = objectUrl;
         setAudioSrc(objectUrl);
+        setIsPlaying(true);
         setError(null);
       } catch (err) {
         if (!ignore) {
@@ -362,29 +343,22 @@ export function PlayerProvider({ children }) {
 
     loadAudioSource();
 
-    return () => {
-      ignore = true;
-    };
+    return () => { ignore = true; };
   }, [activeTrack]);
 
   useEffect(() => {
     return () => {
-      if (audioObjectUrlRef.current) {
-        URL.revokeObjectURL(audioObjectUrlRef.current);
-      }
+      if (audioObjectUrlRef.current) URL.revokeObjectURL(audioObjectUrlRef.current);
     };
   }, []);
 
   useEffect(() => {
     if (!audioRef.current) return;
-
     if (audioSrc && isPlaying) {
-      audioRef.current
-        .play()
-        .catch((err) => {
-          console.warn("Audio play failed:", err);
-          setIsPlaying(false);
-        });
+      audioRef.current.play().catch((err) => {
+        console.warn("Audio play failed:", err);
+        setIsPlaying(false);
+      });
     } else {
       audioRef.current.pause();
     }
@@ -393,19 +367,15 @@ export function PlayerProvider({ children }) {
   const filteredLibrary = useMemo(() => {
     const results = [...localTracks, ...library];
     const query = searchQuery.trim().toLowerCase();
-
     if (query) {
       return results
         .filter((track) => getTrackSearchText(track).includes(query))
         .sort((a, b) => getTrackSearchScore(b, query) - getTrackSearchScore(a, query));
     }
-
     return results;
   }, [library, localTracks, searchQuery]);
 
-  const trackList = useMemo(() => {
-    return [...localTracks, ...library];
-  }, [library, localTracks]);
+  const trackList = useMemo(() => [...localTracks, ...library], [library, localTracks]);
 
   const activeIndex = useMemo(() => {
     return trackList.findIndex((track) => {
@@ -433,9 +403,7 @@ export function PlayerProvider({ children }) {
   const handleSkip = (direction) => {
     if (activeIndex === -1) return;
     const next = trackList[activeIndex + direction];
-    if (next) {
-      handleSelectTrack(next);
-    }
+    if (next) handleSelectTrack(next);
   };
 
   const submitTrackTag = async (tag) => {
@@ -448,7 +416,8 @@ export function PlayerProvider({ children }) {
       const currentTags = activeTrack.audienceTags || [];
       const existingTag = currentTags.find((item) => String(item.tag).toLowerCase() === String(tag).toLowerCase());
       const nextTags = existingTag
-        ? currentTags.map((item) => String(item.tag).toLowerCase() === String(tag).toLowerCase() ? { ...item, count: getTagVoteCount(item) + 1 } : item)
+        ? currentTags.map((item) => String(item.tag).toLowerCase() === String(tag).toLowerCase()
+            ? { ...item, count: getTagVoteCount(item) + 1 } : item)
         : [...currentTags, { tag, count: 1 }];
       const nextTrack = {
         ...activeTrack,
@@ -458,12 +427,9 @@ export function PlayerProvider({ children }) {
 
       try {
         saveMemoryLocalTrack(nextTrack);
-        try {
-          await saveStoredLocalTrack(nextTrack);
-        } catch {
-          // The in-memory copy keeps the current session usable when browser storage is blocked.
-        }
-        setLocalTracks((prevTracks) => prevTracks.map((track) => getTrackId(track) === getTrackId(nextTrack) ? nextTrack : track));
+        try { await saveStoredLocalTrack(nextTrack); } catch { /* memory fallback */ }
+        setLocalTracks((prev) => prev.map((t) => getTrackId(t) === getTrackId(nextTrack) ? nextTrack : t));
+        // BUG 1 FIX: setActiveTrack with same ID — the effect above will skip audio reload
         setActiveTrack(nextTrack);
         setError(null);
       } catch {
@@ -476,18 +442,17 @@ export function PlayerProvider({ children }) {
       const response = await addAudioTag(activeTrack.id || activeTrack._id, tag);
       const audienceTags = response.data.audienceTags || [];
       const genre = response.data.genre || activeTrack.genre;
-      setLibrary((prevLibrary) =>
-        prevLibrary.map((track) =>
+      setLibrary((prev) =>
+        prev.map((track) =>
           (track.id === activeTrack.id || String(track.id) === String(activeTrack._id))
-            ? { ...track, audienceTags, genre }
-            : track
+            ? { ...track, audienceTags, genre } : track
         )
       );
       libraryCacheRef.current.clear();
-      setActiveTrack((prevTrack) =>
-        prevTrack && (prevTrack.id === activeTrack.id || String(prevTrack.id) === String(activeTrack._id))
-          ? { ...prevTrack, audienceTags, genre }
-          : prevTrack
+      // BUG 1 FIX: same ID update — audio effect will detect same ID and skip reload
+      setActiveTrack((prev) =>
+        prev && (prev.id === activeTrack.id || String(prev.id) === String(activeTrack._id))
+          ? { ...prev, audienceTags, genre } : prev
       );
       setError(null);
     } catch (err) {
@@ -527,35 +492,22 @@ export function PlayerProvider({ children }) {
       const createdAt = Date.now();
       const uploadedTracks = files.map((file, index) => {
         const title = file.name.replace(/\.[^.]+$/, "") || "Untitled";
-
         return {
           id: `local:${ownerKey}:${createdAt}:${index}:${file.name}`,
           _id: `local:${ownerKey}:${createdAt}:${index}:${file.name}`,
-          ownerKey,
-          title,
-          artist: "Local Files",
-          genre,
+          ownerKey, title, artist: "Local Files", genre,
           audienceTags: [{ tag: genre, count: 1 }],
-          duration: 0,
-          url: `local:${file.name}`,
-          filename: file.name,
-          fileSize: file.size,
-          mimeType: file.type || "audio/mpeg",
-          source: "local",
-          blob: file,
-          createdAt: createdAt + index
+          duration: 0, url: `local:${file.name}`, filename: file.name,
+          fileSize: file.size, mimeType: file.type || "audio/mpeg",
+          source: "local", blob: file, createdAt: createdAt + index
         };
       });
 
       await Promise.all(uploadedTracks.map(async (track) => {
         saveMemoryLocalTrack(track);
-        try {
-          await saveStoredLocalTrack(track);
-        } catch {
-          // The in-memory copy keeps the current session usable when browser storage is blocked.
-        }
+        try { await saveStoredLocalTrack(track); } catch { /* memory fallback */ }
       }));
-      setLocalTracks((prevTracks) => mergeTracks(uploadedTracks, prevTracks));
+      setLocalTracks((prev) => mergeTracks(uploadedTracks, prev));
 
       if (uploadedTracks[0]) {
         setActiveTrack(uploadedTracks[0]);
@@ -563,7 +515,6 @@ export function PlayerProvider({ children }) {
         setPosition(0);
         setDuration(0);
       }
-
       setError(null);
     } catch (err) {
       setError(getApiErrorMessage(err, "Unable to add local songs."));
@@ -577,13 +528,8 @@ export function PlayerProvider({ children }) {
     try {
       const response = await updateAudioTrack(trackId, payload);
       const updatedTrack = response.data.track;
-
-      setLibrary((prevLibrary) =>
-        prevLibrary.map((track) => getTrackId(track) === getTrackId(updatedTrack) ? updatedTrack : track)
-      );
-      setActiveTrack((prevTrack) =>
-        prevTrack && getTrackId(prevTrack) === getTrackId(updatedTrack) ? updatedTrack : prevTrack
-      );
+      setLibrary((prev) => prev.map((t) => getTrackId(t) === getTrackId(updatedTrack) ? updatedTrack : t));
+      setActiveTrack((prev) => prev && getTrackId(prev) === getTrackId(updatedTrack) ? updatedTrack : prev);
       libraryCacheRef.current.clear();
       setError(null);
       return updatedTrack;
@@ -596,17 +542,16 @@ export function PlayerProvider({ children }) {
   const deleteUploadedTrack = async (trackId) => {
     try {
       await deleteAudioTrack(trackId);
-      setLibrary((prevLibrary) => prevLibrary.filter((track) => getTrackId(track) !== trackId));
-      setPlaylists((prevPlaylists) =>
-        prevPlaylists.map((playlist) => ({
-          ...playlist,
-          tracks: (playlist.tracks || []).filter((track) => getTrackId(track) !== trackId),
-          tracksCount: Math.max(0, (playlist.tracksCount || 0) - ((playlist.tracks || []).some((track) => getTrackId(track) === trackId) ? 1 : 0))
-        }))
-      );
+      setLibrary((prev) => prev.filter((t) => getTrackId(t) !== trackId));
+      setPlaylists((prev) => prev.map((pl) => ({
+        ...pl,
+        tracks: (pl.tracks || []).filter((t) => getTrackId(t) !== trackId),
+        tracksCount: Math.max(0, (pl.tracksCount || 0) - ((pl.tracks || []).some((t) => getTrackId(t) === trackId) ? 1 : 0))
+      })));
       if (getTrackId(activeTrack) === trackId) {
         setActiveTrack(null);
         setIsPlaying(false);
+        loadedTrackIdRef.current = "";
       }
       libraryCacheRef.current.clear();
       setError(null);
@@ -618,45 +563,18 @@ export function PlayerProvider({ children }) {
   };
 
   return (
-    <PlayerContext.Provider
-      value={{
-        library,
-        localTracks,
-        activeTrack,
-        audioSrc,
-        isPlaying,
-        searchQuery,
-        error,
-        position,
-        duration,
-        audioRef,
-        filteredLibrary,
-        pagination,
-        isLibraryLoading,
-        playlists,
-        isPlaylistLoading,
-        isUploadingTracks,
-        handleSelectTrack,
-        setSearchQuery,
-        refreshLibrary,
-        handleLoadNextPage,
-        handlePageChange,
-        loadPlaylists,
-        createUserPlaylist,
-        addTrackToUserPlaylist,
-        toggleTrackLike,
-        handleLocalFileChange,
-        updateUploadedTrack,
-        deleteUploadedTrack,
-        handleTogglePlay,
-        handleSkip,
-        submitTrackTag,
-        handleSeek,
-        handleTimeUpdate,
-        handleLoadedMetadata,
-        setError
-      }}
-    >
+    <PlayerContext.Provider value={{
+      library, localTracks, activeTrack, audioSrc, isPlaying,
+      searchQuery, error, position, duration, audioRef,
+      filteredLibrary, pagination, isLibraryLoading,
+      playlists, isPlaylistLoading, isUploadingTracks,
+      handleSelectTrack, setSearchQuery, refreshLibrary,
+      handleLoadNextPage, handlePageChange, loadPlaylists,
+      createUserPlaylist, addTrackToUserPlaylist, toggleTrackLike,
+      handleLocalFileChange, updateUploadedTrack, deleteUploadedTrack,
+      handleTogglePlay, handleSkip, submitTrackTag,
+      handleSeek, handleTimeUpdate, handleLoadedMetadata, setError
+    }}>
       {children}
     </PlayerContext.Provider>
   );
@@ -664,8 +582,6 @@ export function PlayerProvider({ children }) {
 
 export function usePlayer() {
   const context = useContext(PlayerContext);
-  if (!context) {
-    throw new Error("usePlayer must be used inside a PlayerProvider");
-  }
+  if (!context) throw new Error("usePlayer must be used inside a PlayerProvider");
   return context;
 }
