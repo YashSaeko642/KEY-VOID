@@ -13,6 +13,7 @@ const postRoutes = require("./src/routers/postRoutes");
 const audioRoutes = require("./src/routers/audioRoutes");
 const playlistRoutes = require("./src/routers/playlistRoutes");
 const voidSessionRoutes = require("./src/routers/voidSessionRoutes");
+const feedbackRoutes = require("./src/routers/feedbackRoutes");
 const { securityHeaders, validateInput } = require("./src/middleware/securityMiddleware");
 
 const app = express();
@@ -91,6 +92,7 @@ app.use("/api/posts", postRoutes);
 app.use("/api/audio", audioRoutes);
 app.use("/api/playlists", playlistRoutes);
 app.use("/api/void", voidSessionRoutes);
+app.use("/api/feedback", feedbackRoutes);
 
 // Health check — Render needs this to confirm the service is alive
 app.get("/", (req, res) => {
