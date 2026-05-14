@@ -263,6 +263,26 @@ exports.updateMyProfile = async (req, res) => {
   }
 };
 
+exports.becomeCreator = async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      req.user.role = "creator";
+      req.user.isCreator = true;
+      await req.user.save();
+    }
+
+    const updatedUser = await User.findById(req.user._id);
+
+    return res.json({
+      message: "Creator mode enabled",
+      profile: buildProfilePayload(updatedUser, { includePrivate: true })
+    });
+  } catch (error) {
+    console.error("Error upgrading creator role:", error.message);
+    return res.status(500).json({ msg: "Unable to upgrade account" });
+  }
+};
+
 /**
  * GET /profiles/:username
  * Retrieves a public profile by username (accessible to unauthenticated users)

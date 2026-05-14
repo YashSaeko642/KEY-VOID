@@ -352,6 +352,17 @@ export default function Profile() {
     setIsDeletingAccount(false);
   };
 
+  const handleBecomeCreator = async () => {
+    try {
+      setMessage("");
+      const { data } = await API.patch("/profiles/me/become-creator");
+      updateUser(data.profile);
+      setMessage("Creator mode enabled");
+    } catch (error) {
+      setMessage(getApiErrorMessage(error, "Unable to upgrade account."));
+    }
+  };
+
   const previewAvatar = imageState.avatarPreview || "";
   const publicProfilePath = `/u/${encodeURIComponent(formData.username || user?.username || "")}`;
 
@@ -466,6 +477,11 @@ export default function Profile() {
             <Link className="nav-button nav-button-secondary" to={publicProfilePath}>
               View public profile
             </Link>
+            {user?.role === "user" && (
+              <button className="nav-button nav-button-primary" onClick={handleBecomeCreator} type="button">
+                Become a Creator
+              </button>
+            )}
           </div>
 
           <div style={{

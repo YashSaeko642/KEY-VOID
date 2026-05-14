@@ -3,9 +3,12 @@ const router = express.Router();
 
 const {
   createPost,
+  updatePost,
   addComment,
   deleteComment,
   getFeed,
+  getFeedMeta,
+  getTrendingFeed,
   getUserPosts,
   toggleLike,
   deletePost,
@@ -25,12 +28,15 @@ router.post("/", protect, postCreationRateLimit, postMediaUpload.single("media")
 router.post("/reel", protect, postCreationRateLimit, reelMediaUpload.single("media"), handleUploadError, createReel);
 
 router.get("/", getFeed);
+router.get("/meta", getFeedMeta);
+router.get("/trending", getTrendingFeed);
 router.get("/reels", getReels);
 router.get("/creator/insights", protect, getCreatorInsights);
 router.get("/user/:userId", getUserPosts);
 router.get("/following", protect, getFollowingFeed);
 
 router.patch("/:postId/like", protect, likeRateLimit, toggleLike);
+router.patch("/:postId", protect, updatePost);
 router.post("/:postId/view", trackPostView);
 router.post("/:postId/report", protect, reportPost);
 

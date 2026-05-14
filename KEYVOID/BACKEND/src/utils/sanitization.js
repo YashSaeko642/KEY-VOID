@@ -3,23 +3,19 @@
  */
 
 /**
- * Escapes HTML special characters to prevent XSS attacks
+ * Normalizes text before storing it.
+ *
+ * React renders strings safely by default, so storing HTML entities here makes
+ * normal writing look broken in the app: apostrophes become &#x27;, slash-tags
+ * become &#x2F;tag, etc. Keep text human-readable in the database and let the
+ * renderer escape it at display time.
  * @param {string} text - Text to escape
  * @returns {string} Escaped text
  */
 function sanitizeText(text) {
   if (!text || typeof text !== "string") return "";
-  
-  const escapeMap = {
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#x27;",
-    "/": "&#x2F;"
-  };
 
-  return text.replace(/[&<>"'/]/g, (char) => escapeMap[char]);
+  return text.replace(/\0/g, "");
 }
 
 /**

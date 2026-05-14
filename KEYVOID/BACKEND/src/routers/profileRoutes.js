@@ -5,6 +5,7 @@ const router = express.Router();
 const {
   getMyProfile,
   getPublicProfile,
+  becomeCreator,
   updateMyProfile,
   searchProfiles
 } = require("../controllers/profile-controller");
@@ -20,6 +21,8 @@ const { searchRateLimit } = require("../middleware/securityMiddleware");
  * @access Private
  */
 router.get("/me", protect, getMyProfile);
+
+router.patch("/me/become-creator", protect, becomeCreator);
 
 /**
  * PATCH /profiles/me

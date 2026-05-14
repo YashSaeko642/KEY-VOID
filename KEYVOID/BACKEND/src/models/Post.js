@@ -12,6 +12,27 @@ const postSchema = new mongoose.Schema(
       maxlength: 500,
       default: ""
     },
+    title: {
+      type: String,
+      trim: true,
+      maxlength: 140,
+      default: ""
+    },
+    body: {
+      type: String,
+      trim: true,
+      maxlength: 4000,
+      default: ""
+    },
+    category: {
+      type: String,
+      enum: ["discussion", "question", "news", "recommendation", "fan_content", "general"],
+      default: "general"
+    },
+    tags: {
+      type: [String],
+      default: []
+    },
     mediaUrl: {
       type: String,
       default: ""
@@ -113,6 +134,8 @@ const postSchema = new mongoose.Schema(
 postSchema.index({ isDeleted: 1, createdAt: -1 });
 postSchema.index({ author: 1, isDeleted: 1, createdAt: -1 });
 postSchema.index({ isDeleted: 1, contentType: 1, createdAt: -1 });
+postSchema.index({ isDeleted: 1, category: 1, createdAt: -1 });
+postSchema.index({ isDeleted: 1, tags: 1, createdAt: -1 });
 postSchema.index({ author: 1, isDeleted: 1, viewCount: -1 });
 postSchema.index({ reportCount: -1, safetyStatus: 1 });
 
