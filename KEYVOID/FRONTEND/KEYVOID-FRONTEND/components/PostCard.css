@@ -61,6 +61,24 @@
   margin-top: 2px;
 }
 
+.post-category-badge,
+.post-creator-badge {
+  flex: 0 0 auto;
+  border: 1px solid rgba(125, 211, 252, 0.24);
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: rgba(14, 165, 233, 0.12);
+  color: #bfdbfe;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.post-creator-badge {
+  border-color: rgba(45, 212, 191, 0.32);
+  background: rgba(20, 184, 166, 0.12);
+  color: #ccfbf1;
+}
+
 /* CONTENT */
 .post-content {
   color: #cbd5e1;
@@ -68,6 +86,44 @@
   line-height: 1.6;
   margin-bottom: 16px;
   word-break: break-word;
+}
+
+.post-title {
+  margin: 0 0 8px;
+  color: #f8fafc;
+  font-size: 1.08rem;
+  line-height: 1.35;
+}
+
+.post-body {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.inline-tag,
+.post-tag-row button {
+  border: none;
+  background: transparent;
+  color: #7dd3fc;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 0;
+}
+
+.post-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.post-tag-row button {
+  border: 1px solid rgba(125, 211, 252, 0.2);
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: rgba(14, 165, 233, 0.1);
+  font-size: 0.8rem;
 }
 
 /* MEDIA */
@@ -170,30 +226,33 @@
 }
 
 .like-btn.liked {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
-  border-color: rgba(239, 68, 68, 0.2);
+  color: #facc15;
+  background: rgba(250, 204, 21, 0.1);
+  border-color: rgba(250, 204, 21, 0.22);
 }
 
 .like-btn.liked:hover {
-  background: rgba(239, 68, 68, 0.15);
-  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(250, 204, 21, 0.15);
+  border-color: rgba(250, 204, 21, 0.34);
 }
 
-.like-btn svg {
+.spark-like-symbol {
+  width: 18px;
+  text-align: center;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.like-btn .spark-like-symbol {
   transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.like-btn.liked svg {
+.like-btn.liked .spark-like-symbol {
   animation: heartPulse 0.5s ease-out;
 }
 
-.heart-filled {
-  fill: currentColor;
-}
-
 /* LIKE ANIMATION */
-.like-animation .heart-filled {
+.like-animation .spark-like-symbol {
   animation: heartBeat 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -399,6 +458,7 @@
 }
 
 .report-field select,
+.report-field input,
 .report-field textarea {
   width: 100%;
   border: 1px solid rgba(148, 163, 184, 0.22);
@@ -413,6 +473,10 @@
 .report-field textarea {
   min-height: 90px;
   resize: vertical;
+}
+
+.edit-post-modal {
+  border-color: rgba(45, 212, 191, 0.24);
 }
 
 .report-notice {
@@ -454,7 +518,8 @@
 }
 
 .modal-cancel,
-.modal-delete {
+.modal-delete,
+.modal-save {
   border: none;
   border-radius: 999px;
   padding: 12px 20px;
@@ -479,12 +544,19 @@
   color: white;
 }
 
-.modal-delete:hover:not(:disabled) {
+.modal-save {
+  background: linear-gradient(90deg, #14b8a6, #0ea5e9);
+  color: white;
+}
+
+.modal-delete:hover:not(:disabled),
+.modal-save:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: 0 12px 24px rgba(249, 115, 22, 0.28);
 }
 
-.modal-delete:disabled {
+.modal-delete:disabled,
+.modal-save:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }

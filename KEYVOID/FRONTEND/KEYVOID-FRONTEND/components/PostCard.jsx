@@ -1,17 +1,68 @@
 import { useRef, useState, useEffect } from "react";
-import { Eye, Flag, Heart, MessageCircle, Send, Share2, Trash2, TrendingUp } from "lucide-react";
+import { Eye, Flag, MessageCircle, Pencil, Send, Share2, Trash2, TrendingUp } from "lucide-react";
 import { Link } from "react-router-dom";
 import API, { getApiErrorMessage, reportPost, trackPostView } from "../services/api";
 import { useAuth } from "../src/context/useAuth";
 import { getRelativeTime } from "../src/utils/formatters";
 import "./PostCard.css";
 
-function PostCard({ post, onPostDeleted }) {
+const CATEGORY_LABELS = {
+  discussion: "Discussion",
+  question: "Question",
+  news: "News",
+  recommendation: "Recommendation",
+  fan_content: "Fan Content",
+  general: "General"
+};
+
+const CATEGORY_OPTIONS = Object.entries(CATEGORY_LABELS)
+  .filter(([value]) => value !== "general")
+  .map(([value, label]) => ({ value, label }));
+
+function decodeStoredText(value = "") {
+  return String(value || "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#x27;/g, "'")
+    .replace(/&#x2F;/g, "/");
+}
+
+function renderSlashTags(text = "", onTagClick) {
+  const parts = String(text || "").split(/(\/[a-zA-Z][a-zA-Z0-9_-]{1,29}\b)/g);
+
+  return parts.map((part, index) => {
+    if (/^\/[a-zA-Z][a-zA-Z0-9_-]{1,29}$/.test(part)) {
+      const tag = part.slice(1).toLowerCase();
+      return (
+        <button
+          className="inline-tag"
+          key={`${part}-${index}`}
+          onClick={() => onTagClick?.(tag)}
+          type="button"
+        >
+          {part}
+        </button>
+      );
+    }
+
+    return <span key={`${part}-${index}`}>{part}</span>;
+  });
+}
+
+function PostCard({ post, onPostDeleted, onTagClick }) {
   const { user, isAuthenticated } = useAuth();
+  const [currentPost, setCurrentPost] = useState(post);
+  const activePost = currentPost || post;
   const userId = user?.id;
-  const postId = post?._id;
-  const authorUsername = post?.author?.username || "unknown";
-  const postText = typeof post?.text === "string" ? post.text : "";
+  const postId = activePost?._id;
+  const authorUsername = activePost?.author?.username || "unknown";
+  const postTitle = decodeStoredText(typeof activePost?.title === "string" ? activePost.title : "");
+  const postBody = decodeStoredText(typeof activePost?.body === "string" ? activePost.body : "");
+  const postText = decodeStoredText(typeof activePost?.text === "string" ? activePost.text : "");
+  const displayTitle = postTitle || (postText.length > 96 ? `${postText.slice(0, 96)}...` : postText);
+  const displayBody = postBody || (postTitle ? postText : "");
 
   const cardRef = useRef(null);
   const [likes, setLikes] = useState(post.likes?.length || 0);
@@ -29,35 +80,50 @@ function PostCard({ post, onPostDeleted }) {
   const [isCommenting, setIsCommenting] = useState(false);
   const [commentError, setCommentError] = useState("");
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({
+    category: activePost?.category || "discussion",
+    title: displayTitle || "",
+    body: displayBody || "",
+    tags: Array.isArray(activePost?.tags) ? activePost.tags.map((tag) => `/${tag}`).join(" ") : ""
+  });
+  const [editError, setEditError] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
   const [reportReason, setReportReason] = useState("Spam");
   const [reportDetails, setReportDetails] = useState("");
   const [reportNotice, setReportNotice] = useState("");
   const [isReporting, setIsReporting] = useState(false);
 
   // Check if current user is post owner
-  const isPostOwner = Boolean(userId && post?.author?._id === userId);
+  const isPostOwner = Boolean(userId && String(activePost?.author?._id) === String(userId));
+  const canModeratePost = isPostOwner || user?.role === "admin";
+  const canEditPost = canModeratePost && activePost?.contentType !== "reel";
+
+  useEffect(() => {
+    setCurrentPost(post);
+  }, [post]);
 
   // SET INITIAL LIKE STATE
   useEffect(() => {
-    setLikes(post.likes?.length || 0);
+    setLikes(activePost.likes?.length || 0);
 
-    if (post.likes && userId) {
-      const isLiked = post.likes.some(
+    if (activePost.likes && userId) {
+      const isLiked = activePost.likes.some(
         (id) => id.toString() === userId
       );
       setLiked(isLiked);
     } else {
       setLiked(false);
     }
-  }, [post.likes, userId]);
+  }, [activePost.likes, userId]);
 
   useEffect(() => {
-    setComments((post.comments || []).filter((comment) => !comment.isDeleted));
-  }, [post.comments]);
+    setComments((activePost.comments || []).filter((comment) => !comment.isDeleted));
+  }, [activePost.comments]);
 
   useEffect(() => {
-    setViews(post.viewCount || 0);
-  }, [post.viewCount]);
+    setViews(activePost.viewCount || 0);
+  }, [activePost.viewCount]);
 
   useEffect(() => {
     const node = cardRef.current;
@@ -144,7 +210,8 @@ function PostCard({ post, onPostDeleted }) {
 
   // HANDLE SHARE
   const handleShare = async () => {
-    const preview = postText.length > 50 ? `${postText.substring(0, 50)}...` : postText;
+    const sourceText = displayTitle || displayBody || postText;
+    const preview = sourceText.length > 50 ? `${sourceText.substring(0, 50)}...` : sourceText;
     const shareText = `Check out this post on KeyVoid: "${preview}"`;
     
     if (navigator.share) {
@@ -222,6 +289,48 @@ function PostCard({ post, onPostDeleted }) {
     }
   };
 
+  const openEditModal = () => {
+    setEditForm({
+      category: activePost?.category === "general" ? "discussion" : activePost?.category || "discussion",
+      title: displayTitle || "",
+      body: displayBody || "",
+      tags: Array.isArray(activePost?.tags) ? activePost.tags.map((tag) => `/${tag}`).join(" ") : ""
+    });
+    setEditError("");
+    setShowEditModal(true);
+  };
+
+  const handleEditFieldChange = (event) => {
+    const { name, value } = event.target;
+    setEditForm((current) => ({ ...current, [name]: value }));
+  };
+
+  const handleUpdatePost = async (event) => {
+    event.preventDefault();
+
+    if (!postId || isEditing || !editForm.title.trim()) return;
+
+    setIsEditing(true);
+    setEditError("");
+
+    try {
+      const { data } = await API.patch(`/posts/${postId}`, {
+        category: editForm.category,
+        title: editForm.title.trim(),
+        body: editForm.body.trim(),
+        tags: editForm.tags.trim()
+      });
+
+      setCurrentPost(data);
+      setComments((data.comments || []).filter((comment) => !comment.isDeleted));
+      setShowEditModal(false);
+    } catch (err) {
+      setEditError(getApiErrorMessage(err, "Failed to edit post"));
+    } finally {
+      setIsEditing(false);
+    }
+  };
+
   return (
     <div className="post-card" ref={cardRef}>
       {/* DELETE MODAL */}
@@ -289,10 +398,48 @@ function PostCard({ post, onPostDeleted }) {
         </div>
       )}
 
+      {showEditModal && (
+        <div className="delete-modal-overlay" onClick={() => setShowEditModal(false)}>
+          <form className="delete-modal edit-post-modal" onSubmit={handleUpdatePost} onClick={(event) => event.stopPropagation()}>
+            <div className="delete-modal-header">
+              <span className="delete-modal-title">Edit Post</span>
+              <span className="delete-modal-status">Update the thread title, body, category, and /tags.</span>
+            </div>
+            <label className="report-field">
+              Category
+              <select name="category" value={editForm.category} onChange={handleEditFieldChange}>
+                {CATEGORY_OPTIONS.map((category) => (
+                  <option key={category.value} value={category.value}>{category.label}</option>
+                ))}
+              </select>
+            </label>
+            <label className="report-field">
+              Title
+              <input name="title" value={editForm.title} onChange={handleEditFieldChange} maxLength={140} required />
+            </label>
+            <label className="report-field">
+              Body
+              <textarea name="body" value={editForm.body} onChange={handleEditFieldChange} maxLength={4000} />
+            </label>
+            <label className="report-field">
+              Tags
+              <input name="tags" value={editForm.tags} onChange={handleEditFieldChange} maxLength={240} placeholder="/newmusic /guitar" />
+            </label>
+            {editError && <p className="comment-error">{editError}</p>}
+            <div className="modal-actions">
+              <button className="modal-cancel" type="button" onClick={() => setShowEditModal(false)}>Cancel</button>
+              <button className="modal-save" type="submit" disabled={isEditing || !editForm.title.trim()}>
+                {isEditing ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* HEADER */}
       <div className="post-header">
         <div className="post-avatar">
-          {post.author?.username?.[0]?.toUpperCase() || "U"}
+          {activePost.author?.username?.[0]?.toUpperCase() || "U"}
         </div>
         <div className="post-user-info">
           <Link to={`/u/${encodeURIComponent(authorUsername)}`} className="post-username-link">
@@ -301,10 +448,24 @@ function PostCard({ post, onPostDeleted }) {
             </div>
           </Link>
           <div className="post-timestamp">
-            {getRelativeTime(new Date(post.createdAt))}
+            {getRelativeTime(new Date(activePost.createdAt))}
+            {activePost.isEdited ? " (edited)" : ""}
           </div>
         </div>
-        {isPostOwner && (
+        <span className="post-category-badge">
+          {CATEGORY_LABELS[activePost.category] || "General"}
+        </span>
+        {activePost.author?.role === "creator" && <span className="post-creator-badge">Creator</span>}
+        {canEditPost && (
+          <button
+            className="post-delete-btn"
+            onClick={openEditModal}
+            title="Edit post"
+          >
+            <Pencil size={16} />
+          </button>
+        )}
+        {canModeratePost && (
           <button 
             className="post-delete-btn"
             onClick={() => setShowDeleteModal(true)}
@@ -313,7 +474,7 @@ function PostCard({ post, onPostDeleted }) {
             <Trash2 size={16} />
           </button>
         )}
-        {!isPostOwner && isAuthenticated && (
+        {!canModeratePost && isAuthenticated && (
           <button
             className="post-delete-btn"
             onClick={() => setShowReportModal(true)}
@@ -326,21 +487,31 @@ function PostCard({ post, onPostDeleted }) {
 
       {/* CONTENT */}
       <div className="post-content">
-        {postText}
+        {displayTitle && <h3 className="post-title">{renderSlashTags(displayTitle, onTagClick)}</h3>}
+        {displayBody && <p className="post-body">{renderSlashTags(displayBody, onTagClick)}</p>}
+        {Array.isArray(activePost.tags) && activePost.tags.length > 0 && (
+          <div className="post-tag-row">
+            {activePost.tags.map((tag) => (
+              <button key={tag} type="button" onClick={() => onTagClick?.(tag)}>
+                /{tag}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* MEDIA */}
-      {post.mediaUrl && (
+      {activePost.mediaUrl && (
         <div className="post-media">
-          {post.mediaType === "image" ? (
-            <img src={post.mediaUrl} alt="Post media" className="post-image" loading="lazy" />
-          ) : post.mediaType === "video" ? (
+          {activePost.mediaType === "image" ? (
+            <img src={activePost.mediaUrl} alt="Post media" className="post-image" loading="lazy" />
+          ) : activePost.mediaType === "video" ? (
             <video controls className="post-video" preload="metadata">
-              <source src={post.mediaUrl} />
+              <source src={activePost.mediaUrl} />
             </video>
-          ) : post.mediaType === "audio" ? (
+          ) : activePost.mediaType === "audio" ? (
             <audio controls className="post-audio">
-              <source src={post.mediaUrl} />
+              <source src={activePost.mediaUrl} />
             </audio>
           ) : null}
         </div>
@@ -349,11 +520,11 @@ function PostCard({ post, onPostDeleted }) {
       {/* ACTIONS */}
       <div className="post-insight-row">
         <span><Eye size={15} /> {views} views</span>
-        {post.recommendationReason && (
-          <span><TrendingUp size={15} /> {post.recommendationReason}</span>
+        {activePost.recommendationReason && (
+          <span><TrendingUp size={15} /> {activePost.recommendationReason}</span>
         )}
-        {post.safetyStatus && post.safetyStatus !== "clear" && (
-          <span><Flag size={15} /> {post.safetyStatus.replace("_", " ")}</span>
+        {activePost.safetyStatus && activePost.safetyStatus !== "clear" && (
+          <span><Flag size={15} /> {activePost.safetyStatus.replace("_", " ")}</span>
         )}
       </div>
       <div className="post-actions">
@@ -366,11 +537,7 @@ function PostCard({ post, onPostDeleted }) {
           }`}
           title={isAuthenticated ? "Like post" : "Login to like"}
         >
-          <Heart
-            size={18}
-            className={liked ? "heart-filled" : ""}
-            fill={liked ? "currentColor" : "none"}
-          />
+          <span className="spark-like-symbol" aria-hidden="true">{liked ? "✦" : "✧"}</span>
           <span className="action-count">{likes}</span>
         </button>
 
@@ -417,7 +584,7 @@ function PostCard({ post, onPostDeleted }) {
                         <span>{comment.author?.username || "unknown"}</span>
                         <span>{getRelativeTime(new Date(comment.createdAt))}</span>
                       </div>
-                      <p>{comment.text}</p>
+                      <p>{decodeStoredText(comment.text)}</p>
                     </div>
                     {canDeleteComment && (
                       <button

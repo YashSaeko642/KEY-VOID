@@ -1,20 +1,61 @@
-import { useCallback, useEffect, useState, useRef } from "react";
-import { Image, Loader, Send, Video, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Loader, Plus, Search, Sparkles, Users } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../src/context/useAuth";
 import API, { getApiErrorMessage } from "../services/api";
+import CreatePostModal from "../components/CreatePostModal";
 import PostCard from "../components/PostCard";
 import ErrorBoundary from "../components/ErrorBoundary";
 import "./Feed.css";
 
+const CATEGORY_CARDS = [
+  {
+    key: "discussion",
+    title: "Discussion",
+    prompt: "Artists, albums, scenes, opinions, and music culture.",
+    image: "linear-gradient(135deg, rgba(14, 165, 233, 0.36), rgba(99, 102, 241, 0.22))"
+  },
+  {
+    key: "question",
+    title: "Question",
+    prompt: "Ask for help with theory, production, gear, or discovery.",
+    image: "linear-gradient(135deg, rgba(34, 197, 94, 0.28), rgba(59, 130, 246, 0.2))"
+  },
+  {
+    key: "news",
+    title: "News",
+    prompt: "Fresh drops, tour news, scene updates, and industry talk.",
+    image: "linear-gradient(135deg, rgba(244, 114, 182, 0.3), rgba(251, 191, 36, 0.2))"
+  },
+  {
+    key: "recommendation",
+    title: "Recommendation",
+    prompt: "Find what to play next, from hidden gems to classics.",
+    image: "linear-gradient(135deg, rgba(45, 212, 191, 0.28), rgba(168, 85, 247, 0.18))"
+  },
+  {
+    key: "fan_content",
+    title: "Fan Content",
+    prompt: "Edits, covers, reactions, fan theories, and community fun.",
+    image: "linear-gradient(135deg, rgba(251, 146, 60, 0.28), rgba(99, 102, 241, 0.2))"
+  }
+];
+
+const MODE_LABELS = {
+  global: "For You",
+  following: "Following",
+  trending: "Trending"
+};
+
 function Feed() {
   const { isAuthenticated } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  const [postText, setPostText] = useState("");
-  const [postMedia, setPostMedia] = useState(null);
-  const [mediaPreviewUrl, setMediaPreviewUrl] = useState("");
   const [posts, setPosts] = useState([]);
+  const [feedMeta, setFeedMeta] = useState({ categories: {}, tags: [] });
   const [isLoading, setIsLoading] = useState(false);
-  const [isCreating, setIsCreating] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(Boolean(location.state?.openCreatePost));
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
   const [hasNext, setHasNext] = useState(true);
@@ -22,111 +63,80 @@ function Feed() {
 
   const [mode, setMode] = useState("global");
   const [sort, setSort] = useState("recommended");
+  const [category, setCategory] = useState("");
+  const [tag, setTag] = useState("");
+  const [tagDraft, setTagDraft] = useState("");
 
-  const clearMedia = useCallback(() => {
-    if (mediaPreviewUrl) {
-      URL.revokeObjectURL(mediaPreviewUrl);
+  useEffect(() => {
+    if (location.state?.openCreatePost) {
+      setIsModalOpen(true);
+      navigate(location.pathname, { replace: true });
     }
-    setPostMedia(null);
-    setMediaPreviewUrl("");
-  }, [mediaPreviewUrl]);
+  }, [location.pathname, location.state, navigate]);
+
+  const endpoint = useMemo(() => {
+    if (mode === "following") return "/posts/following";
+    if (mode === "trending") return "/posts/trending";
+    return "/posts";
+  }, [mode]);
 
   const fetchPosts = useCallback(async (pageNum = 1) => {
     try {
       setIsLoading(true);
       setError(null);
 
-      const endpoint =
-        mode === "following" ? "/posts/following" : "/posts";
-
       const res = await API.get(endpoint, {
-        params: { page: pageNum, limit: 10, sort }
+        params: {
+          page: pageNum,
+          limit: 10,
+          sort,
+          category: category || undefined,
+          tag: tag || undefined
+        }
       });
 
-      const postsData = res.data.posts || res.data;
+      const postsData = Array.isArray(res.data.posts) ? res.data.posts : [];
       const pagination = res.data.pagination || {};
 
       setPosts((prev) => {
-        const newPosts = Array.isArray(postsData) ? postsData : [];
-        const combined = pageNum === 1 ? newPosts : [...prev, ...newPosts];
-        return combined.length > 50 ? combined.slice(combined.length - 50) : combined;
+        const existingIds = new Set(pageNum === 1 ? [] : prev.map((post) => post._id));
+        const uniqueNewPosts = postsData.filter((post) => !existingIds.has(post._id));
+        const combined = pageNum === 1 ? uniqueNewPosts : [...prev, ...uniqueNewPosts];
+        return combined.length > 60 ? combined.slice(combined.length - 60) : combined;
       });
-      setHasNext(pagination.hasNext || false);
+      setHasNext(Boolean(pagination.hasNext));
       setPage(pageNum);
     } catch (err) {
-      console.error("Failed to fetch posts:", err);
       setError(getApiErrorMessage(err, "Failed to load posts. Please try again."));
       setPosts([]);
       setHasNext(false);
     } finally {
       setIsLoading(false);
     }
-  }, [mode, sort]);
+  }, [category, endpoint, sort, tag]);
 
-  const handleCreatePost = async () => {
-    if (!postText.trim() || isCreating) return;
-
+  const fetchFeedMeta = useCallback(async () => {
     try {
-      setIsCreating(true);
-      setError(null);
-
-      const response = postMedia
-        ? await (() => {
-            const formData = new FormData();
-            formData.append("text", postText);
-            formData.append("media", postMedia);
-            return API.post("/posts", formData);
-          })()
-        : await API.post("/posts", { text: postText });
-
-      if (response.status === 201) {
-        setPostText("");
-        clearMedia();
-
-        setPosts((prev) => [response.data, ...prev]);
-      }
-    } catch (err) {
-      console.error("Failed to create post:", err);
-      setError(getApiErrorMessage(err, "Failed to create post."));
-    } finally {
-      setIsCreating(false);
+      const { data } = await API.get("/posts/meta");
+      setFeedMeta({
+        categories: data.categories || {},
+        tags: data.tags || []
+      });
+    } catch {
+      setFeedMeta({ categories: {}, tags: [] });
     }
-  };
+  }, []);
 
-  const handlePostDeleted = (postId) => {
-    setPosts((prev) => prev.filter((post) => post._id !== postId));
-  };
-
-  const handleMediaChange = (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-
-    if (!file) return;
-
-    const isAllowedMedia =
-      file.type.startsWith("image/") || file.type.startsWith("video/");
-
-    if (!isAllowedMedia) {
-      setError("Please choose an image or video file.");
-      return;
-    }
-
-    if (file.size > 25 * 1024 * 1024) {
-      setError("Media must be smaller than 25 MB.");
-      return;
-    }
-
-    clearMedia();
-    setPostMedia(file);
-    setMediaPreviewUrl(URL.createObjectURL(file));
-  };
+  useEffect(() => {
+    fetchFeedMeta();
+  }, [fetchFeedMeta]);
 
   useEffect(() => {
     setPosts([]);
     setHasNext(true);
     setPage(1);
     fetchPosts(1);
-  }, [mode, sort, fetchPosts]);
+  }, [mode, sort, category, tag, fetchPosts]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -135,7 +145,7 @@ function Feed() {
           fetchPosts(page + 1);
         }
       },
-      { rootMargin: "240px" }
+      { rootMargin: "260px" }
     );
 
     if (loadMoreTrigger.current) {
@@ -145,38 +155,134 @@ function Feed() {
     return () => observer.disconnect();
   }, [fetchPosts, hasNext, isLoading, page]);
 
-  useEffect(() => {
-    return () => {
-      if (mediaPreviewUrl) {
-        URL.revokeObjectURL(mediaPreviewUrl);
-      }
-    };
-  }, [mediaPreviewUrl]);
+  const handlePostCreated = (post) => {
+    setPosts((prev) => [post, ...prev].slice(0, 60));
+    fetchFeedMeta();
+  };
+
+  const handlePostDeleted = (postId) => {
+    setPosts((prev) => prev.filter((post) => post._id !== postId));
+    fetchFeedMeta();
+  };
+
+  const applyTagFilter = (nextTag) => {
+    const normalized = String(nextTag || "").replace(/^\/+/, "").trim().toLowerCase();
+    setTag(normalized);
+    setTagDraft(normalized ? `/${normalized}` : "");
+  };
+
+  const clearFilters = () => {
+    setCategory("");
+    applyTagFilter("");
+  };
+
+  const activeTitle = tag
+    ? `/${tag}`
+    : category
+      ? CATEGORY_CARDS.find((item) => item.key === category)?.title || "Category"
+      : MODE_LABELS[mode];
 
   return (
     <ErrorBoundary>
       <div className="feed-container social-surface">
+        <CreatePostModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          onPostCreated={handlePostCreated}
+        />
+
         <div className="feed-shell">
           <aside className="feed-sidebar">
-            <p className="feed-sidebar-kicker">Channels</p>
+            <p className="feed-sidebar-kicker">Filters</p>
             <button className={mode === "global" ? "feed-channel active" : "feed-channel"} onClick={() => setMode("global")}>
+              <Sparkles size={16} />
               For You
-              <span>Recommended by views, engagement, media, and freshness</span>
+              <span>Recommended by freshness and community signals</span>
             </button>
             <button className={mode === "following" ? "feed-channel active" : "feed-channel"} onClick={() => setMode("following")}>
+              <Users size={16} />
               Following
-              <span>Creators and listeners you follow</span>
+              <span>Posts from people you follow</span>
             </button>
+            <button className={mode === "trending" ? "feed-channel active" : "feed-channel"} onClick={() => setMode("trending")}>
+              Trending
+              <span>High-engagement threads from the last 48 hours</span>
+            </button>
+
+            <div className="filter-block">
+              <span className="filter-label">Categories</span>
+              {CATEGORY_CARDS.map((item) => (
+                <button
+                  key={item.key}
+                  className={category === item.key ? "filter-option active" : "filter-option"}
+                  onClick={() => setCategory((current) => current === item.key ? "" : item.key)}
+                  type="button"
+                >
+                  {item.title}
+                  <span>{feedMeta.categories?.[item.key] || 0}</span>
+                </button>
+              ))}
+            </div>
+
+            <form
+              className="tag-search"
+              onSubmit={(event) => {
+                event.preventDefault();
+                applyTagFilter(tagDraft);
+              }}
+            >
+              <Search size={15} />
+              <input
+                value={tagDraft}
+                onChange={(event) => setTagDraft(event.target.value)}
+                placeholder="/tag"
+              />
+            </form>
+
+            {(category || tag) && (
+              <button className="clear-filter-btn" type="button" onClick={clearFilters}>
+                Clear filters
+              </button>
+            )}
           </aside>
 
-        <div className="feed-wrapper">
+          <main className="feed-wrapper">
+            <section className="feed-header">
+              <div>
+                <p className="feed-sidebar-kicker">KeyVoid community</p>
+                <h1 className="feed-title">{activeTitle}</h1>
+                <p className="feed-subtitle">
+                  Music threads for artists, listeners, teachers, and people discovering what to play next.
+                </p>
+              </div>
+              {isAuthenticated && (
+                <button className="start-discussion-btn" type="button" onClick={() => setIsModalOpen(true)}>
+                  <Plus size={18} />
+                  Start Discussion
+                </button>
+              )}
+            </section>
 
-          {/* HEADER */}
-          <div className="feed-header">
-            <h1 className="feed-title">{mode === "following" ? "Following" : "For You"}</h1>
-            <p className="feed-subtitle">
-             Music discussions, updates, and media from the KeyVoid community.
-            </p>
+            <section className="category-card-grid" aria-label="Community categories">
+              {CATEGORY_CARDS.map((item) => (
+                <button
+                  key={item.key}
+                  className={category === item.key ? "community-card active" : "community-card"}
+                  style={{ "--category-art": item.image }}
+                  onClick={() => setCategory(item.key)}
+                  type="button"
+                >
+                  <span className="community-card-art" />
+                  <span className="community-card-title">{item.title}</span>
+                  <span className="community-card-prompt">{item.prompt}</span>
+                  <span className="community-card-footer">
+                    Join discussion
+                    <small>{feedMeta.categories?.[item.key] || 0} posts</small>
+                  </span>
+                </button>
+              ))}
+            </section>
+
             <div className="feed-sort-row" aria-label="Feed ranking">
               <button className={sort === "recommended" ? "active" : ""} onClick={() => setSort("recommended")}>
                 Recommended
@@ -186,137 +292,72 @@ function Feed() {
               </button>
             </div>
 
-          </div>
+            {error && (
+              <div className="error-banner">
+                <span>{error}</span>
+                <button onClick={() => setError(null)}>x</button>
+              </div>
+            )}
 
-          {/* ERROR */}
-          {error && (
-            <div className="error-banner">
-              <span>{error}</span>
-              <button onClick={() => setError(null)}>x</button>
-            </div>
-          )}
+            <div className="feed-content">
+              {isLoading && posts.length === 0 ? (
+                <div className="loading-state">
+                  <Loader size={40} className="spinner" />
+                  <p>Loading posts...</p>
+                </div>
+              ) : posts.length === 0 ? (
+                <div className="empty-state">
+                  <h3>No threads yet</h3>
+                  <p>Start a discussion or loosen the filters.</p>
+                </div>
+              ) : (
+                posts.map((post) => (
+                  <PostCard
+                    key={post._id}
+                    post={post}
+                    onPostDeleted={handlePostDeleted}
+                    onTagClick={applyTagFilter}
+                  />
+                ))
+              )}
 
-          {/* CREATE POST */}
-          {isAuthenticated && (
-            <div className="create-post-card">
-              <textarea
-                placeholder="What's on your mind?"
-                value={postText}
-                onChange={(event) => setPostText(event.target.value)}
-                maxLength={500}
-                className="post-textarea"
-              />
-
-              {mediaPreviewUrl && (
-                <div className="media-preview">
-                  {postMedia?.type.startsWith("image/") ? (
-                    <img src={mediaPreviewUrl} alt="preview" />
-                  ) : (
-                    <video src={mediaPreviewUrl} controls />
-                  )}
-                  <button onClick={clearMedia}>
-                    <X size={16} />
+              {posts.length > 0 && hasNext && (
+                <div className="pagination-controls">
+                  <button
+                    className="load-more-btn"
+                    onClick={() => fetchPosts(page + 1)}
+                    disabled={isLoading}
+                  >
+                    {isLoading ? "Loading more..." : "Load more"}
                   </button>
                 </div>
               )}
 
-              <div className="create-post-footer">
-                <div className="composer-tools">
-                  <label className="media-tool">
-                    <Image size={18} />
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleMediaChange}
-                    />
-                  </label>
-
-                  <label className="media-tool">
-                    <Video size={18} />
-                    <input
-                      type="file"
-                      accept="video/*"
-                      onChange={handleMediaChange}
-                    />
-                  </label>
-
-                  <span className="char-count">
-                    {postText.length}/500
-                  </span>
-                </div>
-
-                <button
-                  onClick={handleCreatePost}
-                  disabled={!postText.trim() || isCreating}
-                  className="post-submit-btn"
-                >
-                  {isCreating ? (
-                    <>
-                      <Loader size={16} className="spinner" />
-                      Posting...
-                    </>
-                  ) : (
-                    <>
-                      <Send size={16} />
-                      Post
-                    </>
-                  )}
-                </button>
-              </div>
+              <div ref={loadMoreTrigger} className="load-more-trigger" />
             </div>
-          )}
-
-          {/* FEED */}
-          <div className="feed-content">
-            {isLoading ? (
-              <div className="loading-state">
-                <Loader size={40} className="spinner" />
-                <p>Loading posts...</p>
-              </div>
-            ) : posts.length === 0 ? (
-              <div className="empty-state">
-                <h3>No posts yet</h3>
-                <p>Be the first one to share something interesting!</p>
-              </div>
-            ) : (
-              posts.map((post) => (
-                <PostCard
-                  key={post._id}
-                  post={post}
-                  onPostDeleted={handlePostDeleted}
-                />
-              ))
-            )}
-
-            {posts.length > 0 && hasNext && (
-              <div className="pagination-controls">
-                <button
-                  className="load-more-btn"
-                  onClick={() => fetchPosts(page + 1)}
-                  disabled={isLoading}
-                >
-                  {isLoading ? "Loading more posts..." : "Load more posts"}
-                </button>
-              </div>
-            )}
-
-            <div ref={loadMoreTrigger} className="load-more-trigger" />
-          </div>
-        </div>
+          </main>
 
           <aside className="feed-sidebar feed-sidebar-right">
-            <p className="feed-sidebar-kicker">Community</p>
-            <div className="feed-tip">
-              <strong>Post prompts</strong>
-              <span>Share a track, ask for recs, post a clip, or start a genre debate.</span>
+            <p className="feed-sidebar-kicker">Trending tags</p>
+            <div className="tag-cloud">
+              {feedMeta.tags.length > 0 ? (
+                feedMeta.tags.map((item) => (
+                  <button key={item.tag} type="button" onClick={() => applyTagFilter(item.tag)}>
+                    /{item.tag}
+                    <span>{item.count}</span>
+                  </button>
+                ))
+              ) : (
+                <span className="feed-muted">No tags yet.</span>
+              )}
             </div>
             <div className="feed-tip">
-              <strong>How recommendations work</strong>
-              <span>Views, likes, comments, recency, media quality, and safety status shape For You ranking.</span>
+              <strong>Creator posts</strong>
+              <span>Creators can post reels and music uploads. Listeners can join threads, ask questions, and build the community.</span>
             </div>
             <div className="feed-tip">
-              <strong>Safety tools</strong>
-              <span>Report harmful posts from the flag button. Reviewed content is reduced in recommendations.</span>
+              <strong>Server friendly loading</strong>
+              <span>The feed pulls 10 posts at a time and caps the client window to keep memory stable.</span>
             </div>
           </aside>
         </div>

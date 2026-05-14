@@ -17,7 +17,7 @@ const feedbackRoutes = require("./src/routers/feedbackRoutes");
 const { securityHeaders, validateInput } = require("./src/middleware/securityMiddleware");
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = Number.parseInt(String(process.env.PORT || "5000").trim(), 10) || 5000;
 
 function getAllowedOrigins() {
   const configuredOrigins = [

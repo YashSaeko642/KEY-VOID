@@ -1,13 +1,18 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { ChevronDown } from "lucide-react";
 import { useAuth } from "../src/context/useAuth";
 import EnterVoidModal from "./EnterVoidModal";
+import API, { getApiErrorMessage } from "../services/api";
 import "./Navbar.css";
 
 export default function Navbar() {
-  const { hasRole, isAdmin, isAuthenticated, logout, user } = useAuth();
+  const { hasRole, isAdmin, isAuthenticated, logout, updateUser, user } = useAuth();
   const navigate = useNavigate();
   const [showVoidModal, setShowVoidModal] = useState(false);
+  const [isAccountOpen, setIsAccountOpen] = useState(false);
+  const [upgradeMessage, setUpgradeMessage] = useState("");
+  const accountMenuRef = useRef(null);
 
   async function handleLogout() {
     await logout();
@@ -17,6 +22,34 @@ export default function Navbar() {
   const handleVoidSessionStart = () => {
     setShowVoidModal(false);
   };
+
+  const openCreatePost = () => {
+    setIsAccountOpen(false);
+    navigate("/feed", { state: { openCreatePost: true } });
+  };
+
+  const handleBecomeCreator = async () => {
+    try {
+      setUpgradeMessage("");
+      const { data } = await API.patch("/profiles/me/become-creator");
+      updateUser(data.profile);
+      setIsAccountOpen(false);
+      navigate("/profile");
+    } catch (error) {
+      setUpgradeMessage(getApiErrorMessage(error, "Unable to upgrade account."));
+    }
+  };
+
+  useEffect(() => {
+    const handlePointerDown = (event) => {
+      if (!accountMenuRef.current?.contains(event.target)) {
+        setIsAccountOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, []);
 
   return (
     <>
@@ -33,7 +66,7 @@ export default function Navbar() {
           </a>
           {isAuthenticated ? (
             <Link className="text-sm text-slate-300" to="/dashboard">
-              {user?.username || "Dashboard"}
+              Dashboard
             </Link>
           ) : null}
           {isAuthenticated ? (
@@ -49,11 +82,6 @@ export default function Navbar() {
           {isAuthenticated ? (
             <Link className="text-sm text-slate-300" to="/reels">
               Reels
-            </Link>
-          ) : null}
-          {isAuthenticated ? (
-            <Link className="text-sm text-slate-300" to="/profile">
-              Profile
             </Link>
           ) : null}
           {isAuthenticated && hasRole(["creator", "admin"]) ? (
@@ -81,9 +109,36 @@ export default function Navbar() {
         </nav>
         <div className="nav-actions">
           {isAuthenticated ? (
-            <button className="nav-button nav-button-secondary" onClick={handleLogout} type="button">
-              Logout
-            </button>
+            <div className="account-menu-wrap" ref={accountMenuRef}>
+              <button
+                className="nav-button nav-button-secondary account-menu-trigger"
+                onClick={() => setIsAccountOpen((current) => !current)}
+                type="button"
+                aria-expanded={isAccountOpen}
+              >
+                {user?.username || "Account"}
+                <ChevronDown size={15} />
+              </button>
+              {isAccountOpen && (
+                <div className="account-menu">
+                  <button type="button" onClick={() => { setIsAccountOpen(false); navigate("/profile"); }}>
+                    Visit Profile
+                  </button>
+                  <button type="button" onClick={openCreatePost}>
+                    Start Discussion
+                  </button>
+                  {user?.role === "user" && (
+                    <button type="button" onClick={handleBecomeCreator}>
+                      Become a Creator
+                    </button>
+                  )}
+                  <button type="button" onClick={handleLogout}>
+                    Logout
+                  </button>
+                  {upgradeMessage && <span className="account-menu-error">{upgradeMessage}</span>}
+                </div>
+              )}
+            </div>
           ) : (
             <Link className="nav-button nav-button-primary" to="/login">
               Continue with Google

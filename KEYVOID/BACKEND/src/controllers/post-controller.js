@@ -10,6 +10,7 @@ const {
 const { validateAndSanitizeText } = require("../utils/sanitization");
 
 const ALLOWED_MEDIA_TYPES = new Set(["", "image", "video", "audio"]);
+const POST_CATEGORIES = new Set(["discussion", "question", "news", "recommendation", "fan_content", "general"]);
 const HTTPS_URL_PATTERN = /^https:\/\/[^\s/$.?#].[^\s]*$/i;
 const REPORT_REASONS = new Set([
   "Spam",
@@ -45,6 +46,70 @@ function compactNumber(value = 0) {
   if (count >= 1000000) return `${(count / 1000000).toFixed(count >= 10000000 ? 0 : 1)}M`;
   if (count >= 1000) return `${(count / 1000).toFixed(count >= 10000 ? 0 : 1)}K`;
   return String(count);
+}
+
+function normalizeCategory(category = "general") {
+  const normalized = String(category || "general").trim().toLowerCase();
+  return POST_CATEGORIES.has(normalized) ? normalized : "general";
+}
+
+function extractSlashTags(...values) {
+  const tags = new Set();
+  const pattern = /(^|\s)\/([a-zA-Z][a-zA-Z0-9_-]{1,29})\b/g;
+
+  values.filter(Boolean).forEach((value) => {
+    let match;
+    const text = String(value);
+    while ((match = pattern.exec(text)) !== null) {
+      tags.add(match[2].toLowerCase());
+    }
+  });
+
+  return [...tags].slice(0, 12);
+}
+
+function normalizeProvidedTags(tags) {
+  const rawTags = Array.isArray(tags)
+    ? tags
+    : String(tags || "")
+        .split(/[,\s]+/)
+        .map((tag) => tag.trim());
+
+  return rawTags
+    .map((tag) => String(tag || "").replace(/^\/+/, "").toLowerCase().trim())
+    .filter((tag) => /^[a-z][a-z0-9_-]{1,29}$/.test(tag))
+    .slice(0, 12);
+}
+
+function restoreSlashTags(text = "") {
+  return String(text || "").replace(/&#x2F;/g, "/");
+}
+
+function validateOptionalText(value = "", options = {}) {
+  if (!String(value || "").trim()) {
+    return { valid: true, text: "", error: null };
+  }
+
+  return validateAndSanitizeText(value, options);
+}
+
+function buildPostQuery(query = {}) {
+  const baseQuery = {
+    isDeleted: false,
+    safetyStatus: { $ne: "restricted" }
+  };
+
+  const category = String(query.category || "").trim().toLowerCase();
+  if (POST_CATEGORIES.has(category) && category !== "general") {
+    baseQuery.category = category;
+  }
+
+  const tag = String(query.tag || "").replace(/^\/+/, "").trim().toLowerCase();
+  if (/^[a-z][a-z0-9_-]{1,29}$/.test(tag)) {
+    baseQuery.tags = tag;
+  }
+
+  return baseQuery;
 }
 
 function getRecommendationScore(post) {
@@ -250,17 +315,38 @@ exports.hardDeletePostsByAuthor = async (userId) => {
 // ✅ CREATE POST
 exports.createPost = async (req, res) => {
   try {
-    const { text, mediaUrl, mediaType, contentType = "post" } = req.body;
+    const { text, title, body, mediaUrl, mediaType, contentType = "post" } = req.body;
 
     // Validate contentType
     if (!["post", "reel"].includes(contentType)) {
       return res.status(400).json({ message: "Invalid content type. Must be 'post' or 'reel'." });
     }
 
-    // Validate and sanitize text input
-    const validation = validateAndSanitizeText(text, { maxLength: 500 });
-    if (!validation.valid) {
-      return res.status(400).json({ message: validation.error });
+    if (contentType === "reel" && req.user.role !== "creator" && req.user.role !== "admin") {
+      return res.status(403).json({ message: "Creator access required to post reels" });
+    }
+
+    const textValidation = validateOptionalText(text || "", { maxLength: 500 });
+    if (!textValidation.valid) {
+      return res.status(400).json({ message: textValidation.error });
+    }
+
+    const titleValidation = validateOptionalText(title || "", { maxLength: 140 });
+    if (!titleValidation.valid) {
+      return res.status(400).json({ message: titleValidation.error });
+    }
+
+    const bodyValidation = validateOptionalText(body || "", { maxLength: 4000 });
+    if (!bodyValidation.valid) {
+      return res.status(400).json({ message: bodyValidation.error });
+    }
+
+    const cleanTitle = restoreSlashTags(titleValidation.text);
+    const cleanBody = restoreSlashTags(bodyValidation.text);
+    const cleanText = restoreSlashTags(textValidation.text);
+
+    if (!cleanTitle && !cleanBody && !cleanText && !req.file && !mediaUrl) {
+      return res.status(400).json({ message: "Add a title, body, caption, or media before posting" });
     }
 
     let media = { mediaUrl: "", mediaPublicId: "", mediaType: "" };
@@ -282,9 +368,17 @@ exports.createPost = async (req, res) => {
       };
     }
 
+    const providedTags = normalizeProvidedTags(req.body.tags);
+    const parsedTags = extractSlashTags(title, body, text);
+    const tags = [...new Set([...providedTags, ...parsedTags])].slice(0, 12);
+
     const post = new Post({
       author: req.user.id,
-      text: validation.text,
+      title: cleanTitle,
+      body: cleanBody,
+      text: cleanText || cleanBody.slice(0, 500),
+      category: normalizeCategory(req.body.category),
+      tags,
       mediaUrl: media.mediaUrl,
       mediaPublicId: media.mediaPublicId,
       mediaType: media.mediaType,
@@ -292,7 +386,7 @@ exports.createPost = async (req, res) => {
     });
 
     await post.save();
-    await post.populate("author", "username avatarUrl");
+    await post.populate("author", "username avatarUrl role");
 
     res.status(201).json(post);
   } catch (err) {
@@ -302,21 +396,86 @@ exports.createPost = async (req, res) => {
 };
 
 // ✅ GET ALL POSTS (FEED) WITH PAGINATION
+exports.updatePost = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const userId = req.user.id;
+
+    if (!isValidObjectId(postId)) {
+      return res.status(400).json({ message: "Invalid post ID" });
+    }
+
+    const post = await Post.findOne({ _id: postId, isDeleted: false });
+
+    if (!post) {
+      return res.status(404).json({ message: "Post not found" });
+    }
+
+    if (String(post.author) !== String(userId) && req.user.role !== "admin") {
+      return res.status(403).json({ message: "Unauthorized to edit this post" });
+    }
+
+    if (post.contentType === "reel") {
+      return res.status(400).json({ message: "Reels cannot be edited from the feed yet" });
+    }
+
+    const titleValidation = validateOptionalText(req.body?.title || "", { maxLength: 140 });
+    if (!titleValidation.valid) {
+      return res.status(400).json({ message: titleValidation.error });
+    }
+
+    const bodyValidation = validateOptionalText(req.body?.body || "", { maxLength: 4000 });
+    if (!bodyValidation.valid) {
+      return res.status(400).json({ message: bodyValidation.error });
+    }
+
+    const textValidation = validateOptionalText(req.body?.text || "", { maxLength: 500 });
+    if (!textValidation.valid) {
+      return res.status(400).json({ message: textValidation.error });
+    }
+
+    const cleanTitle = restoreSlashTags(titleValidation.text);
+    const cleanBody = restoreSlashTags(bodyValidation.text);
+    const cleanText = restoreSlashTags(textValidation.text);
+
+    if (!cleanTitle && !cleanBody && !cleanText && !post.mediaUrl) {
+      return res.status(400).json({ message: "A post needs a title, body, caption, or media" });
+    }
+
+    const providedTags = normalizeProvidedTags(req.body?.tags);
+    const parsedTags = extractSlashTags(req.body?.title, req.body?.body, req.body?.text);
+
+    post.title = cleanTitle;
+    post.body = cleanBody;
+    post.text = cleanText || cleanBody.slice(0, 500);
+    post.category = normalizeCategory(req.body?.category || post.category);
+    post.tags = [...new Set([...providedTags, ...parsedTags])].slice(0, 12);
+    post.isEdited = true;
+    post.editedAt = new Date();
+
+    await post.save();
+    await post.populate("author", "username avatarUrl role");
+    await post.populate("comments.author", "username avatarUrl");
+
+    res.json(post);
+  } catch (err) {
+    console.error("Update post error:", err);
+    res.status(500).json({ message: "Failed to update post" });
+  }
+};
+
 exports.getFeed = async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
     const skip = (page - 1) * limit;
     const sortMode = String(req.query.sort || "recommended").toLowerCase();
-    const baseQuery = {
-      isDeleted: false,
-      safetyStatus: { $ne: "restricted" }
-    };
+    const baseQuery = buildPostQuery(req.query);
 
     // Get posts and total count
     const [posts, total] = await Promise.all([
       Post.find(baseQuery)
-        .populate("author", "username avatarUrl")
+        .populate("author", "username avatarUrl role")
         .populate("comments.author", "username avatarUrl")
         .sort({ createdAt: -1 })
         .limit(sortMode === "recent" ? limit : Math.min(100, limit * 5))
@@ -348,6 +507,78 @@ exports.getFeed = async (req, res) => {
   }
 };
 
+exports.getTrendingFeed = async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(30, Math.max(1, parseInt(req.query.limit, 10) || 10));
+    const skip = (page - 1) * limit;
+    const since = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    const baseQuery = {
+      ...buildPostQuery(req.query),
+      createdAt: { $gte: since }
+    };
+
+    const [posts, total] = await Promise.all([
+      Post.find(baseQuery)
+        .populate("author", "username avatarUrl role")
+        .populate("comments.author", "username avatarUrl")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(Math.min(120, limit * 6))
+        .lean(),
+      Post.countDocuments(baseQuery)
+    ]);
+
+    const rankedPosts = attachRecommendationMeta(posts)
+      .sort((a, b) => b.recommendationScore - a.recommendationScore)
+      .slice(0, limit);
+
+    res.json({
+      posts: rankedPosts,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+        hasNext: page * limit < total
+      }
+    });
+  } catch (err) {
+    console.error("Get trending feed error:", err);
+    res.status(500).json({ message: "Failed to load trending posts" });
+  }
+};
+
+exports.getFeedMeta = async (_req, res) => {
+  try {
+    const baseMatch = { isDeleted: false, safetyStatus: { $ne: "restricted" } };
+    const [categoryCounts, tagCounts] = await Promise.all([
+      Post.aggregate([
+        { $match: baseMatch },
+        { $group: { _id: "$category", count: { $sum: 1 } } }
+      ]),
+      Post.aggregate([
+        { $match: { ...baseMatch, tags: { $exists: true, $ne: [] } } },
+        { $unwind: "$tags" },
+        { $group: { _id: "$tags", count: { $sum: 1 } } },
+        { $sort: { count: -1, _id: 1 } },
+        { $limit: 12 }
+      ])
+    ]);
+
+    res.json({
+      categories: categoryCounts.reduce((acc, item) => {
+        acc[item._id || "general"] = item.count;
+        return acc;
+      }, {}),
+      tags: tagCounts.map((item) => ({ tag: item._id, count: item.count }))
+    });
+  } catch (err) {
+    console.error("Get feed meta error:", err);
+    res.status(500).json({ message: "Failed to load feed metadata" });
+  }
+};
+
 // ✅ GET POSTS BY USER
 exports.getUserPosts = async (req, res) => {
   try {
@@ -372,7 +603,7 @@ exports.getUserPosts = async (req, res) => {
 
     const [posts, total] = await Promise.all([
       Post.find(query)
-        .populate("author", "username avatarUrl")
+        .populate("author", "username avatarUrl role")
         .populate("comments.author", "username avatarUrl")
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -560,6 +791,10 @@ exports.toggleLike = async (req, res) => {
 exports.getFollowingFeed = async (req, res) => {
   try {
     const userId = req.user.id;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(30, Math.max(1, parseInt(req.query.limit, 10) || 10));
+    const skip = (page - 1) * limit;
+    const sortMode = String(req.query.sort || "recent").toLowerCase();
 
     // get current user with following list
     const user = await require("../models/User")
@@ -573,16 +808,38 @@ exports.getFollowingFeed = async (req, res) => {
     // include own posts also (optional but recommended)
     const followingIds = [...user.following, userId];
 
-    const posts = await Post.find({
+    const followingQuery = {
+      ...buildPostQuery(req.query),
       author: { $in: followingIds },
-      isDeleted: false,
-      safetyStatus: { $ne: "restricted" }
-    })
-      .populate("author", "username avatarUrl")
-      .sort({ createdAt: -1 })
-      .lean();
+    };
 
-    res.json(attachRecommendationMeta(posts));
+    const [posts, total] = await Promise.all([
+      Post.find(followingQuery)
+        .populate("author", "username avatarUrl role")
+        .populate("comments.author", "username avatarUrl")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(sortMode === "recommended" ? Math.min(80, limit * 4) : limit)
+        .lean(),
+      Post.countDocuments(followingQuery)
+    ]);
+
+    const rankedPosts = sortMode === "recommended"
+      ? attachRecommendationMeta(posts)
+          .sort((a, b) => b.recommendationScore - a.recommendationScore)
+          .slice(0, limit)
+      : attachRecommendationMeta(posts);
+
+    res.json({
+      posts: rankedPosts,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+        hasNext: page * limit < total
+      }
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -626,10 +883,14 @@ exports.getReels = async (req, res) => {
 // ✅ CREATE REEL (with larger file limits)
 exports.createReel = async (req, res) => {
   try {
+    if (req.user.role !== "creator" && req.user.role !== "admin") {
+      return res.status(403).json({ message: "Creator access required to post reels" });
+    }
+
     const { text, mediaUrl, mediaType } = req.body;
 
     // Validate and sanitize text input (optional for reels)
-    const validation = validateAndSanitizeText(text || "", { maxLength: 500 });
+    const validation = validateOptionalText(text || "", { maxLength: 500 });
     if (!validation.valid) {
       return res.status(400).json({ message: validation.error });
     }
@@ -660,7 +921,10 @@ exports.createReel = async (req, res) => {
 
     const post = new Post({
       author: req.user.id,
-      text: validation.text,
+      text: restoreSlashTags(validation.text),
+      title: restoreSlashTags(validation.text).slice(0, 140),
+      category: "general",
+      tags: extractSlashTags(text),
       mediaUrl: media.mediaUrl,
       mediaPublicId: media.mediaPublicId,
       mediaType: media.mediaType,
