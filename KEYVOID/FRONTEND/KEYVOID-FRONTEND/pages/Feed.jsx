@@ -52,6 +52,9 @@ const MODE_LABELS = {
   trending: "Trending"
 };
 
+const isCompactViewport = () =>
+  typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches;
+
 function KVMark({ size = 32, spinning = false }) {
   return (
     <span
@@ -85,8 +88,8 @@ function Feed() {
   const [tagDraft, setTagDraft] = useState("");
 
   // Left panel state
-  const [drawerOpen, setDrawerOpen] = useState(true);
-  const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [drawerOpen, setDrawerOpen] = useState(() => !isCompactViewport());
+  const [rightPanelOpen, setRightPanelOpen] = useState(() => !isCompactViewport());
 
   useEffect(() => {
     if (location.state?.openCreatePost) {

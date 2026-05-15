@@ -56,6 +56,7 @@
   display: grid;
   gap: 16px;
   padding: 18px;
+  min-width: 0;
 }
 
 .search-input-wrap {
@@ -178,6 +179,7 @@
 .profile-result-body p {
   margin: 8px 0;
   line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 
 .profile-result-stats {
@@ -237,5 +239,81 @@
 
   .search-rail {
     position: static;
+  }
+}
+
+@media (max-width: 560px) {
+  .search-page {
+    min-height: auto;
+    padding: 10px;
+  }
+
+  .search-shell {
+    gap: 10px;
+  }
+
+  .search-rail,
+  .search-main,
+  .profile-result {
+    border-radius: 10px;
+  }
+
+  .search-rail {
+    padding: 14px;
+  }
+
+  .search-rail h1 {
+    font-size: clamp(1.45rem, 9vw, 2.15rem);
+  }
+
+  .search-rail p:not(.search-kicker) {
+    margin-bottom: 0;
+    font-size: 0.92rem;
+  }
+
+  .search-main {
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .search-input-wrap {
+    min-height: 50px;
+    padding: 0 12px;
+  }
+
+  .profile-result {
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 11px;
+    padding: 12px;
+  }
+
+  .profile-result-avatar,
+  .profile-result-avatar img {
+    width: 48px;
+    height: 48px;
+  }
+
+  .profile-result-top {
+    display: grid;
+    gap: 8px;
+  }
+
+  .profile-result-top h2 {
+    font-size: 0.98rem;
+    overflow-wrap: anywhere;
+  }
+
+  .profile-result-top span {
+    justify-self: start;
+  }
+
+  .profile-result-stats {
+    gap: 7px;
+  }
+
+  .profile-result-stats span {
+    min-height: 28px;
+    padding-inline: 8px;
+    font-size: 0.82rem;
   }
 }

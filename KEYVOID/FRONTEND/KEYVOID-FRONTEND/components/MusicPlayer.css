@@ -708,7 +708,7 @@
 
 @media (max-width: 720px) {
   .music-page {
-    padding: 12px 12px 12px 48px;
+    padding: 12px;
   }
 
   .music-toolbar-actions {
@@ -744,6 +744,7 @@
   .track-row-actions {
     grid-column: 2;
     justify-content: flex-start;
+    flex-wrap: wrap;
   }
 
   .pagination-bar {
@@ -752,6 +753,40 @@
 
   .player-top {
     grid-template-columns: 1fr;
+  }
+
+  .music-layout {
+    gap: 12px;
+  }
+
+  .library-card,
+  .music-panel {
+    border-radius: 12px;
+  }
+
+  .library-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .recommended-track-row {
+    grid-auto-columns: minmax(150px, 70vw);
+  }
+
+  .recommended-track {
+    width: 100%;
+  }
+
+  .player-controls {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .playlist-dock {
+    top: auto;
+    bottom: 86px;
+    width: min(292px, calc(100vw - 16px));
+    max-height: 58dvh;
   }
 }
 

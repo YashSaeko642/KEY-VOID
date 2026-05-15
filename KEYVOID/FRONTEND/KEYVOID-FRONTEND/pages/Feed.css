@@ -795,21 +795,44 @@
 @media (max-width: 640px) {
   .feed-page {
     --feed-panel-width: 232px;
-    --feed-panel-collapsed-width: 56px;
+    --feed-panel-collapsed-width: 48px;
     --feed-right-panel-width: 232px;
-    --feed-right-collapsed-width: 56px;
+    --feed-right-collapsed-width: 0px;
   }
 
-  .feed-shell { width: calc(100% - 0.5rem); padding-top: 16px; }
+  .feed-drawer,
+  .feed-sidebar-right {
+    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.4);
+  }
+
+  .feed-page--right-closed .feed-sidebar-right {
+    width: 0;
+    border: 0;
+  }
+
+  .feed-page--right-closed .panel-rail-right {
+    display: none;
+  }
+
+  .feed-shell { width: calc(100% - 1rem); padding-top: 14px; }
   .feed-title { font-size: 1.7rem; }
   .feed-header { flex-direction: column; align-items: flex-start; gap: 10px; }
   .category-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .start-discussion-btn { width: 100%; justify-content: center; }
+  .feed-sort-row { width: 100%; }
+  .feed-sort-row button { flex: 1; min-width: 0; }
   .drawer-content { padding-inline: 6px; }
   .drawer-channel,
   .drawer-filter,
   .drawer-tag { padding-inline: 9px; }
   .feed-page--panel-open .feed-main { margin-left: var(--feed-panel-collapsed-width); }
   .feed-page--right-open .feed-main { margin-right: var(--feed-right-collapsed-width); }
+  .create-modal-overlay { padding: 10px; }
+  .create-modal { padding: 16px; max-height: calc(100dvh - 20px); }
+  .create-modal-header,
+  .create-modal-footer { align-items: stretch; flex-direction: column; }
+  .composer-tools { flex-wrap: wrap; }
+  .post-submit-btn { justify-content: center; width: 100%; }
 }
 
 @media (max-width: 400px) {
