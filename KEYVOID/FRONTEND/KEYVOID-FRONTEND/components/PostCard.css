@@ -564,9 +564,15 @@
 /* RESPONSIVE */
 @media (max-width: 640px) {
   .post-card {
-    padding: 16px;
+    padding: 14px;
     margin-bottom: 16px;
     border-radius: 12px;
+  }
+
+  .post-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 10px;
   }
 
   .post-avatar {
@@ -580,10 +586,39 @@
   }
 
   .post-actions {
-    gap: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .post-action-btn {
+    flex: 1 1 92px;
+    justify-content: center;
+    min-height: 38px;
+    padding-inline: 8px;
   }
 
   .share-btn {
     margin-left: 0;
+  }
+
+  .comment-item {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .comment-delete-btn {
+    grid-column: 2;
+    justify-self: end;
+  }
+
+  .modal-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .modal-cancel,
+  .modal-delete,
+  .modal-save {
+    width: 100%;
+    min-width: 0;
   }
 }

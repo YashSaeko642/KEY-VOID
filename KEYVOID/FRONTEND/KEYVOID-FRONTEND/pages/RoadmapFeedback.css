@@ -462,8 +462,47 @@
 }
 
 @media (max-width: 640px) {
+  .roadmap-page {
+    padding: 10px;
+  }
+
+  .roadmap-hero {
+    gap: 10px;
+  }
+
+  .roadmap-hero h1 {
+    max-width: none;
+    font-size: clamp(1.8rem, 11vw, 2.7rem);
+  }
+
   .roadmap-grid { grid-template-columns: 1fr; }
-  .feedback-item-top { flex-wrap: wrap; }
+  .feedback-form,
+  .feedback-board,
+  .roadmap-card {
+    padding: 14px;
+  }
+
+  .feedback-board-header,
+  .feedback-item-top {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .feedback-counts,
+  .feedback-item-actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .feedback-pagination {
+    flex-wrap: wrap;
+  }
+
+  .page-info {
+    width: 100%;
+    margin-left: 0;
+    text-align: center;
+  }
 }
 
 /* In progress item highlight */

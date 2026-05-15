@@ -50,170 +50,46 @@ export default function AppHeader() {
 
   return (
     <>
-      <header
-        style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 40,
-          background: "linear-gradient(180deg, rgba(15, 23, 42, 0.95), rgba(15, 23, 42, 0.85))",
-          backdropFilter: "blur(20px)",
-          borderBottom: "1px solid rgba(71, 85, 105, 0.2)",
-          boxShadow: "0 4px 20px rgba(0, 0, 0, 0.3)"
-        }}
-      >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: "none",
-          margin: "0 auto",
-          padding: "14px clamp(12px, 2vw, 32px)",
-          display: "flex",
-          gap: "12px",
-          alignItems: "center",
-          flexWrap: "wrap"
-        }}
-      >
-        <Link
-          to="/dashboard"
-          style={{
-            textDecoration: "none",
-            color: "#f1f5f9",
-            fontSize: "18px",
-            fontWeight: "700",
-            letterSpacing: "3px",
-            textTransform: "uppercase",
-            fontFamily: "'Michroma', monospace"
-          }}
-        >
+      <header className="mobile-app-header">
+      <div className="mobile-app-header-inner">
+        <Link to="/dashboard" className="mobile-app-brand">
           KeyVoid
         </Link>
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            minWidth: 0,
-            flex: "0 1 auto",
-            flexWrap: "wrap"
-          }}
-        >
-          <span
-            style={{
-              padding: "8px 14px",
-              background: "rgba(30, 41, 59, 0.6)",
-              border: "1px solid rgba(99, 102, 241, 0.2)",
-              borderRadius: "20px",
-              fontSize: "13px",
-              fontWeight: "600",
-              color: "#e2e8f0"
-            }}
-          >
+        <div className="mobile-app-user">
+          <span className="mobile-app-chip mobile-app-chip-user">
             {user?.username || "Account"}
           </span>
-          <span
-            style={{
-              padding: "8px 14px",
-              background: "rgba(99, 102, 241, 0.1)",
-              border: "1px solid rgba(99, 102, 241, 0.3)",
-              borderRadius: "20px",
-              fontSize: "11px",
-              fontWeight: "700",
-              color: "#818cf8",
-              textTransform: "uppercase",
-              letterSpacing: "1px"
-            }}
-          >
+          <span className="mobile-app-chip mobile-app-chip-role">
             {isAdmin ? "Admin" : user?.role === "creator" ? "Creator" : "Listener"}
           </span>
         </div>
 
-        <nav
-          aria-label="Application"
-          style={{
-            display: "flex",
-            gap: "8px",
-            alignItems: "center",
-            justifyContent: "center",
-            flexWrap: "wrap",
-            flex: "1 1 420px",
-            minWidth: 0
-          }}
-        >
+        <nav className="mobile-app-nav" aria-label="Application">
           {navItems.map((item) => (
             <Link
               key={item.path}
               to={item.path}
-              style={{
-                textDecoration: "none",
-                color: isActive(item.path) ? "#818cf8" : "#cbd5e1",
-                fontSize: "14px",
-                fontWeight: isActive(item.path) ? "700" : "600",
-                padding: "10px 14px",
-                borderRadius: "8px",
-                background: isActive(item.path) ? "rgba(99, 102, 241, 0.15)" : "transparent",
-                border: `1px solid ${isActive(item.path) ? "rgba(99, 102, 241, 0.4)" : "transparent"}`,
-                transition: "all 0.2s ease"
-              }}
+              className={`mobile-app-link${isActive(item.path) ? " mobile-app-link-active" : ""}`}
             >
               {item.label}
             </Link>
           ))}
         </nav>
 
-        <form
-          onSubmit={handleSearch}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            padding: "10px 14px",
-            border: "1px solid rgba(71, 85, 105, 0.4)",
-            borderRadius: "12px",
-            background: "rgba(30, 41, 59, 0.5)",
-            flex: "1 1 220px",
-            minWidth: "min(100%, 220px)",
-            maxWidth: "320px"
-          }}
-        >
+        <form onSubmit={handleSearch} className="mobile-app-search">
           <input
             type="text"
             placeholder="Search creators..."
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            style={{
-              flex: 1,
-              border: "none",
-              background: "transparent",
-              color: "#f1f5f9",
-              fontSize: "14px",
-              outline: "none",
-              minWidth: 0
-            }}
           />
-          <button
-            type="submit"
-            style={{
-              background: "none",
-              border: "none",
-              color: "#818cf8",
-              fontSize: "14px",
-              cursor: "pointer"
-            }}
-          >
+          <button type="submit">
             Go
           </button>
         </form>
 
-        <div
-          style={{
-            display: "flex",
-            gap: "12px",
-            alignItems: "center",
-            flex: "0 1 auto",
-            flexWrap: "wrap"
-          }}
-        >
+        <div className="mobile-app-actions">
           <button
             className="void-nav-btn"
             onClick={() => setShowVoidModal(true)}
@@ -228,16 +104,7 @@ export default function AppHeader() {
           <button
             onClick={handleLogout}
             type="button"
-            style={{
-              padding: "10px 18px",
-              background: "rgba(239, 68, 68, 0.1)",
-              border: "1px solid rgba(239, 68, 68, 0.3)",
-              color: "#fca5a5",
-              borderRadius: "8px",
-              fontSize: "14px",
-              fontWeight: "600",
-              cursor: "pointer"
-            }}
+            className="mobile-app-logout"
           >
             Logout
           </button>
