@@ -562,7 +562,7 @@ exports.getFeedMeta = async (_req, res) => {
         { $unwind: "$tags" },
         { $group: { _id: "$tags", count: { $sum: 1 } } },
         { $sort: { count: -1, _id: 1 } },
-        { $limit: 12 }
+        { $limit: 5 }
       ])
     ]);
 
@@ -579,6 +579,32 @@ exports.getFeedMeta = async (_req, res) => {
   }
 };
 
+
+exports.getMyFeedMeta = async (req, res) => {
+  try {
+    const tagCounts = await Post.aggregate([
+      {
+        $match: {
+          author: req.user._id,
+          isDeleted: false,
+          safetyStatus: { $ne: "restricted" },
+          tags: { $exists: true, $ne: [] }
+        }
+      },
+      { $unwind: "$tags" },
+      { $group: { _id: "$tags", count: { $sum: 1 } } },
+      { $sort: { count: -1, _id: 1 } },
+      { $limit: 5 }
+    ]);
+
+    res.json({
+      tags: tagCounts.map((item) => ({ tag: item._id, count: item.count }))
+    });
+  } catch (err) {
+    console.error("Get my feed meta error:", err);
+    res.status(500).json({ message: "Failed to load personal feed metadata" });
+  }
+};
 // ✅ GET POSTS BY USER
 exports.getUserPosts = async (req, res) => {
   try {

@@ -8,6 +8,7 @@ const {
   deleteComment,
   getFeed,
   getFeedMeta,
+  getMyFeedMeta,
   getTrendingFeed,
   getUserPosts,
   toggleLike,
@@ -29,6 +30,7 @@ router.post("/reel", protect, postCreationRateLimit, reelMediaUpload.single("med
 
 router.get("/", getFeed);
 router.get("/meta", getFeedMeta);
+router.get("/meta/me", protect, getMyFeedMeta);
 router.get("/trending", getTrendingFeed);
 router.get("/reels", getReels);
 router.get("/creator/insights", protect, getCreatorInsights);

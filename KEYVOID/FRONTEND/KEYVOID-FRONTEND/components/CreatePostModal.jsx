@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Image, Loader, Send, Video, X } from "lucide-react";
 import API, { getApiErrorMessage } from "../services/api";
 
@@ -118,7 +119,7 @@ function CreatePostModal({ isOpen, onClose, onPostCreated }) {
     }
   };
 
-  return (
+  return createPortal(
     <div className="create-modal-overlay" onClick={onClose}>
       <form className="create-modal" onSubmit={handleSubmit} onClick={(event) => event.stopPropagation()}>
         <div className="create-modal-header">
@@ -222,7 +223,8 @@ function CreatePostModal({ isOpen, onClose, onPostCreated }) {
           </button>
         </div>
       </form>
-    </div>
+    </div>,
+    document.body
   );
 }
 

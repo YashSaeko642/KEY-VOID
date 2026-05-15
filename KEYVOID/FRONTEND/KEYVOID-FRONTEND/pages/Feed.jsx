@@ -70,7 +70,7 @@ function Feed() {
   const navigate = useNavigate();
 
   const [posts, setPosts] = useState([]);
-  const [feedMeta, setFeedMeta] = useState({ categories: {}, tags: [] });
+  const [feedMeta, setFeedMeta] = useState({ categories: {}, tags: [], personalTags: [] });
   const [isLoading, setIsLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(Boolean(location.state?.openCreatePost));
   const [error, setError] = useState(null);
@@ -129,12 +129,22 @@ function Feed() {
 
   const fetchFeedMeta = useCallback(async () => {
     try {
-      const { data } = await API.get("/posts/meta");
-      setFeedMeta({ categories: data.categories || {}, tags: data.tags || [] });
+      const [{ data: platformMeta }, personalMeta] = await Promise.all([
+        API.get("/posts/meta"),
+        isAuthenticated
+          ? API.get("/posts/meta/me").catch(() => ({ data: { tags: [] } }))
+          : Promise.resolve({ data: { tags: [] } })
+      ]);
+
+      setFeedMeta({
+        categories: platformMeta.categories || {},
+        tags: platformMeta.tags || [],
+        personalTags: personalMeta.data.tags || []
+      });
     } catch {
-      setFeedMeta({ categories: {}, tags: [] });
+      setFeedMeta({ categories: {}, tags: [], personalTags: [] });
     }
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => { fetchFeedMeta(); }, [fetchFeedMeta]);
 
@@ -274,12 +284,12 @@ function Feed() {
               </form>
             </div>
 
-            {/* Trending tags */}
-            {feedMeta.tags.length > 0 && (
+            {/* Personal tags */}
+            {feedMeta.personalTags.length > 0 && (
               <div className="drawer-section">
-                <span className="drawer-section-label">Trending tags</span>
+                <span className="drawer-section-label">Your top tags</span>
                 <div className="drawer-tag-list">
-                  {feedMeta.tags.map((item) => (
+                  {feedMeta.personalTags.map((item) => (
                     <button
                       key={item.tag}
                       type="button"
@@ -302,17 +312,6 @@ function Feed() {
               </button>
             )}
 
-            {/* Start discussion */}
-            {isAuthenticated && (
-              <button
-                type="button"
-                className="drawer-start-btn"
-                onClick={() => setIsModalOpen(true)}
-                title="Start Discussion"
-              >
-                <Plus size={14} /> <span className="drawer-item-text">Start Discussion</span>
-              </button>
-            )}
           </div>
           <div className="panel-rail panel-rail-left" aria-label="Collapsed feed filters">
             <button type="button" className="rail-toggle" onClick={() => setDrawerOpen(true)} aria-label="Open filters" title="Open filters">
@@ -340,14 +339,6 @@ function Feed() {
                 <item.icon size={17} />
               </button>
             ))}
-            {isAuthenticated && (
-              <>
-                <span className="rail-divider" />
-                <button type="button" className="rail-btn rail-btn-action" onClick={() => setIsModalOpen(true)} aria-label="Start Discussion" title="Start Discussion">
-                  <Plus size={18} />
-                </button>
-              </>
-            )}
           </div>
         </aside>
 
