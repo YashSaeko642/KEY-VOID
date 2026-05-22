@@ -13,7 +13,6 @@ import CreatorHub from "../pages/CreatorHub";
 import Dashboard from "../pages/Dashboard";
 import Home from "../pages/Home";
 import Login from "../pages/Login";
-import Profile from "../pages/Profile";
 import PublicProfile from "../pages/PublicProfile";
 import ResetPassword from "../pages/ResetPassword";
 import Search from "../pages/Search";
@@ -36,17 +35,18 @@ const MotionP = motion.p;
 function AppLayout() {
   const location = useLocation();
   const isAuthRoute = AUTH_ROUTES.includes(location.pathname);
-  const isAppRoute = APP_ROUTES.includes(location.pathname);
+  const isAppRoute = APP_ROUTES.includes(location.pathname) || location.pathname.startsWith("/u/");
   const isFeedRoute = location.pathname === "/feed";
+  const isMusicRoute = location.pathname === "/music";
   const shellClassName = isAuthRoute
     ? "app-shell app-shell-auth bg-transparent text-slate-50"
     : isAppRoute
-      ? `app-shell app-shell-app${isFeedRoute ? " app-shell-feed" : ""} bg-transparent text-slate-50`
+      ? `app-shell app-shell-app${isFeedRoute ? " app-shell-feed" : ""}${isMusicRoute ? " app-shell-music" : ""} bg-transparent text-slate-50`
       : "app-shell app-shell-home bg-transparent text-slate-50";
   const mainClassName = isAuthRoute
     ? "app-main app-main-auth relative"
     : isAppRoute
-      ? `app-main app-main-app${isFeedRoute ? " app-main-feed" : ""} relative`
+      ? `app-main app-main-app${isFeedRoute ? " app-main-feed" : ""}${isMusicRoute ? " app-main-music" : ""} relative`
       : "app-main app-main-home relative";
 
   return (
@@ -98,7 +98,7 @@ function AppLayout() {
                 path="/profile"
                 element={
                   <ProtectedRoute>
-                    <Profile />
+                    <PublicProfile ownProfile />
                   </ProtectedRoute>
                 }
               />

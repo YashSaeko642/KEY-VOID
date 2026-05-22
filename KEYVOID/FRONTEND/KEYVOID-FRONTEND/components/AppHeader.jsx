@@ -6,7 +6,6 @@ import "./Navbar.css";
 
 const baseNavItems = [
   { path: "/", label: "Home" },
-  { path: "/dashboard", label: "Dashboard" },
   { path: "/music", label: "Music" },
   { path: "/feed", label: "Feed" },
   { path: "/reels", label: "Reels" },
@@ -18,7 +17,7 @@ const baseNavItems = [
 export default function AppHeader() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { hasRole, isAdmin, logout, user } = useAuth();
+  const { isAdmin, logout, user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [showVoidModal, setShowVoidModal] = useState(false);
 
@@ -44,7 +43,6 @@ export default function AppHeader() {
   const isActive = (path) => location.pathname === path;
   const navItems = [
     ...baseNavItems,
-    ...(hasRole(["creator", "admin"]) ? [{ path: "/creator", label: "Creator Hub" }] : []),
     ...(isAdmin ? [{ path: "/admin", label: "Admin" }] : [])
   ];
 
@@ -52,7 +50,7 @@ export default function AppHeader() {
     <>
       <header className="mobile-app-header">
       <div className="mobile-app-header-inner">
-        <Link to="/dashboard" className="mobile-app-brand">
+        <Link to="/profile" className="mobile-app-brand">
           KeyVoid
         </Link>
 

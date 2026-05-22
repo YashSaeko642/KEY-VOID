@@ -2,24 +2,35 @@ const Playlist = require("../models/Playlist");
 const Audio = require("../models/Audio");
 const mongoose = require("mongoose");
 
-const formatTrack = (track) => ({
+const formatAudienceTags = (tags = [], user) => tags
+  .map((item) => ({
+    tag: item.tag,
+    count: Array.isArray(item.voters) ? item.voters.length : 0,
+    hasVoted: Boolean(user && Array.isArray(item.voters) && item.voters.some((voter) => voter.equals?.(user._id) || String(voter) === String(user._id)))
+  }))
+  .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+
+const formatTrack = (track, user) => ({
   id: track._id?.toString(),
   _id: track._id?.toString(),
   title: track.title,
   artist: track.artist,
   genre: track.genre,
+  audienceTags: formatAudienceTags(track.audienceTags, user),
   duration: track.duration,
   url: `/api/audio/stream/${track._id}`,
-  source: track.source || "library"
+  source: track.source || "library",
+  uploadedBy: track.uploadedBy?.toString?.() || null,
+  canEdit: Boolean(user && track.uploadedBy && String(track.uploadedBy) === String(user._id))
 });
 
-const formatPlaylist = (playlist) => ({
+const formatPlaylist = (playlist, user) => ({
   id: playlist._id.toString(),
   _id: playlist._id.toString(),
   name: playlist.name,
   description: playlist.description,
   tracksCount: playlist.tracks?.length || 0,
-  tracks: playlist.tracks?.map(formatTrack) || [],
+  tracks: playlist.tracks?.map((track) => formatTrack(track, user)) || [],
   coverUrl: playlist.coverUrl,
   type: playlist.type || "playlist",
   isLiked: playlist.type === "liked",
@@ -59,11 +70,11 @@ exports.getUserPlaylists = async (req, res) => {
     await getOrCreateLikedPlaylist(req.user._id);
 
     const playlists = await Playlist.find({ userId: req.user._id })
-      .populate("tracks", "title artist genre duration source")
+      .populate("tracks", "title artist genre audienceTags duration source uploadedBy")
       .sort({ type: 1, createdAt: -1 })
       .lean();
 
-    return res.json({ playlists: playlists.map(formatPlaylist) });
+    return res.json({ playlists: playlists.map((playlist) => formatPlaylist(playlist, req.user)) });
   } catch (error) {
     console.error("Error fetching playlists:", error.message);
     return res.status(500).json({ msg: "Unable to fetch playlists" });
@@ -79,7 +90,7 @@ exports.getPlaylist = async (req, res) => {
     }
 
     const playlist = await Playlist.findOne({ _id: playlistId, userId: req.user._id })
-      .populate("tracks", "title artist genre duration source")
+      .populate("tracks", "title artist genre audienceTags duration source uploadedBy")
       .sort({ createdAt: -1 })
       .lean();
 
@@ -87,7 +98,7 @@ exports.getPlaylist = async (req, res) => {
       return res.status(404).json({ msg: "Playlist not found" });
     }
 
-    return res.json({ playlist: formatPlaylist(playlist) });
+    return res.json({ playlist: formatPlaylist(playlist, req.user) });
   } catch (error) {
     console.error("Error fetching playlist:", error.message);
     return res.status(500).json({ msg: "Unable to fetch playlist" });
