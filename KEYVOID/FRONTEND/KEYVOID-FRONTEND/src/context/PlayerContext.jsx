@@ -756,6 +756,13 @@ export function PlayerProvider({ children }) {
     }
   };
 
+  const stopPlayback = useCallback(() => {
+    setIsPlaying(false);
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+  }, []);
+
   return (
     <PlayerContext.Provider value={{
       library, localTracks, activeTrack, audioSrc, isPlaying,
@@ -770,7 +777,7 @@ export function PlayerProvider({ children }) {
       handleLocalFileChange, updateUploadedTrack, deleteUploadedTrack, deleteLocalTrack,
       handleTogglePlay, handleSkip, submitTrackTag, removeTrackTag,
       queueTrack, removeQueuedTrack, clearManualQueue,
-      handleSeek, handleTimeUpdate, handleLoadedMetadata, handleTrackEnded, setError
+      handleSeek, handleTimeUpdate, handleLoadedMetadata, handleTrackEnded, stopPlayback, setError
     }}>
       {children}
     </PlayerContext.Provider>

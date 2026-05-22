@@ -2,9 +2,16 @@
   min-height: 100vh;
   position: relative;
   overflow-x: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(ellipse 80% 48% at 18% 0%, rgba(47, 58, 142, 0.1), transparent 62%),
+    radial-gradient(ellipse 60% 38% at 92% 8%, rgba(19, 105, 140, 0.08), transparent 58%),
+    linear-gradient(180deg, #01040d 0%, #050b1b 48%, #01030a 100%);
 }
 
 .page-transition {
+  position: relative;
+  z-index: 2;
   min-height: inherit;
 }
 
@@ -337,6 +344,8 @@
 }
 
 .app-main {
+  position: relative;
+  z-index: 2;
   width: 100%;
   margin: 0 auto;
   padding-bottom: 0;
@@ -359,7 +368,7 @@
   position: sticky;
   top: 0;
   z-index: 40;
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.95), rgba(15, 23, 42, 0.85));
+  background: linear-gradient(180deg, #0f172a, #0b1324);
   border-bottom: 1px solid rgba(71, 85, 105, 0.2);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   backdrop-filter: blur(20px);
@@ -2237,39 +2246,47 @@ html, body, #root {
 .public-profile-page {
   position: relative;
   height: 100%;
-  min-height: 0;
+  min-height: calc(100dvh - 75px);
+  box-sizing: border-box;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 22px 26px 148px;
+  padding: 0 clamp(18px, 2vw, 28px) 96px;
   color: #e7eefc;
   background:
-    linear-gradient(180deg, rgba(3, 8, 24, 0.1), rgba(3, 8, 24, 0.72)),
-    radial-gradient(ellipse 80% 42% at 12% 0%, rgba(90, 104, 255, 0.14), transparent 62%),
-    radial-gradient(ellipse 58% 38% at 90% 8%, rgba(64, 211, 255, 0.1), transparent 60%);
+    linear-gradient(180deg, rgba(1, 4, 13, 0.28), rgba(1, 4, 13, 0.78)),
+    radial-gradient(ellipse 80% 42% at 12% 0%, rgba(90, 104, 255, 0.08), transparent 62%),
+    radial-gradient(ellipse 58% 38% at 90% 8%, rgba(64, 211, 255, 0.06), transparent 60%);
 }
 
 .public-profile-page-own.profile-panel-open .profile-hero-shell {
-  width: calc(100% - 278px);
-  margin-left: 278px;
+  width: calc(100% - 286px);
+  margin-left: 286px;
   margin-right: 0;
 }
 
 .public-profile-page-own.profile-panel-closed .profile-hero-shell {
-  width: calc(100% - 76px);
-  margin-left: 76px;
+  width: calc(100% - 84px);
+  margin-left: 84px;
   margin-right: 0;
 }
 
 .profile-side-panel {
   position: fixed;
-  top: 0;
+  top: 75px;
   bottom: 0;
   left: 0;
   z-index: 30;
   overflow: hidden;
-  border-right: 1px solid rgba(129, 150, 214, 0.22);
-  background: rgba(8, 13, 27, 0.98);
-  transition: width 220ms ease;
+  border: 1px solid rgba(101, 130, 214, 0.18);
+  border-radius: 0 8px 0 0;
+  background:
+    linear-gradient(180deg, #0a1123, #050a18),
+    #08101f;
+  box-shadow:
+    14px 0 40px rgba(0, 0, 0, 0.18),
+    inset 1px 0 0 rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(16px);
+  transition: width 220ms ease, left 220ms ease;
 }
 
 .profile-side-panel--open {
@@ -2293,7 +2310,7 @@ html, body, #root {
 .profile-side-content {
   display: flex;
   flex-direction: column;
-  padding: 72px 8px 8px;
+  padding: 14px 10px 10px;
 }
 
 .profile-side-rail {
@@ -2301,7 +2318,7 @@ html, body, #root {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  padding: 72px 10px 8px;
+  padding: 14px 10px 10px;
 }
 
 .profile-side-header {
@@ -2310,8 +2327,8 @@ html, body, #root {
   justify-content: space-between;
   gap: 12px;
   min-height: 52px;
-  padding: 4px 4px 8px 10px;
-  border-bottom: 1px solid rgba(99, 102, 241, 0.1);
+  padding: 4px 4px 12px 10px;
+  border-bottom: 1px solid rgba(105, 216, 255, 0.09);
 }
 
 .profile-side-header strong {
@@ -2320,14 +2337,64 @@ html, body, #root {
   color: #f8fbff;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.drawer-kicker,
+.drawer-section-label {
+  margin: 0;
+  color: rgba(143, 208, 255, 0.72);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.drawer-section-label {
+  padding: 0 10px 4px;
+  color: rgba(148, 163, 184, 0.58);
+}
+
+.panel-collapse-btn,
+.rail-toggle,
+.rail-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(101, 130, 214, 0.18);
+  border-radius: 8px;
+  background: rgba(10, 18, 38, 0.76);
+  color: rgba(226, 236, 255, 0.86);
+  cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.panel-collapse-btn:hover,
+.rail-toggle:hover,
+.rail-btn:hover,
+.rail-btn.active {
+  transform: translateY(-1px);
+  border-color: rgba(105, 216, 255, 0.34);
+  background: rgba(16, 72, 105, 0.44);
+  color: #9eeaff;
+}
+
+.rail-divider {
+  width: 28px;
+  height: 1px;
+  margin: 4px 0;
+  background: rgba(105, 216, 255, 0.12);
 }
 
 .profile-side-section {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 10px 4px;
-  border-bottom: 1px solid rgba(99, 102, 241, 0.07);
+  padding: 12px 2px;
+  border-bottom: 1px solid rgba(105, 216, 255, 0.07);
 }
 
 .profile-side-link {
@@ -2336,12 +2403,14 @@ html, body, #root {
   gap: 10px;
   width: 100%;
   min-height: 42px;
-  padding: 0 10px;
-  border: 1px solid transparent;
+  padding: 0 12px;
+  border: 1px solid rgba(101, 130, 214, 0);
   border-radius: 8px;
   background: transparent;
   color: #cbd5e1;
-  font-weight: 800;
+  font-size: 0.93rem;
+  font-weight: 650;
+  letter-spacing: 0;
   text-align: left;
   text-decoration: none;
   cursor: pointer;
@@ -2350,8 +2419,10 @@ html, body, #root {
 
 .profile-side-link:hover,
 .profile-side-link.active {
-  border-color: rgba(129, 140, 248, 0.28);
-  background: rgba(99, 102, 241, 0.13);
+  border-color: rgba(105, 216, 255, 0.28);
+  background:
+    linear-gradient(90deg, rgba(31, 80, 120, 0.42), rgba(49, 38, 103, 0.24)),
+    rgba(99, 102, 241, 0.1);
   color: #f8fbff;
 }
 
@@ -2391,16 +2462,18 @@ html, body, #root {
   position: relative;
   display: flex;
   align-items: flex-end;
-  min-height: clamp(250px, 30vh, 340px);
+  min-height: clamp(180px, 22vh, 240px);
   overflow: hidden;
-  border: 1px solid rgba(101, 130, 214, 0.18);
+  border: 1px solid rgba(101, 130, 214, 0.22);
   border-radius: 8px;
   background:
     linear-gradient(135deg, rgba(18, 35, 74, 0.96), rgba(7, 12, 28, 0.98) 55%, rgba(8, 44, 58, 0.9)),
     #071024;
   background-position: center;
   background-size: cover;
-  box-shadow: 0 22px 72px rgba(0, 0, 0, 0.32);
+  box-shadow:
+    0 22px 72px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .artist-hero-shade {
@@ -2419,13 +2492,13 @@ html, body, #root {
   gap: clamp(18px, 3vw, 34px);
   align-items: center;
   width: 100%;
-  padding: clamp(20px, 3vw, 34px);
+  padding: clamp(16px, 2.4vw, 26px);
 }
 
 .artist-hero-avatar {
   display: grid;
   place-items: center;
-  width: clamp(92px, 12vw, 150px);
+  width: clamp(78px, 9vw, 118px);
   aspect-ratio: 1;
   overflow: hidden;
   border: 1px solid rgba(143, 208, 255, 0.3);
@@ -2467,7 +2540,7 @@ html, body, #root {
   margin: 0;
   max-width: min(13ch, 100%);
   color: #f8fbff;
-  font-size: clamp(2.5rem, 7vw, 5.5rem);
+  font-size: clamp(2.2rem, 5.6vw, 4.4rem);
   line-height: 0.95;
   letter-spacing: 0;
 }
@@ -2510,7 +2583,8 @@ html, body, #root {
 
 .profile-command-row {
   justify-content: space-between;
-  padding: 14px 0;
+  padding: 14px 0 16px;
+  border-bottom: 1px solid rgba(101, 130, 214, 0.12);
 }
 
 .profile-mode-tabs,
@@ -2518,7 +2592,7 @@ html, body, #root {
   padding: 6px;
   border: 1px solid rgba(101, 130, 214, 0.16);
   border-radius: 8px;
-  background: rgba(7, 13, 30, 0.74);
+  background: #071024;
 }
 
 .profile-mode-tabs button,
@@ -2633,7 +2707,7 @@ html, body, #root {
 .profile-posts-surface {
   border: 1px solid rgba(101, 130, 214, 0.16);
   border-radius: 8px;
-  background: rgba(7, 13, 30, 0.74);
+  background: #071024;
   backdrop-filter: blur(14px);
 }
 
@@ -2785,12 +2859,16 @@ html, body, #root {
   display: grid;
   gap: 16px;
   min-height: 360px;
+  box-shadow:
+    0 18px 58px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .profile-post-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 14px;
+  align-items: start;
 }
 
 .profile-post-tile {
@@ -2799,14 +2877,22 @@ html, body, #root {
   width: 100%;
   aspect-ratio: 1;
   overflow: hidden;
-  border: 1px solid rgba(101, 130, 214, 0.14);
+  border: 1px solid rgba(101, 130, 214, 0.18);
   border-radius: 8px;
   background:
-    linear-gradient(135deg, rgba(12, 22, 45, 0.94), rgba(7, 13, 28, 0.98));
+    linear-gradient(135deg, #0c162d, #070d1c);
   color: #f8fbff;
   cursor: pointer;
   font: inherit;
   text-decoration: none;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.2);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.profile-post-tile:hover {
+  transform: translateY(-3px);
+  border-color: rgba(105, 216, 255, 0.34);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28), 0 0 28px rgba(105, 216, 255, 0.08);
 }
 
 .profile-post-tile img,
@@ -2825,7 +2911,7 @@ html, body, #root {
   gap: 8px;
   padding: 12px;
   background: linear-gradient(180deg, rgba(3, 7, 18, 0.04), rgba(3, 7, 18, 0.86));
-  opacity: 0;
+  opacity: 1;
   transition: opacity 160ms ease;
 }
 
@@ -2857,7 +2943,7 @@ html, body, #root {
   padding: 28px;
   border: 1px dashed rgba(105, 216, 255, 0.22);
   border-radius: 8px;
-  background: rgba(10, 18, 38, 0.56);
+  background: #08142b;
   color: rgba(190, 207, 238, 0.78);
   text-align: center;
 }
@@ -2884,17 +2970,19 @@ html, body, #root {
   z-index: 90;
   display: grid;
   place-items: center;
-  padding: 18px;
-  background: rgba(2, 6, 18, 0.82);
-  backdrop-filter: blur(12px);
+  padding: clamp(14px, 2vw, 28px);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(105, 216, 255, 0.12), transparent 38%),
+    rgba(2, 6, 18, 0.82);
+  backdrop-filter: blur(14px);
 }
 
 .profile-post-viewer {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  width: min(780px, calc(100vw - 36px));
-  max-height: calc(100vh - 36px);
+  width: min(820px, calc(100vw - 32px));
+  max-height: calc(100dvh - 36px);
   min-height: 0;
 }
 
@@ -2903,10 +2991,13 @@ html, body, #root {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px;
-  border: 1px solid rgba(101, 130, 214, 0.2);
-  border-radius: 12px;
-  background: rgba(8, 13, 27, 0.96);
+  padding: 8px;
+  border: 1px solid rgba(105, 216, 255, 0.18);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(9, 18, 38, 0.96), rgba(13, 17, 39, 0.96)),
+    rgba(8, 13, 27, 0.96);
+  box-shadow: 0 16px 46px rgba(0, 0, 0, 0.28);
 }
 
 .profile-post-viewer-back,
@@ -2916,9 +3007,9 @@ html, body, #root {
   justify-content: center;
   gap: 8px;
   min-height: 38px;
-  border: 1px solid rgba(101, 130, 214, 0.18);
+  border: 1px solid rgba(101, 130, 214, 0.2);
   border-radius: 8px;
-  background: rgba(10, 18, 38, 0.82);
+  background: rgba(10, 18, 38, 0.86);
   color: rgba(226, 236, 255, 0.9);
   font-weight: 800;
   cursor: pointer;
@@ -2954,20 +3045,42 @@ html, body, #root {
 
 .profile-post-viewer-card {
   min-height: 0;
-  max-height: calc(100vh - 116px);
+  max-height: calc(100dvh - 116px);
   overflow-y: auto;
-  padding-right: 4px;
+  padding: 2px 6px 2px 2px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(99, 102, 241, 0.32) transparent;
-  border-radius: 16px;
+  scrollbar-color: rgba(105, 216, 255, 0.36) transparent;
+  border-radius: 8px;
 }
 
 .profile-post-viewer-card .post-card {
   margin-bottom: 0;
+  border-color: rgba(105, 216, 255, 0.2);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, #0a1226, #050a18),
+    #0f172a;
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .profile-post-viewer-card .post-card:hover {
   transform: none;
+}
+
+.profile-post-viewer-card .post-image {
+  max-height: 68vh;
+  object-fit: contain;
+  background: #020617;
+}
+
+.profile-post-viewer-card .post-comments {
+  margin-top: 16px;
+}
+
+.profile-post-viewer-card .comment-body {
+  background: rgba(7, 15, 33, 0.72);
 }
 
 .profile-post-modal {
@@ -3347,7 +3460,7 @@ html, body, #root {
   }
 
   .profile-side-panel {
-    top: 0;
+    top: 75px;
   }
 
   .profile-side-panel--open {
@@ -3386,11 +3499,11 @@ html, body, #root {
 
 @media (max-width: 640px) {
   .public-profile-page {
-    padding: 10px 10px 132px;
+    padding: 0 10px 96px;
   }
 
   .artist-hero {
-    min-height: 360px;
+    min-height: 260px;
   }
 
   .artist-hero-content {

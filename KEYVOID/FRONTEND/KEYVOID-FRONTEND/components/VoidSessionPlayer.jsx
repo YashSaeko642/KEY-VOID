@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
+import { FastForward, LogOut, TimerReset, X } from "lucide-react";
 import { useEnterVoid } from "../src/context/useEnterVoid";
+import { usePlayer } from "../src/context/PlayerContext";
 import "./VoidSessionPlayer.css";
 
 export default function VoidSessionPlayer() {
@@ -18,74 +20,125 @@ export default function VoidSessionPlayer() {
     exitVoid,
     sessionError
   } = useEnterVoid();
+  const { stopPlayback } = usePlayer();
 
   const audioRef = useRef(null);
   const timerRef = useRef(null);
+  const notificationTimeoutRef = useRef(null);
+  const skipTimerRef = useRef(null);
   const [isLoading, setIsLoading] = useState(false);
   const [canSkip, setCanSkip] = useState(false);
   const [skipCountdown, setSkipCountdown] = useState(0);
   const [showNotification, setShowNotification] = useState(false);
-  const notificationTimeoutRef = useRef(null);
 
-  // Show notification when genre is unavailable
+  const handleSessionEnd = useCallback(async () => {
+    if (!session?.id) return;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    await exitVoid(session.id);
+  }, [exitVoid, session?.id]);
+
+  const loadNextTrack = useCallback(async () => {
+    if (!isActive || !session) return;
+
+    setIsLoading(true);
+    setCanSkip(false);
+
+    // Clear any existing skip countdown timer
+    if (skipTimerRef.current) {
+      clearInterval(skipTimerRef.current);
+      skipTimerRef.current = null;
+    }
+
+    try {
+      const track = await getNextTrack(session.id);
+      if (track) {
+        setCurrentTrack(track);
+        const delay = session.skipDelay ?? 30;
+        setSkipCountdown(delay);
+      } else {
+        await handleSessionEnd();
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [getNextTrack, handleSessionEnd, isActive, session, setCurrentTrack]);
+
+  // Stop normal playback when void is active
+  useEffect(() => {
+    if (!isActive) return;
+    stopPlayback();
+  }, [isActive, stopPlayback]);
+
+  // Show session error notifications
   useEffect(() => {
     if (sessionError && sessionError.includes("isn't available")) {
       setShowNotification(true);
-      
-      if (notificationTimeoutRef.current) {
-        clearTimeout(notificationTimeoutRef.current);
-      }
-      
-      notificationTimeoutRef.current = setTimeout(() => {
-        setShowNotification(false);
-      }, 6000);
+      if (notificationTimeoutRef.current) clearTimeout(notificationTimeoutRef.current);
+      notificationTimeoutRef.current = setTimeout(() => setShowNotification(false), 6000);
     }
-
     return () => {
-      if (notificationTimeoutRef.current) {
-        clearTimeout(notificationTimeoutRef.current);
-      }
+      if (notificationTimeoutRef.current) clearTimeout(notificationTimeoutRef.current);
     };
   }, [sessionError]);
 
-  // Timer for session countdown
+  // Session countdown timer
   useEffect(() => {
-    if (!isActive || !session) return;
-
+    if (!isActive || !session) return undefined;
     timerRef.current = setInterval(() => {
-      setTimeRemaining(prev => {
-        const newTime = prev - 1000;
-        if (newTime <= 0) {
+      setTimeRemaining((prev) => {
+        const next = prev - 1000;
+        if (next <= 0) {
           handleSessionEnd();
           return 0;
         }
-        return newTime;
+        return next;
       });
     }, 1000);
-
     return () => clearInterval(timerRef.current);
-  }, [isActive, session]);
+  }, [handleSessionEnd, isActive, session, setTimeRemaining]);
 
-  // Skip cooldown timer
+  // Skip countdown — runs once per track load
   useEffect(() => {
     if (skipCountdown <= 0) {
       setCanSkip(true);
-      return;
+      return undefined;
     }
 
-    const timer = setInterval(() => {
-      setSkipCountdown(prev => Math.max(0, prev - 1));
+    setCanSkip(false);
+
+    // Clear any previous interval before starting a new one
+    if (skipTimerRef.current) {
+      clearInterval(skipTimerRef.current);
+    }
+
+    skipTimerRef.current = setInterval(() => {
+      setSkipCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(skipTimerRef.current);
+          skipTimerRef.current = null;
+          setCanSkip(true);
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
 
-    return () => clearInterval(timer);
+    return () => {
+      if (skipTimerRef.current) {
+        clearInterval(skipTimerRef.current);
+        skipTimerRef.current = null;
+      }
+    };
   }, [skipCountdown]);
 
-  // Load next track when current ends
+  // Auto-advance when track ends
   useEffect(() => {
-    if (!isActive || !session || !currentTrack) return;
-
+    if (!isActive || !session || !currentTrack) return undefined;
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio) return undefined;
 
     const handleEnded = async () => {
       await logTrack(session.id, currentTrack.id, false, currentTrack.duration);
@@ -94,57 +147,29 @@ export default function VoidSessionPlayer() {
 
     audio.addEventListener("ended", handleEnded);
     return () => audio.removeEventListener("ended", handleEnded);
-  }, [isActive, session, currentTrack]);
+  }, [currentTrack, isActive, loadNextTrack, logTrack, session]);
 
-  // Auto-play tracks
+  // Autoplay when track changes
   useEffect(() => {
     if (!isActive || !session || !currentTrack) return;
-
     const audio = audioRef.current;
     if (!audio) return;
-
-    audio.play().catch(err => console.warn("Auto-play failed:", err));
+    audio.play().catch((err) => console.warn("Auto-play failed:", err));
   }, [currentTrack, isActive, session]);
 
-  // Load initial track
+  // Load first track on mount
   useEffect(() => {
     if (!isActive || !session || currentTrack) return;
-
     loadNextTrack();
-  }, [isActive, session]);
-
-  const loadNextTrack = async () => {
-    if (!isActive || !session) return;
-
-    setIsLoading(true);
-    try {
-      const track = await getNextTrack(session.id);
-      if (track) {
-        setCurrentTrack(track);
-        setCanSkip(false);
-        setSkipCountdown(session.skipDelay || 30);
-      } else {
-        handleSessionEnd();
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  }, [currentTrack, isActive, loadNextTrack, session]);
 
   const handleSkip = async () => {
     if (!canSkip || isLoading) return;
-
-    if (currentTrack) {
-      const audio = audioRef.current;
-      const timeListened = audio?.currentTime || 0;
+    if (currentTrack && audioRef.current) {
+      const timeListened = audioRef.current.currentTime || 0;
       await logTrack(session.id, currentTrack.id, true, timeListened);
     }
-
     await loadNextTrack();
-  };
-
-  const handleSessionEnd = async () => {
-    await exitVoid(session.id);
   };
 
   const formatTime = (ms) => {
@@ -154,110 +179,127 @@ export default function VoidSessionPlayer() {
     return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   };
 
-  // Show player only on /music page, OR if there's an active void session (show everywhere when active)
   const isOnMusicPage = location.pathname === "/music";
-  
   if (!session) return null;
   if (!isActive && !isOnMusicPage) return null;
 
   return (
-    <div className="void-session-player">
-      <div className="void-player-backdrop" />
+    <div className="void-root" role="dialog" aria-modal="true" aria-label="Void session player">
+      {/* Atmospheric background layers */}
+      <div className="void-bg" aria-hidden="true" />
+      <div className="void-nebula void-nebula-a" aria-hidden="true" />
+      <div className="void-nebula void-nebula-b" aria-hidden="true" />
+      <div className="void-nebula void-nebula-c" aria-hidden="true" />
 
-      <div className="void-player-container">
-        {/* Header */}
-        <div className="void-player-header">
-          <div className="void-session-info">
-            <div className="void-mode-badge">{session.mode.toUpperCase()}</div>
-            <div className="void-session-stats">
-              <span className="stat">Tracks: {tracksPlayed}</span>
-              <span className="separator">•</span>
-              <span className="stat">Time: {formatTime(timeRemaining)}</span>
-            </div>
+      {/* Stars */}
+      <div className="void-stars" aria-hidden="true">
+        {Array.from({ length: 48 }, (_, i) => (
+          <span
+            key={i}
+            className={`void-star void-star-${(i % 3) + 1}`}
+            style={{
+              left: `${(i * 31 + 7) % 100}%`,
+              top: `${(i * 19 + 5) % 100}%`,
+              animationDelay: `${-(i % 7) * 0.9}s`,
+              animationDuration: `${3.5 + (i % 5) * 0.8}s`
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Panel */}
+      <div className="void-panel">
+        {/* Top bar */}
+        <div className="void-topbar">
+          <div className="void-topbar-left">
+            <span className="void-label-tiny">VOID</span>
+            <span className="void-divider" />
+            <span className="void-mode-tag">{String(session.mode || "void").toUpperCase()}</span>
           </div>
-          <button
-            className="void-exit-btn"
-            onClick={handleSessionEnd}
-            title="Exit the Void"
-          >
-            ⊗
-          </button>
+          <div className="void-topbar-right">
+            <span className="void-stat-pill">{tracksPlayed} played</span>
+            <span className="void-stat-pill void-stat-time">{formatTime(timeRemaining)}</span>
+            <button className="void-close-btn" onClick={handleSessionEnd} aria-label="Exit void">
+              <X size={15} />
+            </button>
+          </div>
         </div>
 
-        {/* Genre Notification */}
+        {/* Notification */}
         {showNotification && sessionError && (
-          <div className="void-notification void-notification-info">
-            <span className="void-notification-icon">ℹ️</span>
-            <span className="void-notification-text">{sessionError}</span>
-          </div>
+          <div className="void-notice">{sessionError}</div>
         )}
 
-        {/* Now Playing */}
-        {currentTrack && (
-          <div className="void-now-playing">
-            <div className="void-album-art">
-              <div className="void-album-placeholder">
-                <span>🎵</span>
+        {/* Main content */}
+        <div className="void-content">
+          {isLoading && !currentTrack ? (
+            <div className="void-loading-state">
+              <div className="void-orb">
+                <div className="void-orb-ring void-orb-ring-1" />
+                <div className="void-orb-ring void-orb-ring-2" />
+                <div className="void-orb-core" />
               </div>
-              <div className="void-pulse" />
+              <p className="void-loading-text">reaching into the void…</p>
             </div>
+          ) : currentTrack ? (
+            <>
+              {/* Orb / album art */}
+              <div className="void-orb-wrap">
+                <div className="void-orb">
+                  <div className="void-orb-ring void-orb-ring-1" />
+                  <div className="void-orb-ring void-orb-ring-2" />
+                  <div className="void-orb-ring void-orb-ring-3" />
+                  <div className="void-orb-core" />
+                </div>
+              </div>
 
-            <div className="void-track-info">
-              <h3 className="void-track-title">{currentTrack.title}</h3>
-              <p className="void-track-artist">{currentTrack.artist}</p>
-              <p className="void-track-genre">{currentTrack.genre}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Loading State */}
-        {isLoading && (
-          <div className="void-loading">
-            <div className="void-spinner" />
-            <p>Finding your next track...</p>
-          </div>
-        )}
-
-        {/* Audio Element */}
-        {currentTrack && (
-          <audio
-            ref={audioRef}
-            src={currentTrack.url}
-            crossOrigin="anonymous"
-          />
-        )}
+              {/* Track info */}
+              <div className="void-track">
+                <p className="void-transmitting">NOW TRANSMITTING</p>
+                <h2 className="void-title">{currentTrack.title}</h2>
+                <p className="void-artist">{currentTrack.artist}</p>
+                <div className="void-tags">
+                  {currentTrack.genre && <span className="void-tag">{currentTrack.genre}</span>}
+                  {session.mode && <span className="void-tag">{session.mode} mode</span>}
+                </div>
+              </div>
+            </>
+          ) : null}
+        </div>
 
         {/* Controls */}
         <div className="void-controls">
           {!canSkip && skipCountdown > 0 ? (
-            <button className="void-skip-btn disabled" disabled>
-              Skip in {skipCountdown}s
+            <button className="void-btn void-btn-skip void-btn-skip--locked" disabled>
+              <TimerReset size={14} />
+              <span>skip in {skipCountdown}s</span>
             </button>
           ) : (
             <button
-              className="void-skip-btn"
+              className="void-btn void-btn-skip"
               onClick={handleSkip}
               disabled={isLoading || !currentTrack}
             >
-              Skip Track
+              <FastForward size={14} />
+              <span>skip</span>
             </button>
           )}
 
-          <button
-            className="void-exit-session-btn"
-            onClick={handleSessionEnd}
-          >
-            Exit Void
+          <button className="void-btn void-btn-exit" onClick={handleSessionEnd}>
+            <LogOut size={14} />
+            <span>exit void</span>
           </button>
         </div>
 
         {/* Footer */}
-        <div className="void-player-footer">
-          <p className="void-footer-text">
-            Time remaining: <strong>{formatTime(timeRemaining)}</strong>
-          </p>
-        </div>
+        <p className="void-footer">
+          {formatTime(timeRemaining)} remaining · normal playback paused
+        </p>
       </div>
+
+      {currentTrack && (
+        <audio ref={audioRef} src={currentTrack.url} crossOrigin="anonymous" />
+      )}
     </div>
   );
 }

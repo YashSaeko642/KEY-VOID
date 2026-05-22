@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { BarChart3, Disc3, Eye, Grid3X3, Heart, Home, Menu, MessageCircle, Music2, Pause, Pencil, Play, Radio, Search, Settings, Sparkles, Trash2, TrendingUp, UserPlus, X } from "lucide-react";
 import API, { followUser, unfollowUser, getFollowStatus, getApiErrorMessage, getUserAudioUploads, getUserPosts, getCreatorInsights, trackPostView } from "../services/api";
@@ -78,25 +79,42 @@ function ProfilePostViewer({ currentPost, onClose, onPostDeleted, onSelectPost, 
   const hasPrevious = currentIndex > 0;
   const hasNext = currentIndex >= 0 && currentIndex < posts.length - 1;
 
-  const goToPost = (direction) => {
+  const goToPost = useCallback((direction) => {
     const nextPost = posts[currentIndex + direction];
     if (nextPost) {
       onSelectPost(nextPost);
     }
-  };
+  }, [currentIndex, onSelectPost, posts]);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") onClose();
+      if (event.key === "ArrowLeft" && hasPrevious) goToPost(-1);
+      if (event.key === "ArrowRight" && hasNext) goToPost(1);
+    };
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [goToPost, hasNext, hasPrevious, onClose]);
 
   return (
-    <div className="profile-post-viewer-backdrop" role="dialog" aria-modal="true" aria-label="Profile post viewer">
-      <div className="profile-post-viewer">
+    <div className="profile-post-viewer-backdrop" role="dialog" aria-modal="true" aria-label="Profile post viewer" onMouseDown={onClose}>
+      <div className="profile-post-viewer" onMouseDown={(event) => event.stopPropagation()}>
         <div className="profile-post-viewer-toolbar">
           <button className="profile-post-viewer-back" type="button" onClick={onClose}>
-            <X size={16} /> Back to profile
+            <X size={16} /> Close
           </button>
           <div className="profile-post-viewer-nav">
             <button type="button" onClick={() => goToPost(-1)} disabled={!hasPrevious} aria-label="Previous post">
               ←
             </button>
-            <span>{currentIndex + 1} / {posts.length}</span>
+            <span>{Math.max(currentIndex + 1, 1)} / {Math.max(posts.length, 1)}</span>
             <button type="button" onClick={() => goToPost(1)} disabled={!hasNext} aria-label="Next post">
               →
             </button>
@@ -106,6 +124,7 @@ function ProfilePostViewer({ currentPost, onClose, onPostDeleted, onSelectPost, 
           <PostCard
             key={currentPost._id}
             post={currentPost}
+            defaultShowComments
             onPostDeleted={(postId) => {
               onPostDeleted(postId);
               onClose();
@@ -469,6 +488,23 @@ export default function PublicProfile({ ownProfile = false }) {
         setReels((current) => current.map(updatePostViews));
       })
       .catch(() => {});
+  };
+
+  const handleDeletePost = (postId) => {
+    const wasPost = posts.some((post) => post._id === postId);
+    const wasReel = reels.some((post) => post._id === postId);
+
+    setPosts((current) => current.filter((post) => post._id !== postId));
+    setReels((current) => current.filter((post) => post._id !== postId));
+    setPostsPagination((current) => ({
+      ...current,
+      total: Math.max(0, (current.total || 0) - (wasPost ? 1 : 0))
+    }));
+    setReelsPagination((current) => ({
+      ...current,
+      total: Math.max(0, (current.total || 0) - (wasReel ? 1 : 0))
+    }));
+    setSelectedPost((current) => (current?._id === postId ? null : current));
   };
 
   const handleEditChange = (event) => {
@@ -844,17 +880,18 @@ export default function PublicProfile({ ownProfile = false }) {
         )}
       </div>
 
-      {selectedPost ? (
+      {selectedPost ? createPortal(
         <ProfilePostViewer
           currentPost={selectedPost}
           posts={selectedActivity}
           onSelectPost={handleOpenPost}
           onPostDeleted={handleDeletePost}
           onClose={() => setSelectedPost(null)}
-        />
+        />,
+        document.body
       ) : null}
 
-      {editOpen ? (
+      {editOpen ? createPortal(
         <div className="profile-modal-backdrop" role="dialog" aria-modal="true" aria-label="Edit profile">
           <form className="profile-edit-modal" onSubmit={handleEditSubmit}>
             <div className="profile-modal-header">
@@ -906,10 +943,11 @@ export default function PublicProfile({ ownProfile = false }) {
               </button>
             </div>
           </form>
-        </div>
+        </div>,
+        document.body
       ) : null}
 
-      {deleteOpen ? (
+      {deleteOpen ? createPortal(
         <div className="profile-modal-backdrop" role="dialog" aria-modal="true" aria-label="Delete account">
           <div className="profile-delete-modal">
             <div className="profile-modal-header">
@@ -930,7 +968,8 @@ export default function PublicProfile({ ownProfile = false }) {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       ) : null}
     </section>
   );

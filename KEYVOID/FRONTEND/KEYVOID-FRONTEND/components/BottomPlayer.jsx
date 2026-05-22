@@ -1,5 +1,6 @@
 import { Disc3, Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import { useLocation } from "react-router-dom";
+import { useEnterVoid } from "../src/context/useEnterVoid";
 import { usePlayer } from "../src/context/PlayerContext";
 import "./BottomPlayer.css";
 
@@ -17,6 +18,7 @@ export default function BottomPlayer() {
     handleTogglePlay, handleSkip, handleSeek,
     handleTimeUpdate, handleLoadedMetadata, handleTrackEnded
   } = usePlayer();
+  const { isActive: isVoidActive } = useEnterVoid();
   const location = useLocation();
   const isMusicPage = location.pathname === "/music";
   const hasTrack = Boolean(activeTrack);
@@ -31,6 +33,8 @@ export default function BottomPlayer() {
       style={{ display: "none" }}
     />
   );
+
+  if (isVoidActive) return audioElement;
 
   if (!isMusicPage && !hasTrack) return audioElement;
 
