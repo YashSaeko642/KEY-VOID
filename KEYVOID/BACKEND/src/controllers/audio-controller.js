@@ -3,11 +3,12 @@ const { getGridFSBucket } = require("../utils/gridfsUtils");
 const mongoose = require("mongoose");
 const path = require("path");
 
-const formatAudienceTags = (tags = []) => {
+const formatAudienceTags = (tags = [], user) => {
   return tags
     .map((item) => ({
       tag: item.tag,
-      count: Array.isArray(item.voters) ? item.voters.length : 0
+      count: Array.isArray(item.voters) ? item.voters.length : 0,
+      hasVoted: Boolean(user && Array.isArray(item.voters) && item.voters.some((voter) => voter.equals?.(user._id) || String(voter) === String(user._id)))
     }))
     .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
 };
@@ -66,11 +67,25 @@ const isUncategorized = (genre) => UNCATEGORIZED_GENRES.has(String(genre || "").
 const getTagVoteCount = (tag) => Array.isArray(tag?.voters) ? tag.voters.length : 0;
 
 const getDominantGenreFromTags = (tags = [], fallback = DEFAULT_GENRE) => {
-  const sortedTags = [...tags]
-    .filter((item) => item?.tag && getTagVoteCount(item) > 0)
-    .sort((a, b) => getTagVoteCount(b) - getTagVoteCount(a) || String(a.tag).localeCompare(String(b.tag)));
+  const fallbackGenre = normalizeGenre(fallback);
+  const scores = new Map();
 
-  return sortedTags[0]?.tag || fallback;
+  if (!isUncategorized(fallbackGenre) && fallbackGenre !== DEFAULT_GENRE) {
+    scores.set(fallbackGenre.toLowerCase(), { tag: fallbackGenre, score: 1.5 });
+  }
+
+  tags
+    .filter((item) => item?.tag && getTagVoteCount(item) > 0)
+    .forEach((item) => {
+      const key = String(item.tag).toLowerCase();
+      const current = scores.get(key) || { tag: item.tag, score: 0 };
+      scores.set(key, { tag: current.tag, score: current.score + getTagVoteCount(item) });
+    });
+
+  const sortedTags = [...scores.values()]
+    .sort((a, b) => b.score - a.score || String(a.tag).localeCompare(String(b.tag)));
+
+  return sortedTags[0]?.tag || fallbackGenre;
 };
 
 const getSearchScore = (track, searchTerm) => {
@@ -103,34 +118,49 @@ const getSearchScore = (track, searchTerm) => {
   return score;
 };
 
+const getObjectIdValue = (value) => value?._id?.toString?.() || value?.toString?.() || "";
+
 const canAccessTrack = (audio, user) => {
-  return Boolean(audio.isPublic || (user && audio.uploadedBy && String(audio.uploadedBy) === String(user._id)));
+  return Boolean(audio.isPublic || (user && audio.uploadedBy && getObjectIdValue(audio.uploadedBy) === String(user._id)));
 };
 
 const canManageTrack = (audio, user) => {
-  return Boolean(user && audio.uploadedBy && String(audio.uploadedBy) === String(user._id));
+  return Boolean(user && audio.uploadedBy && getObjectIdValue(audio.uploadedBy) === String(user._id));
 };
 
-const formatTrack = (track, user) => ({
-  id: track._id.toString(),
-  _id: track._id.toString(),
-  title: track.title,
-  artist: track.artist,
-  genre: track.genre,
-  audienceTags: formatAudienceTags(track.audienceTags),
-  duration: track.duration,
-  url: `/api/audio/stream/${track._id}`,
-  filename: track.filename,
-  fileSize: track.fileSize,
-  mimeType: track.mimeType,
-  releaseType: track.releaseType || "track",
-  source: track.source || "library",
-  isPublic: track.isPublic,
-  uploadedBy: track.uploadedBy?.toString?.() || null,
-  canEdit: canManageTrack(track, user),
-  createdAt: track.createdAt,
-  updatedAt: track.updatedAt
-});
+const formatTrack = (track, user) => {
+  const uploadedBy = getObjectIdValue(track.uploadedBy);
+  const populatedUploader = track.uploadedBy && typeof track.uploadedBy === "object" ? track.uploadedBy : null;
+  const currentUserUploader = user && uploadedBy && uploadedBy === String(user._id) ? user : null;
+  const uploader = populatedUploader || currentUserUploader;
+
+  return {
+    id: track._id.toString(),
+    _id: track._id.toString(),
+    title: track.title,
+    artist: track.artist,
+    genre: track.genre,
+    audienceTags: formatAudienceTags(track.audienceTags, user),
+    duration: track.duration,
+    url: `/api/audio/stream/${track._id}`,
+    filename: track.filename,
+    fileSize: track.fileSize,
+    mimeType: track.mimeType,
+    releaseType: track.releaseType || "track",
+    source: track.source || "library",
+    isPublic: track.isPublic,
+    uploadedBy: uploadedBy || null,
+    uploadedByProfile: uploader ? {
+      id: uploader._id?.toString?.() || "",
+      username: uploader.username || "",
+      avatarUrl: uploader.avatarUrl || "",
+      role: uploader.role || "user"
+    } : null,
+    canEdit: canManageTrack(track, user),
+    createdAt: track.createdAt,
+    updatedAt: track.updatedAt
+  };
+};
 
 exports.getLibrary = async (req, res) => {
   try {
@@ -155,7 +185,10 @@ exports.getLibrary = async (req, res) => {
       });
     }
 
-    const matchedTracks = await Audio.find(query).sort({ createdAt: -1 }).lean();
+    const matchedTracks = await Audio.find(query)
+      .populate("uploadedBy", "username avatarUrl role")
+      .sort({ createdAt: -1 })
+      .lean();
     const rankedTracks = search
       ? matchedTracks
           .map((track) => ({ track, score: getSearchScore(track, search) }))
@@ -325,7 +358,7 @@ exports.getTrackMetadata = async (req, res) => {
       title: audio.title,
       artist: audio.artist,
       genre: audio.genre,
-      audienceTags: formatAudienceTags(audio.audienceTags),
+      audienceTags: formatAudienceTags(audio.audienceTags, req.user),
       duration: audio.duration,
       filename: audio.filename,
       fileSize: audio.fileSize,
@@ -384,7 +417,7 @@ exports.addTrackTag = async (req, res) => {
 
     return res.json({
       genre: audio.genre,
-      audienceTags: formatAudienceTags(audio.audienceTags)
+      audienceTags: formatAudienceTags(audio.audienceTags, req.user)
     });
   } catch (error) {
     console.error("Error adding track tag:", error.message);
@@ -435,7 +468,7 @@ exports.removeTrackTag = async (req, res) => {
 
     return res.json({
       genre: audio.genre,
-      audienceTags: formatAudienceTags(audio.audienceTags)
+      audienceTags: formatAudienceTags(audio.audienceTags, req.user)
     });
   } catch (error) {
     console.error("Error removing track tag:", error.message);
@@ -451,7 +484,12 @@ exports.getMyUploads = async (req, res) => {
 
     const query = { uploadedBy: req.user._id };
     const [tracks, total] = await Promise.all([
-      Audio.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      Audio.find(query)
+        .populate("uploadedBy", "username avatarUrl role")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
       Audio.countDocuments(query)
     ]);
 
@@ -490,7 +528,12 @@ exports.getUserUploads = async (req, res) => {
     }
 
     const [tracks, total] = await Promise.all([
-      Audio.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      Audio.find(query)
+        .populate("uploadedBy", "username avatarUrl role")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
       Audio.countDocuments(query)
     ]);
 

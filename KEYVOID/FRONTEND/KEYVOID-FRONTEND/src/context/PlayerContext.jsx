@@ -5,11 +5,14 @@ import {
   addTrackToPlaylist,
   createPlaylist,
   deleteAudioTrack,
+  deletePlaylist,
   getApiErrorMessage,
   getAudioLibrary,
   getPlaylists,
+  removeAudioTag,
   streamAudioTrack,
   updateAudioTrack,
+  updatePlaylist,
   toggleLikedTrack
 } from "../../services/api";
 import { useAuth } from "./useAuth";
@@ -77,6 +80,10 @@ function saveStoredLocalTrack(track) {
   return runLocalMusicTransaction("readwrite", (store) => store.put(track));
 }
 
+function deleteStoredLocalTrack(trackId) {
+  return runLocalMusicTransaction("readwrite", (store) => store.delete(trackId));
+}
+
 function loadMemoryLocalTracks(ownerKey) {
   return memoryLocalTracks.get(ownerKey) || [];
 }
@@ -85,6 +92,11 @@ function saveMemoryLocalTrack(track) {
   const tracks = loadMemoryLocalTracks(track.ownerKey);
   const nextTracks = [track, ...tracks.filter((item) => getTrackId(item) !== getTrackId(track))];
   memoryLocalTracks.set(track.ownerKey, nextTracks);
+}
+
+function deleteMemoryLocalTrack(ownerKey, trackId) {
+  const tracks = loadMemoryLocalTracks(ownerKey);
+  memoryLocalTracks.set(ownerKey, tracks.filter((item) => getTrackId(item) !== trackId));
 }
 
 function mergeTracks(currentTracks, nextTracks) {
@@ -102,9 +114,17 @@ function getTagVoteCount(tag) {
 }
 
 function getDominantGenre(track, fallback = "Uploads") {
-  const topTag = [...(track?.audienceTags || [])]
-    .filter((tag) => tag?.tag)
-    .sort((a, b) => getTagVoteCount(b) - getTagVoteCount(a) || String(a.tag).localeCompare(String(b.tag)))[0];
+  const scores = new Map();
+  const artistGenre = track?.genre && track.genre !== "Uploads" ? track.genre : fallback;
+  if (artistGenre && artistGenre !== "Uploads") {
+    scores.set(String(artistGenre).toLowerCase(), { tag: artistGenre, score: 1.5 });
+  }
+  (track?.audienceTags || []).filter((tag) => tag?.tag).forEach((tag) => {
+    const key = String(tag.tag).toLowerCase();
+    const current = scores.get(key) || { tag: tag.tag, score: 0 };
+    scores.set(key, { tag: current.tag, score: current.score + Math.max(1, getTagVoteCount(tag)) });
+  });
+  const topTag = [...scores.values()].sort((a, b) => b.score - a.score || String(a.tag).localeCompare(String(b.tag)))[0];
   return topTag?.tag || track?.genre || fallback;
 }
 
@@ -155,6 +175,9 @@ export function PlayerProvider({ children }) {
   const [playlists, setPlaylists] = useState([]);
   const [isPlaylistLoading, setIsPlaylistLoading] = useState(false);
   const [isUploadingTracks, setIsUploadingTracks] = useState(false);
+  const [playbackQueue, setPlaybackQueue] = useState([]);
+  const [playbackQueueName, setPlaybackQueueName] = useState("Music library");
+  const [manualQueue, setManualQueue] = useState([]);
   const audioRef = useRef(null);
   const audioObjectUrlRef = useRef("");
   const libraryCacheRef = useRef(new Map());
@@ -281,6 +304,40 @@ export function PlayerProvider({ children }) {
     }
   };
 
+  const deleteUserPlaylist = async (playlistId) => {
+    try {
+      await deletePlaylist(playlistId);
+      setPlaylists((prev) => prev.filter((playlist) => getTrackId(playlist) !== playlistId));
+      if (playbackQueueName && playlists.find((playlist) => getTrackId(playlist) === playlistId)?.name === playbackQueueName) {
+        setPlaybackQueue([]);
+        setPlaybackQueueName("Music library");
+      }
+      setError(null);
+      return true;
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Unable to delete playlist."));
+      return false;
+    }
+  };
+
+  const updateUserPlaylist = async ({ playlistId, name, description = "", cover }) => {
+    const formData = new FormData();
+    formData.append("playlistId", playlistId);
+    formData.append("name", name);
+    formData.append("description", description);
+    if (cover) formData.append("cover", cover);
+
+    try {
+      await updatePlaylist(formData);
+      await loadPlaylists();
+      setError(null);
+      return true;
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Unable to update playlist."));
+      return false;
+    }
+  };
+
   const toggleTrackLike = async (trackId) => {
     try {
       const response = await toggleLikedTrack(trackId);
@@ -376,16 +433,37 @@ export function PlayerProvider({ children }) {
   }, [library, localTracks, searchQuery]);
 
   const trackList = useMemo(() => [...localTracks, ...library], [library, localTracks]);
+  const effectiveQueue = useMemo(() => playbackQueue.length ? playbackQueue : trackList, [playbackQueue, trackList]);
 
   const activeIndex = useMemo(() => {
-    return trackList.findIndex((track) => {
+    return effectiveQueue.findIndex((track) => {
       const trackId = track?._id || track?.id || track?.url || "";
       const activeId = activeTrack?._id || activeTrack?.id || activeTrack?.url || "";
       return trackId === activeId;
     });
-  }, [trackList, activeTrack]);
+  }, [effectiveQueue, activeTrack]);
 
-  const handleSelectTrack = (track) => {
+  const genreFallbackQueue = useMemo(() => {
+    const genre = String(activeTrack?.genre || "").toLowerCase();
+    if (!genre) return [];
+    const activeId = getTrackId(activeTrack);
+    return trackList.filter((track) => getTrackId(track) !== activeId && String(track.genre || "").toLowerCase() === genre);
+  }, [activeTrack, trackList]);
+
+  const setQueueSource = (tracks = [], name = "Music library") => {
+    const nextTracks = mergeTracks(tracks, []);
+    if (nextTracks.length > 0) {
+      setPlaybackQueue(nextTracks);
+      setPlaybackQueueName(name);
+    }
+  };
+
+  const handleSelectTrack = (track, queueOptions = {}) => {
+    if (queueOptions.tracks?.length) {
+      setQueueSource(queueOptions.tracks, queueOptions.name);
+    } else if (!effectiveQueue.some((item) => getTrackId(item) === getTrackId(track))) {
+      setQueueSource(trackList, "Music library");
+    }
     setActiveTrack(track);
     setIsPlaying(true);
     setPosition(0);
@@ -400,10 +478,41 @@ export function PlayerProvider({ children }) {
     setIsPlaying((prev) => !prev);
   };
 
+  const queueTrack = (track) => {
+    if (!track) return;
+    setManualQueue((prev) => [...prev, track]);
+    setError(null);
+  };
+
+  const removeQueuedTrack = (index) => {
+    setManualQueue((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
+  };
+
+  const clearManualQueue = () => setManualQueue([]);
+
   const handleSkip = (direction) => {
+    if (direction > 0 && manualQueue.length > 0) {
+      const [nextTrack, ...remainingQueue] = manualQueue;
+      setManualQueue(remainingQueue);
+      handleSelectTrack(nextTrack);
+      return;
+    }
+
     if (activeIndex === -1) return;
-    const next = trackList[activeIndex + direction];
-    if (next) handleSelectTrack(next);
+    const next = effectiveQueue[activeIndex + direction];
+    if (next) {
+      handleSelectTrack(next);
+      return;
+    }
+
+    if (direction > 0 && genreFallbackQueue.length > 0) {
+      setQueueSource(genreFallbackQueue, `${activeTrack?.genre || "Similar"} radio`);
+      handleSelectTrack(genreFallbackQueue[0], { tracks: genreFallbackQueue, name: `${activeTrack?.genre || "Similar"} radio` });
+    }
+  };
+
+  const handleTrackEnded = () => {
+    handleSkip(1);
   };
 
   const submitTrackTag = async (tag) => {
@@ -429,6 +538,8 @@ export function PlayerProvider({ children }) {
         saveMemoryLocalTrack(nextTrack);
         try { await saveStoredLocalTrack(nextTrack); } catch { /* memory fallback */ }
         setLocalTracks((prev) => prev.map((t) => getTrackId(t) === getTrackId(nextTrack) ? nextTrack : t));
+        setPlaybackQueue((prev) => prev.map((t) => getTrackId(t) === getTrackId(nextTrack) ? nextTrack : t));
+        setManualQueue((prev) => prev.map((t) => getTrackId(t) === getTrackId(nextTrack) ? nextTrack : t));
         // BUG 1 FIX: setActiveTrack with same ID — the effect above will skip audio reload
         setActiveTrack(nextTrack);
         setError(null);
@@ -448,6 +559,8 @@ export function PlayerProvider({ children }) {
             ? { ...track, audienceTags, genre } : track
         )
       );
+      setPlaybackQueue((prev) => prev.map((track) => getTrackId(track) === getTrackId(activeTrack) ? { ...track, audienceTags, genre } : track));
+      setManualQueue((prev) => prev.map((track) => getTrackId(track) === getTrackId(activeTrack) ? { ...track, audienceTags, genre } : track));
       libraryCacheRef.current.clear();
       // BUG 1 FIX: same ID update — audio effect will detect same ID and skip reload
       setActiveTrack((prev) =>
@@ -457,6 +570,62 @@ export function PlayerProvider({ children }) {
       setError(null);
     } catch (err) {
       setError(getApiErrorMessage(err, "Unable to add tag."));
+    }
+  };
+
+  const removeTrackTag = async (tag) => {
+    if (!activeTrack) {
+      setError("Pick a track before removing a tag.");
+      return;
+    }
+
+    if (activeTrack.source === "local") {
+      const currentTags = activeTrack.audienceTags || [];
+      const nextTags = currentTags
+        .map((item) => String(item.tag).toLowerCase() === String(tag).toLowerCase()
+          ? { ...item, count: Math.max(0, getTagVoteCount(item) - 1) }
+          : item)
+        .filter((item) => getTagVoteCount(item) > 0);
+      const nextTrack = {
+        ...activeTrack,
+        audienceTags: nextTags,
+        genre: getDominantGenre({ ...activeTrack, audienceTags: nextTags }, "Uploads")
+      };
+
+      try {
+        saveMemoryLocalTrack(nextTrack);
+        try { await saveStoredLocalTrack(nextTrack); } catch { /* memory fallback */ }
+        setLocalTracks((prev) => prev.map((t) => getTrackId(t) === getTrackId(nextTrack) ? nextTrack : t));
+        setPlaybackQueue((prev) => prev.map((t) => getTrackId(t) === getTrackId(nextTrack) ? nextTrack : t));
+        setManualQueue((prev) => prev.map((t) => getTrackId(t) === getTrackId(nextTrack) ? nextTrack : t));
+        setActiveTrack(nextTrack);
+        setError(null);
+      } catch {
+        setError("Unable to remove the local track tag.");
+      }
+      return;
+    }
+
+    try {
+      const response = await removeAudioTag(activeTrack.id || activeTrack._id, tag);
+      const audienceTags = response.data.audienceTags || [];
+      const genre = response.data.genre || activeTrack.genre;
+      setLibrary((prev) =>
+        prev.map((track) =>
+          getTrackId(track) === getTrackId(activeTrack)
+            ? { ...track, audienceTags, genre } : track
+        )
+      );
+      setPlaybackQueue((prev) => prev.map((track) => getTrackId(track) === getTrackId(activeTrack) ? { ...track, audienceTags, genre } : track));
+      setManualQueue((prev) => prev.map((track) => getTrackId(track) === getTrackId(activeTrack) ? { ...track, audienceTags, genre } : track));
+      libraryCacheRef.current.clear();
+      setActiveTrack((prev) =>
+        prev && getTrackId(prev) === getTrackId(activeTrack)
+          ? { ...prev, audienceTags, genre } : prev
+      );
+      setError(null);
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Unable to remove tag."));
     }
   };
 
@@ -543,6 +712,8 @@ export function PlayerProvider({ children }) {
     try {
       await deleteAudioTrack(trackId);
       setLibrary((prev) => prev.filter((t) => getTrackId(t) !== trackId));
+      setPlaybackQueue((prev) => prev.filter((t) => getTrackId(t) !== trackId));
+      setManualQueue((prev) => prev.filter((t) => getTrackId(t) !== trackId));
       setPlaylists((prev) => prev.map((pl) => ({
         ...pl,
         tracks: (pl.tracks || []).filter((t) => getTrackId(t) !== trackId),
@@ -562,18 +733,51 @@ export function PlayerProvider({ children }) {
     }
   };
 
+  const deleteLocalTrack = async (trackId) => {
+    const targetTrack = localTracks.find((track) => getTrackId(track) === trackId);
+    if (!targetTrack) return false;
+
+    try {
+      deleteMemoryLocalTrack(ownerKey, trackId);
+      try { await deleteStoredLocalTrack(trackId); } catch { /* memory fallback */ }
+      setLocalTracks((prev) => prev.filter((track) => getTrackId(track) !== trackId));
+      setPlaybackQueue((prev) => prev.filter((track) => getTrackId(track) !== trackId));
+      setManualQueue((prev) => prev.filter((track) => getTrackId(track) !== trackId));
+      if (getTrackId(activeTrack) === trackId) {
+        setActiveTrack(null);
+        setIsPlaying(false);
+        loadedTrackIdRef.current = "";
+      }
+      setError(null);
+      return true;
+    } catch {
+      setError("Unable to remove this local song.");
+      return false;
+    }
+  };
+
+  const stopPlayback = useCallback(() => {
+    setIsPlaying(false);
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+  }, []);
+
   return (
     <PlayerContext.Provider value={{
       library, localTracks, activeTrack, audioSrc, isPlaying,
       searchQuery, error, position, duration, audioRef,
       filteredLibrary, pagination, isLibraryLoading,
+      playbackQueue: effectiveQueue, playbackQueueName, manualQueue,
       playlists, isPlaylistLoading, isUploadingTracks,
       handleSelectTrack, setSearchQuery, refreshLibrary,
       handleLoadNextPage, handlePageChange, loadPlaylists,
-      createUserPlaylist, addTrackToUserPlaylist, toggleTrackLike,
-      handleLocalFileChange, updateUploadedTrack, deleteUploadedTrack,
-      handleTogglePlay, handleSkip, submitTrackTag,
-      handleSeek, handleTimeUpdate, handleLoadedMetadata, setError
+      createUserPlaylist, updateUserPlaylist, addTrackToUserPlaylist, toggleTrackLike,
+      deleteUserPlaylist,
+      handleLocalFileChange, updateUploadedTrack, deleteUploadedTrack, deleteLocalTrack,
+      handleTogglePlay, handleSkip, submitTrackTag, removeTrackTag,
+      queueTrack, removeQueuedTrack, clearManualQueue,
+      handleSeek, handleTimeUpdate, handleLoadedMetadata, handleTrackEnded, stopPlayback, setError
     }}>
       {children}
     </PlayerContext.Provider>

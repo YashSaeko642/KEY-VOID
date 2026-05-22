@@ -51,7 +51,7 @@ function renderSlashTags(text = "", onTagClick) {
   });
 }
 
-function PostCard({ post, onPostDeleted, onTagClick }) {
+function PostCard({ post, onPostDeleted, onTagClick, defaultShowComments = false }) {
   const { user, isAuthenticated } = useAuth();
   const [currentPost, setCurrentPost] = useState(post);
   const activePost = currentPost || post;
@@ -75,7 +75,7 @@ function PostCard({ post, onPostDeleted, onTagClick }) {
   const [comments, setComments] = useState(
     (post.comments || []).filter((comment) => !comment.isDeleted)
   );
-  const [showComments, setShowComments] = useState(false);
+  const [showComments, setShowComments] = useState(defaultShowComments);
   const [commentText, setCommentText] = useState("");
   const [isCommenting, setIsCommenting] = useState(false);
   const [commentError, setCommentError] = useState("");
@@ -102,6 +102,10 @@ function PostCard({ post, onPostDeleted, onTagClick }) {
   useEffect(() => {
     setCurrentPost(post);
   }, [post]);
+
+  useEffect(() => {
+    setShowComments(defaultShowComments);
+  }, [defaultShowComments, post?._id]);
 
   // SET INITIAL LIKE STATE
   useEffect(() => {

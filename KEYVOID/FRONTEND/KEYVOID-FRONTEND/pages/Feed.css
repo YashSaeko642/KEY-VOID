@@ -25,7 +25,10 @@
   --feed-panel-collapsed-width: 64px;
   --feed-right-panel-width: 258px;
   --feed-right-collapsed-width: 64px;
-  background: linear-gradient(180deg, #020617 0%, #0f172a 52%, #020617 100%);
+  background:
+    radial-gradient(ellipse 70% 44% at 20% 0%, rgba(80, 92, 210, 0.12), transparent 62%),
+    radial-gradient(ellipse 48% 34% at 82% 10%, rgba(45, 212, 191, 0.08), transparent 58%),
+    linear-gradient(180deg, rgba(2, 6, 23, 0.52) 0%, rgba(15, 23, 42, 0.42) 52%, rgba(2, 6, 23, 0.5) 100%);
 }
 
 .drawer-backdrop { display: none; }
@@ -38,7 +41,7 @@
   z-index: 50;
   display: flex;
   overflow: hidden;
-  background: rgba(8, 13, 27, 0.98);
+  background: #080d1b;
   transition: width 220ms ease;
 }
 
@@ -93,7 +96,7 @@
   min-height: 42px;
   border: 1px solid rgba(129, 150, 214, 0.16);
   border-radius: 8px;
-  background: rgba(15, 23, 42, 0.58);
+  background: #0f172a;
   color: #7dd3fc;
   cursor: pointer;
   transition: background 150ms, border-color 150ms, color 150ms;

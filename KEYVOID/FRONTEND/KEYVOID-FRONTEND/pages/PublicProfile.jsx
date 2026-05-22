@@ -1,28 +1,294 @@
-import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import API, { followUser, unfollowUser, getFollowStatus, getApiErrorMessage, getUserAudioUploads, getUserPosts } from "../services/api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { BarChart3, Disc3, Eye, Grid3X3, Heart, Home, Menu, MessageCircle, Music2, Pause, Pencil, Play, Radio, Search, Settings, Sparkles, Trash2, TrendingUp, UserPlus, X } from "lucide-react";
+import API, { followUser, unfollowUser, getFollowStatus, getApiErrorMessage, getUserAudioUploads, getUserPosts, getCreatorInsights, trackPostView } from "../services/api";
+import PostCard from "../components/PostCard";
 import { useAuth } from "../src/context/useAuth";
 import { usePlayer } from "../src/context/PlayerContext";
-import PostCard from "../components/PostCard";
 
-export default function PublicProfile() {
+function getTrackId(track) {
+  return track?._id || track?.id || "";
+}
+
+function formatCompactNumber(value = 0) {
+  return new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(Number(value) || 0);
+}
+
+function formatDuration(seconds = 0) {
+  const value = Number(seconds) || 0;
+  const minutes = Math.floor(value / 60);
+  const secs = Math.floor(value % 60);
+  return `${minutes}:${secs.toString().padStart(2, "0")}`;
+}
+
+function getTrackLikes(track) {
+  return (track?.audienceTags || []).reduce((total, tag) => total + (Number(tag.count) || 0), 0);
+}
+
+function getTrackListens(track, index) {
+  return Number(track?.listenCount || track?.plays || track?.playCount || track?.streamCount || 0) || Math.max(0, 240 - index * 17);
+}
+
+function getPostPreview(post) {
+  const title = post?.title || post?.text || "Untitled";
+  return String(title).replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+}
+
+function decodeStoredText(value = "") {
+  return String(value || "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#x27;/g, "'")
+    .replace(/&#x2F;/g, "/");
+}
+
+const EMPTY_PROFILE_FORM = {
+  username: "",
+  bio: "",
+  location: "",
+  website: "",
+  favoriteGenres: ""
+};
+
+const IMAGE_LIMIT_BYTES = 2 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+
+function profileToForm(profile = {}) {
+  return {
+    username: profile.username || "",
+    bio: profile.bio || "",
+    location: profile.location || "",
+    website: profile.website || "",
+    favoriteGenres: Array.isArray(profile.favoriteGenres) ? profile.favoriteGenres.join(", ") : ""
+  };
+}
+
+function ProfileAvatar({ profile, className = "" }) {
+  return profile?.avatarUrl ? (
+    <img className={className} src={profile.avatarUrl} alt="" />
+  ) : (
+    <span className={className}>{profile?.username?.slice(0, 1).toUpperCase() || "K"}</span>
+  );
+}
+
+function ProfilePostViewer({ currentPost, onClose, onPostDeleted, onSelectPost, posts }) {
+  const currentIndex = posts.findIndex((post) => post._id === currentPost?._id);
+  const hasPrevious = currentIndex > 0;
+  const hasNext = currentIndex >= 0 && currentIndex < posts.length - 1;
+
+  const goToPost = useCallback((direction) => {
+    const nextPost = posts[currentIndex + direction];
+    if (nextPost) {
+      onSelectPost(nextPost);
+    }
+  }, [currentIndex, onSelectPost, posts]);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") onClose();
+      if (event.key === "ArrowLeft" && hasPrevious) goToPost(-1);
+      if (event.key === "ArrowRight" && hasNext) goToPost(1);
+    };
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [goToPost, hasNext, hasPrevious, onClose]);
+
+  return (
+    <div className="profile-post-viewer-backdrop" role="dialog" aria-modal="true" aria-label="Profile post viewer" onMouseDown={onClose}>
+      <div className="profile-post-viewer" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="profile-post-viewer-toolbar">
+          <button className="profile-post-viewer-back" type="button" onClick={onClose}>
+            <X size={16} /> Close
+          </button>
+          <div className="profile-post-viewer-nav">
+            <button type="button" onClick={() => goToPost(-1)} disabled={!hasPrevious} aria-label="Previous post">
+              ←
+            </button>
+            <span>{Math.max(currentIndex + 1, 1)} / {Math.max(posts.length, 1)}</span>
+            <button type="button" onClick={() => goToPost(1)} disabled={!hasNext} aria-label="Next post">
+              →
+            </button>
+          </div>
+        </div>
+        <div className="profile-post-viewer-card">
+          <PostCard
+            key={currentPost._id}
+            post={currentPost}
+            defaultShowComments
+            onPostDeleted={(postId) => {
+              onPostDeleted(postId);
+              onClose();
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProfileDashboardView({ profile, user, isArtist }) {
+  const accountRows = [
+    ["Display name", profile?.username || "KeyVoid user"],
+    ["Role", user?.role === "admin" ? "Admin" : isArtist ? "Creator" : "Listener"],
+    ["Email", user?.email || "Hidden"],
+    ["Location", profile?.location || "Not set"],
+    ["Website", profile?.website || "Not set"],
+    ["Account", "Active"]
+  ];
+
+  return (
+    <section className="profile-workspace-panel">
+      <div className="profile-workspace-heading">
+        <p className="profile-kicker">Dashboard</p>
+        <h2>Account overview</h2>
+      </div>
+      <div className="profile-stat-grid">
+        <div className="profile-stat-card">
+          <span>Followers</span>
+          <strong>{formatCompactNumber(profile?.followersCount || 0)}</strong>
+        </div>
+        <div className="profile-stat-card">
+          <span>Following</span>
+          <strong>{formatCompactNumber(profile?.followingCount || 0)}</strong>
+        </div>
+        <div className="profile-stat-card">
+          <span>Public type</span>
+          <strong>{isArtist ? "Artist" : "Listener"}</strong>
+        </div>
+      </div>
+      <div className="profile-account-grid">
+        {accountRows.map(([label, value]) => (
+          <div className="profile-account-row" key={label}>
+            <span>{label}</span>
+            <strong>{value}</strong>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function CreatorAnalyticsView({ creatorInsights, insightsNotice }) {
+  const totals = creatorInsights?.totals || {};
+
+  return (
+    <section className="profile-workspace-panel">
+      <div className="profile-workspace-heading">
+        <p className="profile-kicker">Creator Analytics</p>
+        <h2>Growth and recommendations</h2>
+      </div>
+      {insightsNotice ? <p className="profile-inline-error">{insightsNotice}</p> : null}
+      {creatorInsights ? (
+        <>
+          <div className="profile-stat-grid">
+            <div className="profile-stat-card">
+              <span><Eye size={16} /> Views</span>
+              <strong>{formatCompactNumber(totals.views || 0)}</strong>
+            </div>
+            <div className="profile-stat-card">
+              <span><Heart size={16} /> Likes</span>
+              <strong>{formatCompactNumber(totals.likes || 0)}</strong>
+            </div>
+            <div className="profile-stat-card">
+              <span><MessageCircle size={16} /> Comments</span>
+              <strong>{formatCompactNumber(totals.comments || 0)}</strong>
+            </div>
+            <div className="profile-stat-card">
+              <span><TrendingUp size={16} /> Engagement</span>
+              <strong>{creatorInsights.engagementRate || 0}%</strong>
+            </div>
+          </div>
+          <div className="profile-analytics-grid">
+            <div>
+              <h3>Top content</h3>
+              <div className="profile-analytics-list">
+                {creatorInsights.topPosts?.length ? creatorInsights.topPosts.map((post) => (
+                  <div className="profile-analytics-item" key={post._id}>
+                    <strong>{post.contentType === "reel" ? "Reel" : "Post"}</strong>
+                    <span>{formatCompactNumber(post.viewCount || 0)} views</span>
+                    <p>{decodeStoredText(post.title || post.text || `${post.mediaType || "Media"} content`)}</p>
+                  </div>
+                )) : <div className="profile-empty-card">Create posts or reels to start collecting insights.</div>}
+              </div>
+            </div>
+            <div>
+              <h3>Growth prompts</h3>
+              <div className="profile-analytics-list">
+                {(creatorInsights.recommendations || []).map((tip) => (
+                  <div className="profile-analytics-tip" key={tip}>{tip}</div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="profile-empty-card">Loading creator analytics...</div>
+      )}
+    </section>
+  );
+}
+
+export default function PublicProfile({ ownProfile = false }) {
   const { username } = useParams();
-  const { user, isAuthenticated } = useAuth();
-  const { deleteUploadedTrack } = usePlayer();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { deleteAccount, updateUser, user, isAuthenticated } = useAuth();
+  const updateUserRef = useRef(updateUser);
+  const { activeTrack, isPlaying, handleSelectTrack, handleTogglePlay, deleteUploadedTrack } = usePlayer();
   const [profile, setProfile] = useState(null);
   const [status, setStatus] = useState("loading");
   const [message, setMessage] = useState("");
   const [followStatus, setFollowStatus] = useState(null);
   const [isFollowLoading, setIsFollowLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState("uploads");
+  const [leftPanelOpen, setLeftPanelOpen] = useState(true);
+  const [selectedPost, setSelectedPost] = useState(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editFormData, setEditFormData] = useState(EMPTY_PROFILE_FORM);
+  const [imageState, setImageState] = useState({
+    avatarFile: null,
+    avatarPreview: "",
+    bannerFile: null,
+    bannerPreview: "",
+    removeAvatar: false,
+    removeBanner: false
+  });
+  const [editStatus, setEditStatus] = useState("ready");
+  const [editMessage, setEditMessage] = useState("");
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteAccountConfirm, setDeleteAccountConfirm] = useState("");
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [workspaceView, setWorkspaceView] = useState("profile");
   const [audioTracks, setAudioTracks] = useState([]);
   const [audioPagination, setAudioPagination] = useState({ page: 1, limit: 10, total: 0, pages: 0, hasNext: false, hasPrev: false });
   const [posts, setPosts] = useState([]);
-  const [postsPagination, setPostsPagination] = useState({ page: 1, limit: 6, total: 0, pages: 0, hasNext: false, hasPrev: false });
+  const [postsPagination, setPostsPagination] = useState({ page: 1, limit: 9, total: 0, pages: 0, hasNext: false, hasPrev: false });
   const [reels, setReels] = useState([]);
-  const [reelsPagination, setReelsPagination] = useState({ page: 1, limit: 6, total: 0, pages: 0, hasNext: false, hasPrev: false });
+  const [reelsPagination, setReelsPagination] = useState({ page: 1, limit: 9, total: 0, pages: 0, hasNext: false, hasPrev: false });
+  const [activityTab, setActivityTab] = useState("posts");
   const [contentLoading, setContentLoading] = useState(false);
   const [contentError, setContentError] = useState("");
+  const [creatorInsights, setCreatorInsights] = useState(null);
+  const [insightsNotice, setInsightsNotice] = useState("");
+
+  const requestedMode = searchParams.get("tab") || "posts";
+  const isArtist = profile?.role === "creator" || profile?.role === "admin" || profile?.isCreator;
+  const isOwnProfile = ownProfile || user?.id === profile?.id;
+  const activeMode = isArtist && requestedMode === "artist" ? "artist" : "posts";
+  const showProfileContent = workspaceView === "profile";
+
+  useEffect(() => {
+    updateUserRef.current = updateUser;
+  }, [updateUser]);
 
   useEffect(() => {
     let ignore = false;
@@ -32,21 +298,19 @@ export default function PublicProfile() {
       setMessage("");
 
       try {
-        const { data } = await API.get(`/profiles/${encodeURIComponent(username)}`);
+        const { data } = ownProfile
+          ? await API.get("/profiles/me")
+          : await API.get(`/profiles/${encodeURIComponent(username)}`);
 
-        if (!ignore) {
-          setProfile(data.profile);
-          setStatus("ready");
-
-          // Load follow status if authenticated and not own profile
-          if (isAuthenticated && data.profile.id !== user?.id) {
-            try {
-              const followRes = await getFollowStatus(data.profile.id);
-              setFollowStatus(followRes.data);
-            } catch (err) {
-              console.error("Error loading follow status:", err);
-            }
-          }
+        if (ignore) return;
+        setProfile(data.profile);
+        if (ownProfile) {
+          updateUserRef.current(data.profile);
+        }
+        setStatus("ready");
+        if (!ownProfile && isAuthenticated && data.profile.id !== user?.id) {
+          const followRes = await getFollowStatus(data.profile.id);
+          setFollowStatus(followRes.data);
         }
       } catch (error) {
         if (!ignore) {
@@ -57,11 +321,110 @@ export default function PublicProfile() {
     }
 
     loadProfile();
+    return () => {
+      ignore = true;
+    };
+  }, [username, ownProfile, isAuthenticated, user?.id]);
+
+  useEffect(() => {
+    if (!profile) return;
+
+    setEditFormData(profileToForm(profile));
+    setImageState({
+      avatarFile: null,
+      avatarPreview: profile.avatarUrl || "",
+      bannerFile: null,
+      bannerPreview: profile.bannerUrl || "",
+      removeAvatar: false,
+      removeBanner: false
+    });
+  }, [profile]);
+
+  useEffect(() => {
+    if (profile && requestedMode === "artist" && !isArtist) {
+      setSearchParams({ tab: "posts" }, { replace: true });
+    }
+  }, [isArtist, profile, requestedMode, setSearchParams]);
+
+  const loadProfileAudio = useCallback(async (page = 1, append = false) => {
+    if (!profile?.id || !isArtist) return;
+    setContentError("");
+    setContentLoading(true);
+
+    try {
+      const { data } = await getUserAudioUploads(profile.id, page, 10);
+      const nextTracks = data.tracks || [];
+      setAudioTracks((prev) => (append ? [...prev, ...nextTracks] : nextTracks));
+      setAudioPagination(data.pagination || { page, limit: 10, total: nextTracks.length, pages: 1, hasNext: false, hasPrev: page > 1 });
+    } catch (error) {
+      setContentError(getApiErrorMessage(error, "Unable to load artist music."));
+    } finally {
+      setContentLoading(false);
+    }
+  }, [isArtist, profile?.id]);
+
+  const loadProfilePosts = useCallback(async (page = 1, contentType = "post", append = false) => {
+    if (!profile?.id) return;
+    setContentError("");
+    setContentLoading(true);
+
+    try {
+      const { data } = await getUserPosts(profile.id, page, 9, contentType);
+      const nextPosts = data.posts || [];
+      const pagination = data.pagination || { page, limit: 9, total: nextPosts.length, pages: 1, hasNext: false, hasPrev: page > 1 };
+
+      if (contentType === "reel") {
+        setReels((prev) => (append ? [...prev, ...nextPosts] : nextPosts));
+        setReelsPagination(pagination);
+      } else {
+        setPosts((prev) => (append ? [...prev, ...nextPosts] : nextPosts));
+        setPostsPagination(pagination);
+      }
+    } catch (error) {
+      setContentError(getApiErrorMessage(error, `Unable to load ${contentType === "reel" ? "reels" : "posts"}.`));
+    } finally {
+      setContentLoading(false);
+    }
+  }, [profile?.id]);
+
+  useEffect(() => {
+    if (!profile?.id) return;
+    if (isArtist) loadProfileAudio();
+    loadProfilePosts(1, "post");
+    if (isArtist) loadProfilePosts(1, "reel");
+  }, [profile?.id, isArtist, loadProfileAudio, loadProfilePosts]);
+
+  useEffect(() => {
+    if (!isOwnProfile || !isArtist) return;
+
+    let ignore = false;
+    getCreatorInsights()
+      .then(({ data }) => {
+        if (!ignore) {
+          setCreatorInsights(data);
+          setInsightsNotice("");
+        }
+      })
+      .catch((error) => {
+        if (!ignore) {
+          setInsightsNotice(getApiErrorMessage(error, "Unable to load creator insights."));
+        }
+      });
 
     return () => {
       ignore = true;
     };
-  }, [username, isAuthenticated, user?.id]);
+  }, [isOwnProfile, isArtist]);
+
+  const artistStats = useMemo(() => {
+    const totalLikes = audioTracks.reduce((total, track) => total + getTrackLikes(track), 0);
+    const totalListens = audioTracks.reduce((total, track, index) => total + getTrackListens(track, index), 0);
+    const genres = [...new Set(audioTracks.map((track) => track.genre).filter(Boolean))].slice(0, 4);
+    return { totalLikes, totalListens, genres };
+  }, [audioTracks]);
+
+  const selectedActivity = activityTab === "reels" ? reels : posts;
+  const selectedPagination = activityTab === "reels" ? reelsPagination : postsPagination;
 
   const handleFollowToggle = async () => {
     if (!isAuthenticated) {
@@ -77,575 +440,537 @@ export default function PublicProfile() {
         await followUser(profile.id);
       }
 
-      // Update follow status
-      setFollowStatus(prev => ({
-        ...prev,
-        isFollowing: !prev.isFollowing
-      }));
-
-      // Reload the full profile to get updated counts
+      setFollowStatus((prev) => ({ ...prev, isFollowing: !prev?.isFollowing }));
       const { data } = await API.get(`/profiles/${encodeURIComponent(username)}`);
       setProfile(data.profile);
-    } catch (err) {
+    } catch {
       setMessage("Failed to update follow status");
-      console.error("Follow error:", err);
     } finally {
       setIsFollowLoading(false);
     }
   };
 
-  const loadProfileAudio = useCallback(async (page = 1, append = false) => {
-    if (!profile?.id) return;
-    setContentError("");
-    setContentLoading(true);
-
-    try {
-      const { data } = await getUserAudioUploads(profile.id, page, 10);
-      const nextTracks = data.tracks || [];
-      setAudioTracks((prev) => (append ? [...prev, ...nextTracks] : nextTracks));
-      setAudioPagination(data.pagination || {
-        page,
-        limit: 10,
-        total: nextTracks.length,
-        pages: 1,
-        hasNext: false,
-        hasPrev: page > 1
-      });
-    } catch (error) {
-      setContentError(getApiErrorMessage(error, "Unable to load audio uploads."));
-    } finally {
-      setContentLoading(false);
-    }
-  }, [profile?.id]);
-
-  const loadProfilePosts = useCallback(async (page = 1, contentType = "post", append = false) => {
-    if (!profile?.id) return;
-    setContentError("");
-    setContentLoading(true);
-
-    try {
-      const { data } = await getUserPosts(profile.id, page, 6, contentType);
-      const nextPosts = data.posts || [];
-      if (contentType === "reel") {
-        setReels((prev) => (append ? [...prev, ...nextPosts] : nextPosts));
-        setReelsPagination(data.pagination || {
-          page,
-          limit: 6,
-          total: nextPosts.length,
-          pages: 1,
-          hasNext: false,
-          hasPrev: page > 1
-        });
-      } else {
-        setPosts((prev) => (append ? [...prev, ...nextPosts] : nextPosts));
-        setPostsPagination(data.pagination || {
-          page,
-          limit: 6,
-          total: nextPosts.length,
-          pages: 1,
-          hasNext: false,
-          hasPrev: page > 1
-        });
-      }
-    } catch (error) {
-      setContentError(getApiErrorMessage(error, `Unable to load ${contentType === "reel" ? "reels" : "posts"}.`));
-    } finally {
-      setContentLoading(false);
-    }
-  }, [profile?.id]);
-
-  useEffect(() => {
-    if (!profile?.id) return;
-    loadProfileAudio();
-    loadProfilePosts(1, "post");
-    loadProfilePosts(1, "reel");
-  }, [profile?.id, loadProfileAudio, loadProfilePosts]);
+  const handleLoadMoreActivity = async () => {
+    if (!selectedPagination.hasNext) return;
+    await loadProfilePosts(selectedPagination.page + 1, activityTab === "reels" ? "reel" : "post", true);
+  };
 
   const handleLoadMoreAudio = async () => {
-    if (!audioPagination.hasNext) return;
-    await loadProfileAudio(audioPagination.page + 1, true);
-  };
-
-  const handleLoadMorePosts = async () => {
-    if (!postsPagination.hasNext) return;
-    await loadProfilePosts(postsPagination.page + 1, "post", true);
-  };
-
-  const handleLoadMoreReels = async () => {
-    if (!reelsPagination.hasNext) return;
-    await loadProfilePosts(reelsPagination.page + 1, "reel", true);
-  };
-
-  const handleDeletePost = (postId) => {
-    setPosts((prev) => prev.filter((post) => post._id !== postId));
-    setReels((prev) => prev.filter((post) => post._id !== postId));
+    if (audioPagination.hasNext) {
+      await loadProfileAudio(audioPagination.page + 1, true);
+    }
   };
 
   const handleDeleteAudio = async (trackId) => {
     const deleted = await deleteUploadedTrack(trackId);
     if (deleted) {
-      setAudioTracks((prev) => prev.filter((track) => track.id !== trackId));
+      setAudioTracks((prev) => prev.filter((track) => getTrackId(track) !== trackId));
     }
   };
 
+  const handleOpenPost = (post) => {
+    setSelectedPost(post);
+
+    if (!post?._id) return;
+
+    trackPostView(post._id)
+      .then((response) => {
+        if (typeof response.data?.viewCount !== "number") return;
+        const updatePostViews = (item) => item._id === post._id
+          ? { ...item, viewCount: response.data.viewCount }
+          : item;
+
+        setSelectedPost((current) => current?._id === post._id
+          ? { ...current, viewCount: response.data.viewCount }
+          : current
+        );
+        setPosts((current) => current.map(updatePostViews));
+        setReels((current) => current.map(updatePostViews));
+      })
+      .catch(() => {});
+  };
+
+  const handleDeletePost = (postId) => {
+    const wasPost = posts.some((post) => post._id === postId);
+    const wasReel = reels.some((post) => post._id === postId);
+
+    setPosts((current) => current.filter((post) => post._id !== postId));
+    setReels((current) => current.filter((post) => post._id !== postId));
+    setPostsPagination((current) => ({
+      ...current,
+      total: Math.max(0, (current.total || 0) - (wasPost ? 1 : 0))
+    }));
+    setReelsPagination((current) => ({
+      ...current,
+      total: Math.max(0, (current.total || 0) - (wasReel ? 1 : 0))
+    }));
+    setSelectedPost((current) => (current?._id === postId ? null : current));
+  };
+
+  const handleEditChange = (event) => {
+    const { name, value } = event.target;
+    setEditFormData((current) => ({ ...current, [name]: value }));
+  };
+
+  const handleImageChange = (event) => {
+    const { files, name } = event.target;
+    const file = files?.[0];
+
+    if (!file) return;
+
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      setEditMessage("Images must be PNG, JPG, WEBP, or GIF");
+      event.target.value = "";
+      return;
+    }
+
+    if (file.size > IMAGE_LIMIT_BYTES) {
+      setEditMessage("Images must be smaller than 2 MB");
+      event.target.value = "";
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    const isAvatar = name === "avatar";
+
+    setImageState((current) => {
+      const previousPreview = isAvatar ? current.avatarPreview : current.bannerPreview;
+      if (previousPreview.startsWith("blob:")) {
+        URL.revokeObjectURL(previousPreview);
+      }
+
+      return {
+        ...current,
+        [isAvatar ? "avatarFile" : "bannerFile"]: file,
+        [isAvatar ? "avatarPreview" : "bannerPreview"]: previewUrl,
+        [isAvatar ? "removeAvatar" : "removeBanner"]: false
+      };
+    });
+    setEditMessage("");
+  };
+
+  const clearImage = (name) => {
+    const isAvatar = name === "avatar";
+    setImageState((current) => {
+      const previousPreview = isAvatar ? current.avatarPreview : current.bannerPreview;
+      if (previousPreview.startsWith("blob:")) {
+        URL.revokeObjectURL(previousPreview);
+      }
+
+      return {
+        ...current,
+        [isAvatar ? "avatarFile" : "bannerFile"]: null,
+        [isAvatar ? "avatarPreview" : "bannerPreview"]: "",
+        [isAvatar ? "removeAvatar" : "removeBanner"]: true
+      };
+    });
+  };
+
+  const handleEditSubmit = async (event) => {
+    event.preventDefault();
+    if (!isOwnProfile) return;
+
+    setEditStatus("saving");
+    setEditMessage("");
+
+    try {
+      const profileForm = new FormData();
+      profileForm.append("username", editFormData.username);
+      profileForm.append("bio", editFormData.bio);
+      profileForm.append("location", editFormData.location);
+      profileForm.append("website", editFormData.website);
+      profileForm.append("favoriteGenres", editFormData.favoriteGenres);
+      profileForm.append("removeAvatar", String(imageState.removeAvatar));
+      profileForm.append("removeBanner", String(imageState.removeBanner));
+
+      if (imageState.avatarFile) profileForm.append("avatar", imageState.avatarFile);
+      if (imageState.bannerFile) profileForm.append("banner", imageState.bannerFile);
+
+      const { data } = await API.patch("/profiles/me", profileForm);
+      setProfile(data.profile);
+      updateUser(data.profile);
+      setEditMessage("Profile updated");
+      setEditStatus("ready");
+      setEditOpen(false);
+    } catch (error) {
+      setEditMessage(getApiErrorMessage(error, "Unable to update profile"));
+      setEditStatus("ready");
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteAccountConfirm.trim().toUpperCase() !== "DELETE" || isDeletingAccount) {
+      return;
+    }
+
+    setIsDeletingAccount(true);
+    const result = await deleteAccount();
+
+    if (result.success) {
+      navigate("/login", { replace: true });
+      return;
+    }
+
+    setEditMessage(result.message || "Unable to delete account.");
+    setIsDeletingAccount(false);
+  };
+
   if (status === "loading") {
-    return (
-      <section className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 py-12 px-4">
-        <div className="mx-auto max-w-4xl">
-          <p className="text-slate-400">Loading profile...</p>
-        </div>
-      </section>
-    );
+    return <section className="public-profile-page"><div className="profile-state">Loading profile...</div></section>;
   }
 
   if (status === "error") {
     return (
-      <section className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 py-12 px-4">
-        <div className="mx-auto max-w-4xl text-center">
-          <h1 className="text-3xl font-bold text-slate-50 mb-4">Profile Not Found</h1>
-          <p className="text-slate-400 mb-6">{message}</p>
-          <Link className="inline-block px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-colors" to="/">
-            ← Go Home
-          </Link>
+      <section className="public-profile-page">
+        <div className="profile-state">
+          <h1>Profile Not Found</h1>
+          <p>{message}</p>
+          <Link className="profile-action-button" to="/">Go Home</Link>
         </div>
       </section>
     );
   }
 
-  const isOwnProfile = user?.id === profile.id;
-  const joinedDate = profile.joinedAt ? new Date(profile.joinedAt).toLocaleDateString() : "";
-
   return (
-    <section style={{
-      minHeight: "100vh",
-      background: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)",
-      padding: "40px 20px",
-      fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
-    }}>
-      <div style={{maxWidth: "900px", margin: "0 auto"}}>
-        {/* Banner */}
-        {profile.bannerUrl && (
-          <div 
-            style={{
-              height: "300px",
-              backgroundImage: `url(${profile.bannerUrl})`,
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-              borderTopLeftRadius: "20px",
-              borderTopRightRadius: "20px",
-              border: "1px solid rgba(71, 85, 105, 0.3)",
-              marginBottom: "-80px",
-              position: "relative",
-              zIndex: 1
-            }}
-          />
-        )}
+    <section className={`public-profile-page${isOwnProfile ? " public-profile-page-own" : ""}${leftPanelOpen ? " profile-panel-open" : " profile-panel-closed"}`}>
+      {isOwnProfile ? (
+        <aside className={`profile-side-panel ${leftPanelOpen ? "profile-side-panel--open" : "profile-side-panel--closed"}`} aria-label="Profile navigation">
+          {leftPanelOpen ? (
+            <div className="profile-side-content">
+              <div className="profile-side-header">
+                <div>
+                  <p className="drawer-kicker">Profile</p>
+                  <strong>{profile.username}</strong>
+                </div>
+                <button className="panel-collapse-btn" type="button" onClick={() => setLeftPanelOpen(false)} aria-label="Collapse profile panel">
+                  <X size={16} />
+                </button>
+              </div>
 
-        {/* Profile Card */}
-        <div style={{
-          background: "rgba(15, 23, 42, 0.7)",
-          border: "1px solid rgba(71, 85, 105, 0.3)",
-          borderTopLeftRadius: profile.bannerUrl ? "0" : "20px",
-          borderTopRightRadius: profile.bannerUrl ? "0" : "20px",
-          borderBottomLeftRadius: "20px",
-          borderBottomRightRadius: "20px",
-          backdropFilter: "blur(10px)",
-          padding: "60px 50px",
-          position: "relative",
-          zIndex: 2
-        }}>
-          {/* Avatar Section */}
-          <div style={{
-            display: "flex",
-            alignItems: "flex-end",
-            gap: "30px",
-            marginBottom: "40px",
-            paddingBottom: "40px",
-            borderBottom: "1px solid rgba(71, 85, 105, 0.2)"
-          }}>
-            {/* Avatar */}
+              <div className="profile-side-section">
+                <p className="drawer-section-label">Views</p>
+                {isArtist ? (
+                  <button className={`profile-side-link ${showProfileContent && activeMode === "artist" ? "active" : ""}`} type="button" onClick={() => { setWorkspaceView("profile"); setSearchParams({ tab: "artist" }); }}>
+                    <Radio size={17} /> Artist page
+                  </button>
+                ) : null}
+                <button className={`profile-side-link ${showProfileContent && activeMode === "posts" ? "active" : ""}`} type="button" onClick={() => { setWorkspaceView("profile"); setSearchParams({ tab: "posts" }); }}>
+                  <Grid3X3 size={17} /> Posts and reels
+                </button>
+              </div>
+
+              <div className="profile-side-section">
+                <p className="drawer-section-label">Account</p>
+                <button className="profile-side-link" type="button" onClick={() => setEditOpen(true)}>
+                  <Pencil size={17} /> Edit profile
+                </button>
+                {isArtist ? (
+                  <button className={`profile-side-link ${workspaceView === "analytics" ? "active" : ""}`} type="button" onClick={() => setWorkspaceView("analytics")}>
+                    <BarChart3 size={17} /> Creator analytics
+                  </button>
+                ) : null}
+                <button className={`profile-side-link ${workspaceView === "dashboard" ? "active" : ""}`} type="button" onClick={() => setWorkspaceView("dashboard")}>
+                  <Home size={17} /> Dashboard
+                </button>
+                <Link className="profile-side-link" to="/search">
+                  <Search size={17} /> Search creators
+                </Link>
+              </div>
+
+              <div className="profile-side-section">
+                <p className="drawer-section-label">Danger</p>
+                <button className="profile-side-link danger" type="button" onClick={() => setDeleteOpen(true)}>
+                  <Trash2 size={17} /> Delete account
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="profile-side-rail">
+              <button className="rail-toggle" type="button" onClick={() => setLeftPanelOpen(true)} aria-label="Open profile panel">
+                <Menu size={18} />
+              </button>
+              <button className={`rail-btn ${showProfileContent && activeMode === "posts" ? "active" : ""}`} type="button" onClick={() => { setWorkspaceView("profile"); setSearchParams({ tab: "posts" }); }} aria-label="Posts and reels">
+                <Grid3X3 size={18} />
+              </button>
+              {isArtist ? (
+                <button className={`rail-btn ${showProfileContent && activeMode === "artist" ? "active" : ""}`} type="button" onClick={() => { setWorkspaceView("profile"); setSearchParams({ tab: "artist" }); }} aria-label="Artist page">
+                  <Radio size={18} />
+                </button>
+              ) : null}
+              <span className="rail-divider" />
+              <button className={`rail-btn ${workspaceView === "dashboard" ? "active" : ""}`} type="button" onClick={() => setWorkspaceView("dashboard")} aria-label="Dashboard">
+                <Home size={18} />
+              </button>
+              {isArtist ? (
+                <button className={`rail-btn ${workspaceView === "analytics" ? "active" : ""}`} type="button" onClick={() => setWorkspaceView("analytics")} aria-label="Creator analytics">
+                  <BarChart3 size={18} />
+                </button>
+              ) : null}
+              <button className="rail-btn" type="button" onClick={() => setEditOpen(true)} aria-label="Edit profile">
+                <Settings size={18} />
+              </button>
+              <button className="rail-btn danger" type="button" onClick={() => setDeleteOpen(true)} aria-label="Delete account">
+                <Trash2 size={18} />
+              </button>
+            </div>
+          )}
+        </aside>
+      ) : null}
+
+      <div className="profile-hero-shell">
+        <div className="artist-hero" style={{ backgroundImage: profile.bannerUrl ? `url(${profile.bannerUrl})` : "" }}>
+          <div className="artist-hero-shade" />
+          <div className="artist-hero-content">
+            <div className="artist-hero-avatar">
+              <ProfileAvatar profile={profile} />
+            </div>
             <div>
-              {profile.avatarUrl ? (
-                <img 
-                  src={profile.avatarUrl} 
-                  alt={profile.username}
-                  style={{
-                    width: "150px",
-                    height: "150px",
-                    borderRadius: "16px",
-                    objectFit: "cover",
-                    border: "4px solid rgba(99, 102, 241, 0.3)",
-                    marginTop: profile.bannerUrl ? "-100px" : "0"
-                  }}
-                />
-              ) : (
-                <div style={{
-                  width: "150px",
-                  height: "150px",
-                  borderRadius: "16px",
-                  background: "linear-gradient(135deg, #4f46e5 0%, #a855f7 100%)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "64px",
-                  fontWeight: "700",
-                  color: "white",
-                  border: "4px solid rgba(99, 102, 241, 0.3)",
-                  marginTop: profile.bannerUrl ? "-100px" : "0"
-                }}>
-                  {profile.username.slice(0, 1).toUpperCase()}
+              <p className="profile-kicker">{isArtist ? "Verified KeyVoid Artist" : "KeyVoid Listener"}</p>
+              <h1>{profile.username}</h1>
+              <p>{profile.bio || "This profile is still tuning their signal."}</p>
+              <div className="artist-hero-stats">
+                <span>{formatCompactNumber(profile.followersCount)} followers</span>
+                <span>{formatCompactNumber(profile.followingCount)} following</span>
+                {isArtist ? <span>{formatCompactNumber(audioPagination.total)} songs</span> : null}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="profile-command-row">
+          <div className="profile-mode-tabs">
+            {isArtist ? (
+              <button type="button" className={activeMode === "artist" ? "active" : ""} onClick={() => setSearchParams({ tab: "artist" })}>
+                <Radio size={16} /> Artist
+              </button>
+            ) : null}
+            <button type="button" className={activeMode === "posts" ? "active" : ""} onClick={() => setSearchParams({ tab: "posts" })}>
+              <Grid3X3 size={16} /> Posts
+            </button>
+          </div>
+
+          <div className="profile-actions">
+            {!isOwnProfile && isAuthenticated ? (
+              <button type="button" className="profile-action-button" onClick={handleFollowToggle} disabled={isFollowLoading}>
+                <UserPlus size={16} /> {isFollowLoading ? "..." : followStatus?.isFollowing ? "Following" : "Follow"}
+              </button>
+            ) : null}
+            {isOwnProfile ? <button className="profile-action-button" type="button" onClick={() => setEditOpen(true)}>Edit Profile</button> : null}
+          </div>
+        </div>
+
+        {message ? <p className="profile-inline-error">{message}</p> : null}
+        {contentError ? <p className="profile-inline-error">{contentError}</p> : null}
+
+        {workspaceView === "dashboard" ? (
+          <ProfileDashboardView profile={profile} user={user} isArtist={isArtist} />
+        ) : workspaceView === "analytics" ? (
+          <CreatorAnalyticsView creatorInsights={creatorInsights} insightsNotice={insightsNotice} />
+        ) : activeMode === "artist" ? (
+          <div className="artist-page-grid">
+            <main className="artist-main-section">
+              <div className="artist-control-strip">
+                <button
+                  type="button"
+                  className="artist-play-button"
+                  onClick={() => audioTracks[0] && (getTrackId(activeTrack) === getTrackId(audioTracks[0]) ? handleTogglePlay() : handleSelectTrack(audioTracks[0]))}
+                  disabled={!audioTracks.length}
+                  aria-label="Play artist"
+                >
+                  {isPlaying && getTrackId(activeTrack) === getTrackId(audioTracks[0]) ? <Pause size={26} /> : <Play size={26} />}
+                </button>
+                <div className="artist-stat-pill"><Eye size={16} /> {formatCompactNumber(artistStats.totalListens)} listens</div>
+                <div className="artist-stat-pill"><Heart size={16} /> {formatCompactNumber(artistStats.totalLikes)} likes</div>
+                <div className="artist-stat-pill"><Disc3 size={16} /> {formatCompactNumber(audioPagination.total)} tracks</div>
+              </div>
+
+              <section className="artist-section">
+                <div className="artist-section-heading">
+                  <h2>Popular</h2>
+                  {contentLoading ? <span>Loading...</span> : null}
+                </div>
+                <div className="artist-track-list">
+                  {audioTracks.length ? audioTracks.map((track, index) => {
+                    const active = getTrackId(activeTrack) === getTrackId(track);
+                    return (
+                      <div className={`artist-track-row ${active ? "active" : ""}`} key={getTrackId(track)}>
+                        <button type="button" className="artist-track-play" onClick={() => handleSelectTrack(track)} aria-label={`Play ${track.title}`}>
+                          {active && isPlaying ? <Pause size={15} /> : <Play size={15} />}
+                        </button>
+                        <span className="artist-track-rank">{index + 1}</span>
+                        <div className="artist-track-art">{track.coverUrl ? <img src={track.coverUrl} alt="" /> : <Music2 size={18} />}</div>
+                        <div className="artist-track-copy">
+                          <strong>{track.title || "Untitled"}</strong>
+                          <span>{track.genre || "Uploads"}</span>
+                        </div>
+                        <span>{formatCompactNumber(getTrackListens(track, index))}</span>
+                        <span>{formatCompactNumber(getTrackLikes(track))} likes</span>
+                        <span>{formatDuration(track.duration)}</span>
+                        {isOwnProfile ? (
+                          <button type="button" className="artist-delete-track" onClick={() => handleDeleteAudio(getTrackId(track))}>Delete</button>
+                        ) : null}
+                      </div>
+                    );
+                  }) : (
+                    <div className="profile-empty-card">No public music yet. Upload songs from Creator Hub to fill this artist page.</div>
+                  )}
+                </div>
+                {audioPagination.hasNext ? <button type="button" className="profile-load-more" onClick={handleLoadMoreAudio}>Load more music</button> : null}
+              </section>
+            </main>
+
+            <aside className="artist-side-section">
+              <section className="artist-pick-card">
+                <p className="profile-kicker">Artist Pick</p>
+                {audioTracks[0] ? (
+                  <button type="button" onClick={() => handleSelectTrack(audioTracks[0])}>
+                    <span>{audioTracks[0].title}</span>
+                    <small>{audioTracks[0].genre || "New upload"}</small>
+                  </button>
+                ) : (
+                  <p>New releases will show here.</p>
+                )}
+              </section>
+              <section className="artist-pick-card">
+                <p className="profile-kicker">Sound</p>
+                <div className="profile-chip-row compact">
+                  {(artistStats.genres.length ? artistStats.genres : profile.favoriteGenres || ["Discovery"]).map((genre) => (
+                    <span className="profile-chip" key={genre}>{genre}</span>
+                  ))}
+                </div>
+              </section>
+            </aside>
+          </div>
+        ) : (
+          <div className="profile-posts-surface">
+            <div className="activity-tabs">
+              <button type="button" className={activityTab === "posts" ? "active" : ""} onClick={() => setActivityTab("posts")}>
+                <Grid3X3 size={15} /> Posts {postsPagination.total}
+              </button>
+              {isArtist ? (
+                <button type="button" className={activityTab === "reels" ? "active" : ""} onClick={() => setActivityTab("reels")}>
+                  <Sparkles size={15} /> Reels {reelsPagination.total}
+                </button>
+              ) : null}
+              <button type="button" disabled>
+                <MessageCircle size={15} /> Commented
+              </button>
+            </div>
+
+            <div className="profile-post-grid">
+              {selectedActivity.length ? selectedActivity.map((post) => (
+                <button className="profile-post-tile" type="button" onClick={() => handleOpenPost(post)} key={post._id}>
+                  {post.mediaUrl && post.mediaType === "image" ? <img src={post.mediaUrl} alt="" /> : null}
+                  {post.mediaUrl && post.mediaType === "video" ? <video src={post.mediaUrl} muted playsInline /> : null}
+                  <div className="profile-post-overlay">
+                    <strong>{getPostPreview(post)}</strong>
+                    <span><Heart size={14} /> {post.likes?.length || 0}</span>
+                    <span><MessageCircle size={14} /> {(post.comments || []).length}</span>
+                  </div>
+                </button>
+              )) : (
+                <div className="profile-empty-card">
+                  {activityTab === "reels" ? "No reels yet." : "No posts yet. Discussions and commented threads will show here as activity grows."}
                 </div>
               )}
             </div>
 
-            {/* User Info */}
-            <div style={{flex: 1}}>
-              <div style={{marginBottom: "16px", display: "flex", alignItems: "center", gap: "12px"}}>
-                <span style={{
-                  padding: "8px 16px",
-                  background: "rgba(99, 102, 241, 0.15)",
-                  border: "1px solid rgba(99, 102, 241, 0.3)",
-                  color: "#818cf8",
-                  fontSize: "12px",
-                  fontWeight: "700",
-                  borderRadius: "20px",
-                  textTransform: "uppercase",
-                  letterSpacing: "1px"
-                }}>
-                  {profile.role === "creator" ? "🎵 Creator" : "🎧 Listener"}
-                </span>
-              </div>
-              <h1 style={{
-                fontSize: "48px",
-                fontWeight: "700",
-                color: "#f1f5f9",
-                marginBottom: "12px"
-              }}>
-                {profile.username}
-              </h1>
-              <p style={{
-                fontSize: "16px",
-                color: "#cbd5e1",
-                lineHeight: "1.6"
-              }}>
-                {profile.bio || "This profile is on a sonic journey..."}
-              </p>
-            </div>
-
-            {/* Follow Button */}
-            {!isOwnProfile && isAuthenticated && (
-              <button
-                onClick={handleFollowToggle}
-                disabled={isFollowLoading}
-                style={{
-                  padding: "14px 32px",
-                  fontSize: "15px",
-                  fontWeight: "700",
-                  borderRadius: "10px",
-                  border: followStatus?.isFollowing ? "1px solid rgba(99, 102, 241, 0.3)" : "1px solid rgba(99, 102, 241, 0.5)",
-                  background: followStatus?.isFollowing ? "linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)" : "transparent",
-                  color: followStatus?.isFollowing ? "white" : "#818cf8",
-                  cursor: isFollowLoading ? "not-allowed" : "pointer",
-                  transition: "all 0.3s ease",
-                  whiteSpace: "nowrap",
-                  opacity: isFollowLoading ? 0.6 : 1
-                }}
-                onMouseEnter={(e) => {
-                  if (!isFollowLoading) {
-                    if (!followStatus?.isFollowing) {
-                      e.currentTarget.style.background = "rgba(99, 102, 241, 0.15)";
-                      e.currentTarget.style.borderColor = "rgba(99, 102, 241, 0.8)";
-                    }
-                    e.currentTarget.style.transform = "translateY(-4px)";
-                    e.currentTarget.style.boxShadow = "0 10px 20px rgba(99, 102, 241, 0.2)";
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isFollowLoading) {
-                    if (!followStatus?.isFollowing) {
-                      e.currentTarget.style.background = "transparent";
-                      e.currentTarget.style.borderColor = "rgba(99, 102, 241, 0.5)";
-                    }
-                    e.currentTarget.style.transform = "translateY(0)";
-                    e.currentTarget.style.boxShadow = "none";
-                  }
-                }}
-              >
-                {isFollowLoading ? "..." : followStatus?.isFollowing ? "✓ Following" : "+ Follow"}
-              </button>
-            )}
+            {selectedPagination.hasNext ? <button type="button" className="profile-load-more" onClick={handleLoadMoreActivity}>Load more</button> : null}
           </div>
-
-          {message && (
-            <div style={{
-              marginBottom: "30px",
-              padding: "16px 20px",
-              background: "rgba(239, 68, 68, 0.1)",
-              border: "1px solid rgba(239, 68, 68, 0.3)",
-              color: "#fca5a5",
-              fontSize: "14px",
-              borderRadius: "10px"
-            }}>
-              {message}
-            </div>
-          )}
-
-          {/* Stats Grid */}
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-            gap: "30px",
-            marginBottom: "40px",
-            paddingBottom: "40px",
-            borderBottom: "1px solid rgba(71, 85, 105, 0.2)"
-          }}>
-            <div>
-              <p style={{fontSize: "12px", letterSpacing: "2px", color: "#94a3b8", textTransform: "uppercase", marginBottom: "12px", fontWeight: "600"}}>Followers</p>
-              <p style={{fontSize: "40px", fontWeight: "700", color: "#818cf8"}}>{profile.followersCount || 0}</p>
-            </div>
-            <div>
-              <p style={{fontSize: "12px", letterSpacing: "2px", color: "#94a3b8", textTransform: "uppercase", marginBottom: "12px", fontWeight: "600"}}>Following</p>
-              <p style={{fontSize: "40px", fontWeight: "700", color: "#a855f7"}}>{profile.followingCount || 0}</p>
-            </div>
-            <div>
-              <p style={{fontSize: "12px", letterSpacing: "2px", color: "#94a3b8", textTransform: "uppercase", marginBottom: "12px", fontWeight: "600"}}>Joined</p>
-              <p style={{fontSize: "20px", fontWeight: "700", color: "#cbd5e1"}}>{joinedDate || "Recently"}</p>
-            </div>
-            {profile.website && (
-              <div>
-                <p style={{fontSize: "12px", letterSpacing: "2px", color: "#94a3b8", textTransform: "uppercase", marginBottom: "12px", fontWeight: "600"}}>Website</p>
-                <a 
-                  href={profile.website} 
-                  target="_blank" 
-                  rel="noreferrer"
-                  style={{
-                    fontSize: "15px",
-                    fontWeight: "600",
-                    color: "#818cf8",
-                    textDecoration: "none",
-                    transition: "color 0.2s ease",
-                    display: "block"
-                  }}
-                  onMouseEnter={(e) => e.target.style.color = "#a78bfa"}
-                  onMouseLeave={(e) => e.target.style.color = "#818cf8"}
-                >
-                  Visit →
-                </a>
-              </div>
-            )}
-          </div>
-
-          {/* Favorite Genres */}
-          {profile.favoriteGenres && profile.favoriteGenres.length > 0 && (
-            <div style={{marginBottom: "40px"}}>
-              <h3 style={{
-                fontSize: "16px",
-                fontWeight: "700",
-                color: "#f1f5f9",
-                marginBottom: "16px",
-                textTransform: "uppercase",
-                letterSpacing: "1px"
-              }}>
-                🎵 Favorite Genres
-              </h3>
-              <div style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "12px"
-              }}>
-                {profile.favoriteGenres.map((genre) => (
-                  <span 
-                    key={genre}
-                    style={{
-                      padding: "10px 18px",
-                      background: "rgba(99, 102, 241, 0.1)",
-                      border: "1px solid rgba(99, 102, 241, 0.3)",
-                      color: "#cbd5e1",
-                      borderRadius: "8px",
-                      fontSize: "14px",
-                      fontWeight: "600",
-                      transition: "all 0.2s ease",
-                      cursor: "default"
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = "rgba(99, 102, 241, 0.2)";
-                      e.currentTarget.style.borderColor = "rgba(99, 102, 241, 0.6)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = "rgba(99, 102, 241, 0.1)";
-                      e.currentTarget.style.borderColor = "rgba(99, 102, 241, 0.3)";
-                    }}
-                  >
-                    {genre}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div style={{ marginBottom: "32px", padding: "24px", borderRadius: "20px", background: "rgba(15, 23, 42, 0.9)", border: "1px solid rgba(71, 85, 105, 0.3)" }}>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", marginBottom: "22px" }}>
-              {[
-                { key: "uploads", label: `Music (${audioPagination.total})` },
-                { key: "posts", label: `Posts (${postsPagination.total})` },
-                { key: "reels", label: `Reels (${reelsPagination.total})` }
-              ].map((tab) => (
-                <button
-                  key={tab.key}
-                  type="button"
-                  onClick={() => setActiveTab(tab.key)}
-                  style={{
-                    padding: "12px 20px",
-                    borderRadius: "999px",
-                    border: activeTab === tab.key ? "1px solid #818cf8" : "1px solid rgba(148, 163, 184, 0.24)",
-                    background: activeTab === tab.key ? "rgba(99, 102, 241, 0.18)" : "rgba(31, 41, 55, 0.8)",
-                    color: "#e2e8f0",
-                    cursor: "pointer"
-                  }}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            {contentError ? (
-              <p className="auth-error" style={{ marginBottom: "16px" }}>{contentError}</p>
-            ) : null}
-            {contentLoading ? (
-              <p style={{ color: "#cbd5e1", marginBottom: "16px" }}>Loading content...</p>
-            ) : null}
-
-            {activeTab === "uploads" && (
-              <div style={{ display: "grid", gap: "14px" }}>
-                {audioTracks.length > 0 ? (
-                  audioTracks.map((track) => (
-                    <div key={track.id} style={{ padding: "16px", borderRadius: "16px", border: "1px solid rgba(148, 163, 184, 0.12)", background: "rgba(15, 23, 42, 0.95)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: "1rem", color: "#f8fafc" }}>{track.title || "Untitled"}</div>
-                          <div style={{ color: "#94a3b8", fontSize: "0.95rem" }}>{track.artist || "Unknown artist"}</div>
-                        </div>
-                        {isOwnProfile && (
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteAudio(track.id)}
-                            style={{ padding: "10px 14px", borderRadius: "12px", background: "#7f1d1d", border: "none", color: "white", cursor: "pointer" }}
-                          >
-                            Delete
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <p style={{ color: "#cbd5e1" }}>No music uploads available.</p>
-                )}
-                {audioPagination.hasNext && (
-                  <button type="button" onClick={handleLoadMoreAudio} style={{ padding: "12px 20px", borderRadius: "12px", background: "#6366f1", border: "none", color: "white", cursor: "pointer", width: "fit-content" }}>
-                    Load more music
-                  </button>
-                )}
-              </div>
-            )}
-
-            {activeTab === "posts" && (
-              <div style={{ display: "grid", gap: "16px" }}>
-                {posts.length > 0 ? (
-                  posts.map((post) => (
-                    <PostCard key={post._id} post={post} onPostDeleted={handleDeletePost} />
-                  ))
-                ) : (
-                  <p style={{ color: "#cbd5e1" }}>No posts yet.</p>
-                )}
-                {postsPagination.hasNext && (
-                  <button type="button" onClick={handleLoadMorePosts} style={{ padding: "12px 20px", borderRadius: "12px", background: "#6366f1", border: "none", color: "white", cursor: "pointer", width: "fit-content" }}>
-                    Load more posts
-                  </button>
-                )}
-              </div>
-            )}
-
-            {activeTab === "reels" && (
-              <div style={{ display: "grid", gap: "16px" }}>
-                {reels.length > 0 ? (
-                  reels.map((post) => (
-                    <PostCard key={post._id} post={post} onPostDeleted={handleDeletePost} />
-                  ))
-                ) : (
-                  <p style={{ color: "#cbd5e1" }}>No reels yet.</p>
-                )}
-                {reelsPagination.hasNext && (
-                  <button type="button" onClick={handleLoadMoreReels} style={{ padding: "12px 20px", borderRadius: "12px", background: "#6366f1", border: "none", color: "white", cursor: "pointer", width: "fit-content" }}>
-                    Load more reels
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Action Buttons */}
-          <div style={{display: "flex", gap: "16px", flexWrap: "wrap"}}>
-            {isOwnProfile && (
-              <Link 
-                to="/profile"
-                style={{
-                  padding: "14px 32px",
-                  background: "linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)",
-                  color: "white",
-                  border: "1px solid rgba(99, 102, 241, 0.3)",
-                  borderRadius: "10px",
-                  fontSize: "15px",
-                  fontWeight: "600",
-                  textDecoration: "none",
-                  display: "inline-block",
-                  cursor: "pointer",
-                  transition: "all 0.3s ease"
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-4px)";
-                  e.currentTarget.style.boxShadow = "0 10px 20px rgba(99, 102, 241, 0.2)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "none";
-                }}
-              >
-                ✎ Edit Profile
-              </Link>
-            )}
-            <Link 
-              to="/"
-              style={{
-                padding: "14px 32px",
-                background: "rgba(30, 41, 59, 0.6)",
-                color: "#cbd5e1",
-                border: "1px solid rgba(71, 85, 105, 0.5)",
-                borderRadius: "10px",
-                fontSize: "15px",
-                fontWeight: "600",
-                textDecoration: "none",
-                display: "inline-block",
-                cursor: "pointer",
-                transition: "all 0.3s ease"
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.6)";
-                e.currentTarget.style.background = "rgba(168, 85, 247, 0.1)";
-                e.currentTarget.style.color = "#e2e8f0";
-                e.currentTarget.style.transform = "translateY(-4px)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = "rgba(71, 85, 105, 0.5)";
-                e.currentTarget.style.background = "rgba(30, 41, 59, 0.6)";
-                e.currentTarget.style.color = "#cbd5e1";
-                e.currentTarget.style.transform = "translateY(0)";
-              }}
-            >
-              ← Back to Home
-            </Link>
-          </div>
-        </div>
+        )}
       </div>
+
+      {selectedPost ? createPortal(
+        <ProfilePostViewer
+          currentPost={selectedPost}
+          posts={selectedActivity}
+          onSelectPost={handleOpenPost}
+          onPostDeleted={handleDeletePost}
+          onClose={() => setSelectedPost(null)}
+        />,
+        document.body
+      ) : null}
+
+      {editOpen ? createPortal(
+        <div className="profile-modal-backdrop" role="dialog" aria-modal="true" aria-label="Edit profile">
+          <form className="profile-edit-modal" onSubmit={handleEditSubmit}>
+            <div className="profile-modal-header">
+              <div>
+                <p className="profile-kicker">Edit Profile</p>
+                <h2>Update your public profile</h2>
+              </div>
+              <button className="panel-collapse-btn" type="button" onClick={() => setEditOpen(false)} aria-label="Close edit profile">
+                <X size={16} />
+              </button>
+            </div>
+            {editMessage ? <p className={editMessage === "Profile updated" ? "auth-success" : "auth-error"}>{editMessage}</p> : null}
+            <div className="profile-edit-grid">
+              <label className="auth-field">
+                <span>Display name</span>
+                <input maxLength="24" minLength="3" name="username" onChange={handleEditChange} required type="text" value={editFormData.username} />
+              </label>
+              <label className="auth-field">
+                <span>Location</span>
+                <input maxLength="60" name="location" onChange={handleEditChange} type="text" value={editFormData.location} />
+              </label>
+              <label className="auth-field profile-wide-field">
+                <span>Bio</span>
+                <textarea maxLength="280" name="bio" onChange={handleEditChange} rows="4" value={editFormData.bio} />
+              </label>
+              <label className="auth-field">
+                <span>Website</span>
+                <input name="website" onChange={handleEditChange} type="url" value={editFormData.website} />
+              </label>
+              <label className="auth-field">
+                <span>Favorite genres</span>
+                <input name="favoriteGenres" onChange={handleEditChange} type="text" value={editFormData.favoriteGenres} />
+              </label>
+              <label className="auth-field">
+                <span>Avatar image</span>
+                <input accept="image/png,image/jpeg,image/webp,image/gif" name="avatar" onChange={handleImageChange} type="file" />
+                {imageState.avatarPreview ? <button className="auth-inline-button" onClick={() => clearImage("avatar")} type="button">Remove avatar</button> : null}
+              </label>
+              <label className="auth-field">
+                <span>Banner image</span>
+                <input accept="image/png,image/jpeg,image/webp,image/gif" name="banner" onChange={handleImageChange} type="file" />
+                {imageState.bannerPreview ? <button className="auth-inline-button" onClick={() => clearImage("banner")} type="button">Remove banner</button> : null}
+              </label>
+            </div>
+            <div className="profile-modal-actions">
+              <button className="profile-action-button" type="button" onClick={() => setEditOpen(false)}>Cancel</button>
+              <button className="profile-action-button primary" disabled={editStatus === "saving"} type="submit">
+                {editStatus === "saving" ? "Saving..." : "Save profile"}
+              </button>
+            </div>
+          </form>
+        </div>,
+        document.body
+      ) : null}
+
+      {deleteOpen ? createPortal(
+        <div className="profile-modal-backdrop" role="dialog" aria-modal="true" aria-label="Delete account">
+          <div className="profile-delete-modal">
+            <div className="profile-modal-header">
+              <div>
+                <p className="profile-kicker">Danger Zone</p>
+                <h2>Delete account</h2>
+              </div>
+              <button className="panel-collapse-btn" type="button" onClick={() => setDeleteOpen(false)} aria-label="Close delete account">
+                <X size={16} />
+              </button>
+            </div>
+            <p>This permanently removes your account, posts, reels, uploaded media, playlists, sessions, and profile images.</p>
+            <input value={deleteAccountConfirm} onChange={(event) => setDeleteAccountConfirm(event.target.value)} placeholder="Type DELETE" />
+            <div className="profile-modal-actions">
+              <button className="profile-action-button" type="button" onClick={() => setDeleteOpen(false)}>Cancel</button>
+              <button className="profile-action-button danger" disabled={isDeletingAccount || deleteAccountConfirm.trim().toUpperCase() !== "DELETE"} type="button" onClick={handleDeleteAccount}>
+                {isDeletingAccount ? "Deleting..." : "Delete forever"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      ) : null}
     </section>
   );
 }

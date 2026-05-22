@@ -63,6 +63,9 @@ export const getPlaylists = () => API.get("/playlists");
 export const getPlaylist = (playlistId) => API.get(`/playlists/${playlistId}`);
 export const createPlaylist = (formData) =>
   API.post("/playlists/create", formData, { headers: { "Content-Type": "multipart/form-data" } });
+export const updatePlaylist = (formData) =>
+  API.post("/playlists/update", formData, { headers: { "Content-Type": "multipart/form-data" } });
+export const deletePlaylist = (playlistId) => API.post("/playlists/delete", { playlistId });
 export const addTrackToPlaylist = (playlistId, trackId) => API.post("/playlists/add-track", { playlistId, trackId });
 export const removeTrackFromPlaylist = (playlistId, trackId) => API.post("/playlists/remove-track", { playlistId, trackId });
 export const toggleLikedTrack = (trackId) => API.post("/playlists/like", { trackId });
