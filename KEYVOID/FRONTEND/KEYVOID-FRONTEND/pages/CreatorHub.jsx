@@ -49,7 +49,7 @@ export default function CreatorHub() {
   const [creatorInsights, setCreatorInsights] = useState(null);
   const [insightsNotice, setInsightsNotice] = useState("");
 
-  // Reel creation state
+  // Vod creation state
   const [reelText, setReelText] = useState("");
   const [reelMedia, setReelMedia] = useState(null);
   const [mediaPreviewUrl, setMediaPreviewUrl] = useState("");
@@ -188,11 +188,11 @@ export default function CreatorHub() {
 
     const isAllowedMedia = file.type.startsWith("video/") || file.type.startsWith("image/");
     if (!isAllowedMedia) {
-      setReelError("Please choose a video or image file for your reel.");
+      setReelError("Please choose a video or image file for your vod.");
       return;
     }
 
-    // Larger file limits for reels
+    // Larger file limits for vods
     const maxSize = file.type.startsWith("video/") ? 100 * 1024 * 1024 : 50 * 1024 * 1024; // 100MB video, 50MB image
     if (file.size > maxSize) {
       const maxSizeMB = maxSize / (1024 * 1024);
@@ -225,7 +225,7 @@ export default function CreatorHub() {
       if (response.status === 201) {
         setReelText("");
         clearReelMedia();
-        setReelNotice({ type: "success", message: "Reel created successfully! Check it out in the Reels feed." });
+        setReelNotice({ type: "success", message: "Vod created successfully." });
       }
     } catch (err) {
       console.error("Failed to create reel:", err);
@@ -233,9 +233,9 @@ export default function CreatorHub() {
       const isLargeUpload = err.response?.status === 413 || /payload too large|uploaded file is too large/i.test(serverMessage);
 
       if (isLargeUpload) {
-        setReelError("Reel upload failed because the file is too large. Please use a video under 100MB or an image under 50MB.");
+        setReelError("Vod upload failed because the file is too large. Please use a video under 100MB or an image under 50MB.");
       } else {
-        setReelError(getApiErrorMessage(err, "Failed to create reel."));
+        setReelError(getApiErrorMessage(err, "Failed to create vod."));
       }
     } finally {
       setIsCreatingReel(false);
@@ -288,11 +288,6 @@ export default function CreatorHub() {
         <h1 className="font-['Michroma'] text-[clamp(2rem,4vw,3.4rem)] leading-tight text-slate-50">
           Creator Hub for {user?.username || "your account"}
         </h1>
-        <p className="text-slate-300/80">
-          This page is protected by both the frontend role guard and a backend creator-only
-          authorization check. Admin accounts are also allowed through this gate.
-        </p>
-
         <div className="dashboard-grid">
           <div className="dashboard-card">
             <span className="dashboard-label">Role</span>
@@ -310,7 +305,7 @@ export default function CreatorHub() {
             <span className="dashboard-label">Quick Actions</span>
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               <Link to="/reels" style={{ color: "#6366f1", textDecoration: "none", fontWeight: "500" }}>
-                View Reels
+                View Vods
               </Link>
               <Link to="/feed" style={{ color: "#6366f1", textDecoration: "none", fontWeight: "500" }}>
                 View Feed
@@ -347,14 +342,14 @@ export default function CreatorHub() {
                   {creatorInsights.topPosts?.length ? creatorInsights.topPosts.map((post) => (
                     <div key={post._id} style={{ display: "grid", gap: "8px", padding: "12px", borderRadius: "8px", border: "1px solid rgba(148, 163, 184, 0.14)", background: "rgba(17, 24, 39, 0.74)" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", color: "#f8fafc" }}>
-                        <strong>{post.contentType === "reel" ? "Reel" : "Post"}</strong>
+                        <strong>{post.contentType === "reel" ? "Vod" : "Discussion"}</strong>
                         <span style={{ color: "#93c5fd" }}>{post.viewCount} views</span>
                       </div>
                       <p style={{ margin: 0, color: "#cbd5e1", fontSize: "14px" }}>{post.text || `${post.mediaType || "Media"} content`}</p>
                       <small style={{ color: "#94a3b8" }}>{post.recommendationReason}</small>
                     </div>
                   )) : (
-                    <p style={{ color: "#9ca3af", margin: 0 }}>Post or create a reel to start collecting insights.</p>
+                    <p style={{ color: "#9ca3af", margin: 0 }}>Create a discussion or vod to start collecting insights.</p>
                   )}
                 </div>
                 <div style={{ display: "grid", gap: "10px", alignContent: "start" }}>
@@ -508,11 +503,11 @@ export default function CreatorHub() {
           </div>
         </div>
 
-        {/* Reel Creation Section */}
+        {/* Vod Creation Section */}
         <div className="dashboard-card" style={{ marginTop: "2rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
             <Video size={24} color="#6366f1" />
-            <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: "600" }}>Create a Reel</h2>
+            <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: "600" }}>Create a Vod</h2>
           </div>
 
           {reelNotice.message && (
@@ -544,7 +539,7 @@ export default function CreatorHub() {
 
           <div style={{ marginBottom: "16px" }}>
             <textarea
-              placeholder="Add a caption to your reel (optional)..."
+              placeholder="Add a caption to your vod (optional)..."
               value={reelText}
               onChange={(e) => setReelText(e.target.value)}
               maxLength={500}
@@ -608,7 +603,7 @@ export default function CreatorHub() {
                 ) : (
                   <img
                     src={mediaPreviewUrl}
-                    alt="Reel preview"
+                    alt="Vod preview"
                     style={{ width: "100%", maxHeight: "400px", objectFit: "cover" }}
                   />
                 )}
@@ -663,12 +658,12 @@ export default function CreatorHub() {
                   borderRadius: "50%",
                   animation: "spin 1s linear infinite"
                 }}></div>
-                Creating Reel...
+                Creating Vod...
               </>
             ) : (
               <>
                 <Play size={16} />
-                Create Reel
+                Create Vod
               </>
             )}
           </button>

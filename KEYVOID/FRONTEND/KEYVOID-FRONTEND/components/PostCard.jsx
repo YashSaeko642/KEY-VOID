@@ -51,7 +51,7 @@ function renderSlashTags(text = "", onTagClick) {
   });
 }
 
-function PostCard({ post, onPostDeleted, onTagClick, defaultShowComments = false }) {
+function PostCard({ post, onPostDeleted, onTagClick, defaultShowComments = false, highlightCommentId = "" }) {
   const { user, isAuthenticated } = useAuth();
   const [currentPost, setCurrentPost] = useState(post);
   const activePost = currentPost || post;
@@ -124,6 +124,16 @@ function PostCard({ post, onPostDeleted, onTagClick, defaultShowComments = false
   useEffect(() => {
     setComments((activePost.comments || []).filter((comment) => !comment.isDeleted));
   }, [activePost.comments]);
+
+  useEffect(() => {
+    if (!showComments || !highlightCommentId) return;
+    const target = document.querySelector(`[data-comment-id="${CSS.escape(String(highlightCommentId))}"]`);
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    target.classList.add("comment-item-highlight");
+    const timer = window.setTimeout(() => target.classList.remove("comment-item-highlight"), 2200);
+    return () => window.clearTimeout(timer);
+  }, [comments.length, highlightCommentId, showComments]);
 
   useEffect(() => {
     setViews(activePost.viewCount || 0);
@@ -579,7 +589,7 @@ function PostCard({ post, onPostDeleted, onTagClick, defaultShowComments = false
                 );
 
                 return (
-                  <div className="comment-item" key={comment._id}>
+                  <div className="comment-item" data-comment-id={comment._id} key={comment._id}>
                     <div className="comment-avatar">
                       {comment.author?.username?.[0]?.toUpperCase() || "U"}
                     </div>

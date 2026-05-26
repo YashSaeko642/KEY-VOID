@@ -1,21 +1,44 @@
 /* POST CARD CONTAINER */
+@keyframes postCardLedSweep {
+  0% { transform: translateX(-48%); opacity: 0; }
+  18% { opacity: 0.86; }
+  58% { opacity: 0.46; }
+  100% { transform: translateX(126%); opacity: 0; }
+}
+
 .post-card {
-  background: linear-gradient(135deg, #0f172a, #091226);
-  border: 1px solid rgba(99, 102, 241, 0.25);
-  border-radius: 16px;
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(9, 18, 38, 0.98)),
+    #091226;
+  border: 1px solid rgba(125, 211, 252, 0.24);
+  border-radius: 8px;
   padding: 20px;
   margin-bottom: 20px;
   box-shadow: 
     0 8px 32px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 20px rgba(125, 211, 252, 0.04);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   backdrop-filter: blur(10px);
 }
 
+.post-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 44%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(125, 211, 252, 0.9), transparent);
+  animation: postCardLedSweep 5.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
 .post-card:hover {
-  border-color: rgba(99, 102, 241, 0.4);
+  border-color: rgba(125, 211, 252, 0.44);
   box-shadow: 
-    0 12px 48px rgba(99, 102, 241, 0.15),
+    0 12px 48px rgba(14, 165, 233, 0.14),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
   transform: translateY(-2px);
 }
@@ -318,6 +341,12 @@
   grid-template-columns: 32px minmax(0, 1fr) auto;
   gap: 10px;
   align-items: start;
+}
+
+.comment-item-highlight .comment-body {
+  border-color: rgba(125, 211, 252, 0.72);
+  background: rgba(14, 165, 233, 0.18);
+  box-shadow: 0 0 24px rgba(125, 211, 252, 0.16);
 }
 
 .comment-avatar {

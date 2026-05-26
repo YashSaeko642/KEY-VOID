@@ -31,8 +31,8 @@ export default function ProtectedRoute({ children, allowedRoles = [] }) {
             this once your role matches the required creator access.
           </p>
           <div className="auth-inline-actions">
-            <Link className="nav-button nav-button-primary" to="/dashboard">
-              Back to dashboard
+            <Link className="nav-button nav-button-primary" to="/profile">
+              Back to profile
             </Link>
             <Link className="nav-button nav-button-secondary" to="/">
               Go home

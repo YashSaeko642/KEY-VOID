@@ -655,6 +655,56 @@ exports.getUserPosts = async (req, res) => {
   }
 };
 
+exports.getUserCommentedPosts = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (!isValidObjectId(userId)) {
+      return res.status(400).json({ message: "Invalid user ID" });
+    }
+
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 10));
+    const skip = (page - 1) * limit;
+
+    const query = {
+      author: { $ne: userId },
+      isDeleted: false,
+      comments: {
+        $elemMatch: {
+          author: userId,
+          isDeleted: { $ne: true }
+        }
+      }
+    };
+
+    const [posts, total] = await Promise.all([
+      Post.find(query)
+        .populate("author", "username avatarUrl role")
+        .populate("comments.author", "username avatarUrl")
+        .sort({ "comments.createdAt": -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Post.countDocuments(query)
+    ]);
+
+    res.json({
+      posts,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+        hasNext: page * limit < total,
+        hasPrev: page > 1
+      }
+    });
+  } catch (err) {
+    console.error("Get user commented posts error:", err);
+    res.status(500).json({ message: "Failed to load commented discussions" });
+  }
+};
+
 exports.addComment = async (req, res) => {
   try {
     const { postId } = req.params;

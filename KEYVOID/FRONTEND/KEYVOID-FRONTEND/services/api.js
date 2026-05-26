@@ -54,6 +54,8 @@ export const getUserAudioUploads = (userId, page = 1, limit = 10) =>
   API.get(`/audio/user/${userId}`, { params: { page, limit } });
 export const getUserPosts = (userId, page = 1, limit = 10, contentType = "") =>
   API.get(`/posts/user/${userId}`, { params: { page, limit, contentType } });
+export const getUserCommentedPosts = (userId, page = 1, limit = 10) =>
+  API.get(`/posts/user/${userId}/comments`, { params: { page, limit } });
 export const getCreatorInsights = () => API.get("/posts/creator/insights");
 export const trackPostView = (postId) => API.post(`/posts/${postId}/view`);
 export const reportPost = (postId, payload) => API.post(`/posts/${postId}/report`, payload);
