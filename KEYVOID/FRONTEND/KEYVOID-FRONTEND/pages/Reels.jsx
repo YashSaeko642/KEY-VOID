@@ -211,7 +211,7 @@ function ReelCard({ reel }) {
     if (!isAuthenticated || !reelId) return;
 
     try {
-      await reportPost(reelId, { reason: "Other", details: "Reported from Reels" });
+      await reportPost(reelId, { reason: "Other", details: "Reported from Vods" });
       setReportNotice("Sent to moderation");
       window.setTimeout(() => setReportNotice(""), 2500);
     } catch (err) {
@@ -243,7 +243,7 @@ function ReelCard({ reel }) {
         ) : (
           <img
             src={reel.mediaUrl}
-            alt="Reel content"
+            alt="Vod content"
             className="reel-image"
           />
         )}
@@ -437,7 +437,7 @@ export default function Reels() {
       return newReels;
     } catch (err) {
       console.error("Failed to fetch reels:", err);
-      setError(getApiErrorMessage(err, "Failed to load reels. Please try again."));
+      setError(getApiErrorMessage(err, "Failed to load vods. Please try again."));
       setHasNext(false);
       return [];
     } finally {
@@ -540,7 +540,7 @@ export default function Reels() {
         {isLoading && (
           <div className="reels-loading">
             <div className="loading-spinner"></div>
-            <p>Loading reel...</p>
+            <p>Loading vod...</p>
           </div>
         )}
 
@@ -552,8 +552,8 @@ export default function Reels() {
 
         {reels.length === 0 && !isLoading && !error && (
           <div className="reels-empty">
-            <h2>No reels yet</h2>
-            <p>Be the first to create a reel!</p>
+            <h2>No vods yet</h2>
+            <p>Be the first to create a vod.</p>
           </div>
         )}
       </div>

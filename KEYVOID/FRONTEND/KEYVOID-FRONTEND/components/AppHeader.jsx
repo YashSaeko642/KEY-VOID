@@ -8,7 +8,7 @@ const baseNavItems = [
   { path: "/", label: "Home" },
   { path: "/music", label: "Music" },
   { path: "/feed", label: "Feed" },
-  { path: "/reels", label: "Reels" },
+  { path: "/reels", label: "Vods" },
   { path: "/roadmap", label: "Roadmap" },
   { path: "/search", label: "Search" },
   { path: "/profile", label: "Profile" }

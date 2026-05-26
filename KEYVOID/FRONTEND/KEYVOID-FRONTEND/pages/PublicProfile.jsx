@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { BarChart3, Disc3, Eye, Grid3X3, Heart, Home, Menu, MessageCircle, Music2, Pause, Pencil, Play, Radio, Search, Settings, Sparkles, Trash2, TrendingUp, UserPlus, X } from "lucide-react";
-import API, { followUser, unfollowUser, getFollowStatus, getApiErrorMessage, getUserAudioUploads, getUserPosts, getCreatorInsights, trackPostView } from "../services/api";
+import { BarChart3, Disc3, Eye, Grid3X3, Heart, Menu, MessageCircle, Music2, Pause, Pencil, Play, Plus, Radio, Search, Settings, Sparkles, Trash2, TrendingUp, Upload, UserPlus, Video, X } from "lucide-react";
+import API, { followUser, unfollowUser, getFollowStatus, getApiErrorMessage, getUserAudioUploads, getUserCommentedPosts, getUserPosts, getCreatorInsights, trackPostView, uploadCreatorSongs } from "../services/api";
+import CreatePostModal from "../components/CreatePostModal";
 import PostCard from "../components/PostCard";
 import { useAuth } from "../src/context/useAuth";
 import { usePlayer } from "../src/context/PlayerContext";
+import { getRelativeTime } from "../src/utils/formatters";
 
 function getTrackId(track) {
   return track?._id || track?.id || "";
@@ -55,6 +57,7 @@ const EMPTY_PROFILE_FORM = {
 
 const IMAGE_LIMIT_BYTES = 2 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+const MUSIC_CATEGORIES = ["Metal", "Blues", "Electronic", "Rock", "Pop", "Hip-Hop", "Jazz", "Classical", "Folk", "Country", "R&B", "Punk", "Ambient", "Indie"];
 
 function profileToForm(profile = {}) {
   return {
@@ -74,7 +77,7 @@ function ProfileAvatar({ profile, className = "" }) {
   );
 }
 
-function ProfilePostViewer({ currentPost, onClose, onPostDeleted, onSelectPost, posts }) {
+function ProfilePostViewer({ currentPost, highlightCommentId = "", onClose, onPostDeleted, onSelectPost, posts }) {
   const currentIndex = posts.findIndex((post) => post._id === currentPost?._id);
   const hasPrevious = currentIndex > 0;
   const hasNext = currentIndex >= 0 && currentIndex < posts.length - 1;
@@ -125,6 +128,7 @@ function ProfilePostViewer({ currentPost, onClose, onPostDeleted, onSelectPost, 
             key={currentPost._id}
             post={currentPost}
             defaultShowComments
+            highlightCommentId={highlightCommentId}
             onPostDeleted={(postId) => {
               onPostDeleted(postId);
               onClose();
@@ -214,11 +218,11 @@ function CreatorAnalyticsView({ creatorInsights, insightsNotice }) {
               <div className="profile-analytics-list">
                 {creatorInsights.topPosts?.length ? creatorInsights.topPosts.map((post) => (
                   <div className="profile-analytics-item" key={post._id}>
-                    <strong>{post.contentType === "reel" ? "Reel" : "Post"}</strong>
+                    <strong>{post.contentType === "reel" ? "Vod" : "Discussion"}</strong>
                     <span>{formatCompactNumber(post.viewCount || 0)} views</span>
                     <p>{decodeStoredText(post.title || post.text || `${post.mediaType || "Media"} content`)}</p>
                   </div>
-                )) : <div className="profile-empty-card">Create posts or reels to start collecting insights.</div>}
+                )) : <div className="profile-empty-card">Create discussions or vods to start collecting insights.</div>}
               </div>
             </div>
             <div>
@@ -238,13 +242,36 @@ function CreatorAnalyticsView({ creatorInsights, insightsNotice }) {
   );
 }
 
+function CreatorWorkspaceView({ audioCount, onOpenMusic, onOpenVod, vodCount }) {
+  return (
+    <section className="profile-workspace-panel creator-workspace-panel">
+      <div className="profile-workspace-heading">
+        <p className="profile-kicker">Creator Hub</p>
+        <h2>Creator tools</h2>
+      </div>
+      <div className="creator-action-grid">
+        <button className="creator-action-card" type="button" onClick={onOpenMusic}>
+          <Music2 size={22} />
+          <span>Upload music</span>
+          <strong>{formatCompactNumber(audioCount || 0)} tracks</strong>
+        </button>
+        <button className="creator-action-card" type="button" onClick={onOpenVod}>
+          <Video size={22} />
+          <span>Upload vod</span>
+          <strong>{formatCompactNumber(vodCount || 0)} vods</strong>
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export default function PublicProfile({ ownProfile = false }) {
   const { username } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { deleteAccount, updateUser, user, isAuthenticated } = useAuth();
   const updateUserRef = useRef(updateUser);
-  const { activeTrack, isPlaying, handleSelectTrack, handleTogglePlay, deleteUploadedTrack } = usePlayer();
+  const { activeTrack, isPlaying, handleSelectTrack, handleTogglePlay, deleteUploadedTrack, refreshLibrary } = usePlayer();
   const [profile, setProfile] = useState(null);
   const [status, setStatus] = useState("loading");
   const [message, setMessage] = useState("");
@@ -252,6 +279,7 @@ export default function PublicProfile({ ownProfile = false }) {
   const [isFollowLoading, setIsFollowLoading] = useState(false);
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
   const [selectedPost, setSelectedPost] = useState(null);
+  const [selectedCommentId, setSelectedCommentId] = useState("");
   const [editOpen, setEditOpen] = useState(false);
   const [editFormData, setEditFormData] = useState(EMPTY_PROFILE_FORM);
   const [imageState, setImageState] = useState({
@@ -265,6 +293,8 @@ export default function PublicProfile({ ownProfile = false }) {
   const [editStatus, setEditStatus] = useState("ready");
   const [editMessage, setEditMessage] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [createDiscussionOpen, setCreateDiscussionOpen] = useState(false);
+  const [creatorUploadOpen, setCreatorUploadOpen] = useState("");
   const [deleteAccountConfirm, setDeleteAccountConfirm] = useState("");
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [workspaceView, setWorkspaceView] = useState("profile");
@@ -274,11 +304,21 @@ export default function PublicProfile({ ownProfile = false }) {
   const [postsPagination, setPostsPagination] = useState({ page: 1, limit: 9, total: 0, pages: 0, hasNext: false, hasPrev: false });
   const [reels, setReels] = useState([]);
   const [reelsPagination, setReelsPagination] = useState({ page: 1, limit: 9, total: 0, pages: 0, hasNext: false, hasPrev: false });
+  const [commentedPosts, setCommentedPosts] = useState([]);
+  const [commentedPagination, setCommentedPagination] = useState({ page: 1, limit: 9, total: 0, pages: 0, hasNext: false, hasPrev: false });
   const [activityTab, setActivityTab] = useState("posts");
   const [contentLoading, setContentLoading] = useState(false);
   const [contentError, setContentError] = useState("");
   const [creatorInsights, setCreatorInsights] = useState(null);
   const [insightsNotice, setInsightsNotice] = useState("");
+  const [musicForm, setMusicForm] = useState({ title: "", artist: user?.username || "", genre: MUSIC_CATEGORIES[0], tags: "", releaseType: "track", files: [] });
+  const [musicNotice, setMusicNotice] = useState({ type: "", message: "" });
+  const [isUploadingMusic, setIsUploadingMusic] = useState(false);
+  const [vodText, setVodText] = useState("");
+  const [vodMedia, setVodMedia] = useState(null);
+  const [vodPreviewUrl, setVodPreviewUrl] = useState("");
+  const [vodNotice, setVodNotice] = useState({ type: "", message: "" });
+  const [isCreatingVod, setIsCreatingVod] = useState(false);
 
   const requestedMode = searchParams.get("tab") || "posts";
   const isArtist = profile?.role === "creator" || profile?.role === "admin" || profile?.isCreator;
@@ -381,7 +421,28 @@ export default function PublicProfile({ ownProfile = false }) {
         setPostsPagination(pagination);
       }
     } catch (error) {
-      setContentError(getApiErrorMessage(error, `Unable to load ${contentType === "reel" ? "reels" : "posts"}.`));
+      setContentError(getApiErrorMessage(error, `Unable to load ${contentType === "reel" ? "vods" : "discussions"}.`));
+    } finally {
+      setContentLoading(false);
+    }
+  }, [profile?.id]);
+
+  const loadCommentedPosts = useCallback(async (page = 1, append = false, showError = true) => {
+    if (!profile?.id) return;
+    if (showError) setContentError("");
+    setContentLoading(true);
+
+    try {
+      const { data } = await getUserCommentedPosts(profile.id, page, 9);
+      const nextPosts = data.posts || [];
+      setCommentedPosts((prev) => (append ? [...prev, ...nextPosts] : nextPosts));
+      setCommentedPagination(data.pagination || { page, limit: 9, total: nextPosts.length, pages: 1, hasNext: false, hasPrev: page > 1 });
+    } catch (error) {
+      setCommentedPosts((prev) => (append ? prev : []));
+      setCommentedPagination((current) => ({ ...current, page, total: append ? current.total : 0, hasNext: false }));
+      if (showError) {
+        setContentError(getApiErrorMessage(error, "Unable to load commented discussions."));
+      }
     } finally {
       setContentLoading(false);
     }
@@ -392,7 +453,8 @@ export default function PublicProfile({ ownProfile = false }) {
     if (isArtist) loadProfileAudio();
     loadProfilePosts(1, "post");
     if (isArtist) loadProfilePosts(1, "reel");
-  }, [profile?.id, isArtist, loadProfileAudio, loadProfilePosts]);
+    loadCommentedPosts(1, false, false);
+  }, [profile?.id, isArtist, loadCommentedPosts, loadProfileAudio, loadProfilePosts]);
 
   useEffect(() => {
     if (!isOwnProfile || !isArtist) return;
@@ -416,6 +478,10 @@ export default function PublicProfile({ ownProfile = false }) {
     };
   }, [isOwnProfile, isArtist]);
 
+  useEffect(() => () => {
+    if (vodPreviewUrl) URL.revokeObjectURL(vodPreviewUrl);
+  }, [vodPreviewUrl]);
+
   const artistStats = useMemo(() => {
     const totalLikes = audioTracks.reduce((total, track) => total + getTrackLikes(track), 0);
     const totalListens = audioTracks.reduce((total, track, index) => total + getTrackListens(track, index), 0);
@@ -423,8 +489,25 @@ export default function PublicProfile({ ownProfile = false }) {
     return { totalLikes, totalListens, genres };
   }, [audioTracks]);
 
-  const selectedActivity = activityTab === "reels" ? reels : posts;
-  const selectedPagination = activityTab === "reels" ? reelsPagination : postsPagination;
+  const selectedActivity = activityTab === "vods" ? reels : activityTab === "comments" ? commentedPosts : posts;
+  const selectedPagination = activityTab === "vods" ? reelsPagination : activityTab === "comments" ? commentedPagination : postsPagination;
+  const profileGenres = useMemo(() => {
+    if (Array.isArray(profile?.favoriteGenres)) {
+      return profile.favoriteGenres.filter(Boolean);
+    }
+    if (typeof profile?.favoriteGenres === "string") {
+      return profile.favoriteGenres.split(",").map((genre) => genre.trim()).filter(Boolean);
+    }
+    return [];
+  }, [profile?.favoriteGenres]);
+  const commentHistory = useMemo(() => {
+    if (!profile?.id) return [];
+    return commentedPosts.flatMap((post) => (
+      (post.comments || [])
+        .filter((comment) => !comment.isDeleted && String(comment.author?._id || comment.author) === String(profile.id))
+        .map((comment) => ({ comment, post }))
+    )).sort((a, b) => new Date(b.comment.createdAt || 0) - new Date(a.comment.createdAt || 0));
+  }, [commentedPosts, profile?.id]);
 
   const handleFollowToggle = async () => {
     if (!isAuthenticated) {
@@ -452,7 +535,11 @@ export default function PublicProfile({ ownProfile = false }) {
 
   const handleLoadMoreActivity = async () => {
     if (!selectedPagination.hasNext) return;
-    await loadProfilePosts(selectedPagination.page + 1, activityTab === "reels" ? "reel" : "post", true);
+    if (activityTab === "comments") {
+      await loadCommentedPosts(selectedPagination.page + 1, true);
+      return;
+    }
+    await loadProfilePosts(selectedPagination.page + 1, activityTab === "vods" ? "reel" : "post", true);
   };
 
   const handleLoadMoreAudio = async () => {
@@ -468,7 +555,8 @@ export default function PublicProfile({ ownProfile = false }) {
     }
   };
 
-  const handleOpenPost = (post) => {
+  const handleOpenPost = (post, commentId = "") => {
+    setSelectedCommentId(commentId || "");
     setSelectedPost(post);
 
     if (!post?._id) return;
@@ -486,16 +574,23 @@ export default function PublicProfile({ ownProfile = false }) {
         );
         setPosts((current) => current.map(updatePostViews));
         setReels((current) => current.map(updatePostViews));
+        setCommentedPosts((current) => current.map(updatePostViews));
       })
       .catch(() => {});
+  };
+
+  const handleOpenComment = (post, commentId) => {
+    handleOpenPost(post, commentId);
   };
 
   const handleDeletePost = (postId) => {
     const wasPost = posts.some((post) => post._id === postId);
     const wasReel = reels.some((post) => post._id === postId);
+    const wasCommented = commentedPosts.some((post) => post._id === postId);
 
     setPosts((current) => current.filter((post) => post._id !== postId));
     setReels((current) => current.filter((post) => post._id !== postId));
+    setCommentedPosts((current) => current.filter((post) => post._id !== postId));
     setPostsPagination((current) => ({
       ...current,
       total: Math.max(0, (current.total || 0) - (wasPost ? 1 : 0))
@@ -504,7 +599,134 @@ export default function PublicProfile({ ownProfile = false }) {
       ...current,
       total: Math.max(0, (current.total || 0) - (wasReel ? 1 : 0))
     }));
+    setCommentedPagination((current) => ({
+      ...current,
+      total: Math.max(0, (current.total || 0) - (wasCommented ? 1 : 0))
+    }));
     setSelectedPost((current) => (current?._id === postId ? null : current));
+  };
+
+  const handleDiscussionCreated = (payload) => {
+    const nextPost = payload?.post || payload;
+    if (!nextPost?._id) return;
+
+    setPosts((current) => [nextPost, ...current.filter((post) => post._id !== nextPost._id)].slice(0, postsPagination.limit || 9));
+    setPostsPagination((current) => ({
+      ...current,
+      total: (current.total || 0) + 1
+    }));
+    setActivityTab("posts");
+    setWorkspaceView("profile");
+    setSearchParams({ tab: "posts" });
+  };
+
+  const handleMusicFileChange = (event) => {
+    const files = Array.from(event.target.files || []);
+    const invalidFile = files.find((file) => !file.type.startsWith("audio/") || file.size > 30 * 1024 * 1024);
+
+    if (invalidFile) {
+      setMusicNotice({ type: "error", message: "Each audio file must be under 30MB." });
+      event.target.value = "";
+      return;
+    }
+
+    setMusicForm((current) => ({ ...current, files }));
+    setMusicNotice({ type: "", message: "" });
+  };
+
+  const handleUploadMusic = async (event) => {
+    event.preventDefault();
+    if (!musicForm.files.length || isUploadingMusic) {
+      setMusicNotice({ type: "error", message: "Choose at least one audio file." });
+      return;
+    }
+
+    try {
+      setIsUploadingMusic(true);
+      const formData = new FormData();
+      musicForm.files.forEach((file) => formData.append("songs", file));
+      formData.append("title", musicForm.title);
+      formData.append("artist", musicForm.artist || user?.username || "Original Artist");
+      formData.append("genre", musicForm.genre);
+      formData.append("tags", musicForm.tags);
+      formData.append("releaseType", musicForm.releaseType);
+
+      await uploadCreatorSongs(formData);
+      setMusicForm({ title: "", artist: user?.username || "", genre: MUSIC_CATEGORIES[0], tags: "", releaseType: "track", files: [] });
+      setMusicNotice({ type: "success", message: "Music uploaded." });
+      await loadProfileAudio(1);
+      refreshLibrary?.();
+      window.setTimeout(() => setCreatorUploadOpen(""), 700);
+    } catch (error) {
+      setMusicNotice({ type: "error", message: getApiErrorMessage(error, "Unable to upload music.") });
+    } finally {
+      setIsUploadingMusic(false);
+    }
+  };
+
+  const clearVodMedia = () => {
+    if (vodPreviewUrl) URL.revokeObjectURL(vodPreviewUrl);
+    setVodMedia(null);
+    setVodPreviewUrl("");
+  };
+
+  const handleVodMediaChange = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    const isAllowedMedia = file.type.startsWith("video/") || file.type.startsWith("image/");
+    if (!isAllowedMedia) {
+      setVodNotice({ type: "error", message: "Choose a video or image file." });
+      return;
+    }
+
+    const maxSize = file.type.startsWith("video/") ? 100 * 1024 * 1024 : 50 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setVodNotice({ type: "error", message: `Maximum file size is ${maxSize / (1024 * 1024)}MB.` });
+      return;
+    }
+
+    clearVodMedia();
+    setVodMedia(file);
+    setVodPreviewUrl(URL.createObjectURL(file));
+    setVodNotice({ type: "", message: "" });
+  };
+
+  const handleCreateVod = async (event) => {
+    event.preventDefault();
+    if (!vodMedia || isCreatingVod) return;
+
+    try {
+      setIsCreatingVod(true);
+      setVodNotice({ type: "", message: "" });
+      const formData = new FormData();
+      if (vodText.trim()) formData.append("text", vodText.trim());
+      formData.append("media", vodMedia);
+      formData.append("contentType", "reel");
+      const response = await API.post("/posts/reel", formData);
+      const nextVod = response.data?.post || response.data;
+
+      setVodText("");
+      clearVodMedia();
+      if (nextVod?._id) {
+        setReels((current) => [nextVod, ...current.filter((post) => post._id !== nextVod._id)]);
+        setReelsPagination((current) => ({ ...current, total: (current.total || 0) + 1 }));
+      } else {
+        await loadProfilePosts(1, "reel");
+      }
+      setActivityTab("vods");
+      setWorkspaceView("profile");
+      setSearchParams({ tab: "posts" });
+      setVodNotice({ type: "success", message: "Vod uploaded." });
+      window.setTimeout(() => setCreatorUploadOpen(""), 700);
+    } catch (error) {
+      const serverMessage = error.response?.data?.message || error.response?.data?.msg || error.message;
+      const isLargeUpload = error.response?.status === 413 || /payload too large|uploaded file is too large/i.test(serverMessage);
+      setVodNotice({ type: "error", message: isLargeUpload ? "The file is too large." : getApiErrorMessage(error, "Unable to upload vod.") });
+    } finally {
+      setIsCreatingVod(false);
+    }
   };
 
   const handleEditChange = (event) => {
@@ -655,12 +877,20 @@ export default function PublicProfile({ ownProfile = false }) {
                   </button>
                 ) : null}
                 <button className={`profile-side-link ${showProfileContent && activeMode === "posts" ? "active" : ""}`} type="button" onClick={() => { setWorkspaceView("profile"); setSearchParams({ tab: "posts" }); }}>
-                  <Grid3X3 size={17} /> Posts and reels
+                  <Grid3X3 size={17} /> Discussions and vods
                 </button>
               </div>
 
               <div className="profile-side-section">
                 <p className="drawer-section-label">Account</p>
+                <button className="profile-side-link" type="button" onClick={() => setCreateDiscussionOpen(true)}>
+                  <Plus size={17} /> Start discussion
+                </button>
+                {isArtist ? (
+                  <button className={`profile-side-link ${workspaceView === "creator" ? "active" : ""}`} type="button" onClick={() => setWorkspaceView("creator")}>
+                    <Music2 size={17} /> Creator Hub
+                  </button>
+                ) : null}
                 <button className="profile-side-link" type="button" onClick={() => setEditOpen(true)}>
                   <Pencil size={17} /> Edit profile
                 </button>
@@ -669,9 +899,6 @@ export default function PublicProfile({ ownProfile = false }) {
                     <BarChart3 size={17} /> Creator analytics
                   </button>
                 ) : null}
-                <button className={`profile-side-link ${workspaceView === "dashboard" ? "active" : ""}`} type="button" onClick={() => setWorkspaceView("dashboard")}>
-                  <Home size={17} /> Dashboard
-                </button>
                 <Link className="profile-side-link" to="/search">
                   <Search size={17} /> Search creators
                 </Link>
@@ -689,7 +916,7 @@ export default function PublicProfile({ ownProfile = false }) {
               <button className="rail-toggle" type="button" onClick={() => setLeftPanelOpen(true)} aria-label="Open profile panel">
                 <Menu size={18} />
               </button>
-              <button className={`rail-btn ${showProfileContent && activeMode === "posts" ? "active" : ""}`} type="button" onClick={() => { setWorkspaceView("profile"); setSearchParams({ tab: "posts" }); }} aria-label="Posts and reels">
+              <button className={`rail-btn ${showProfileContent && activeMode === "posts" ? "active" : ""}`} type="button" onClick={() => { setWorkspaceView("profile"); setSearchParams({ tab: "posts" }); }} aria-label="Discussions and vods">
                 <Grid3X3 size={18} />
               </button>
               {isArtist ? (
@@ -698,9 +925,14 @@ export default function PublicProfile({ ownProfile = false }) {
                 </button>
               ) : null}
               <span className="rail-divider" />
-              <button className={`rail-btn ${workspaceView === "dashboard" ? "active" : ""}`} type="button" onClick={() => setWorkspaceView("dashboard")} aria-label="Dashboard">
-                <Home size={18} />
+              <button className="rail-btn" type="button" onClick={() => setCreateDiscussionOpen(true)} aria-label="Start discussion">
+                <Plus size={18} />
               </button>
+              {isArtist ? (
+                <button className={`rail-btn ${workspaceView === "creator" ? "active" : ""}`} type="button" onClick={() => setWorkspaceView("creator")} aria-label="Creator Hub">
+                  <Music2 size={18} />
+                </button>
+              ) : null}
               {isArtist ? (
                 <button className={`rail-btn ${workspaceView === "analytics" ? "active" : ""}`} type="button" onClick={() => setWorkspaceView("analytics")} aria-label="Creator analytics">
                   <BarChart3 size={18} />
@@ -718,176 +950,345 @@ export default function PublicProfile({ ownProfile = false }) {
       ) : null}
 
       <div className="profile-hero-shell">
-        <div className="artist-hero" style={{ backgroundImage: profile.bannerUrl ? `url(${profile.bannerUrl})` : "" }}>
-          <div className="artist-hero-shade" />
-          <div className="artist-hero-content">
-            <div className="artist-hero-avatar">
-              <ProfileAvatar profile={profile} />
-            </div>
-            <div>
-              <p className="profile-kicker">{isArtist ? "Verified KeyVoid Artist" : "KeyVoid Listener"}</p>
-              <h1>{profile.username}</h1>
-              <p>{profile.bio || "This profile is still tuning their signal."}</p>
-              <div className="artist-hero-stats">
-                <span>{formatCompactNumber(profile.followersCount)} followers</span>
-                <span>{formatCompactNumber(profile.followingCount)} following</span>
-                {isArtist ? <span>{formatCompactNumber(audioPagination.total)} songs</span> : null}
+        <div className="profile-three-column">
+          <main className="profile-center-column">
+            <div className="profile-feed-header">
+              <div>
+                <p className="profile-kicker">{workspaceView === "profile" ? "Profile Feed" : workspaceView === "analytics" ? "Creator Studio" : workspaceView === "creator" ? "Creator Hub" : "Account"}</p>
+                <h1>{workspaceView === "profile" ? (activeMode === "artist" ? "Artist signal" : "Discussions") : workspaceView === "analytics" ? "Analytics" : workspaceView === "creator" ? "Creator tools" : "Profile"}</h1>
               </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="profile-command-row">
-          <div className="profile-mode-tabs">
-            {isArtist ? (
-              <button type="button" className={activeMode === "artist" ? "active" : ""} onClick={() => setSearchParams({ tab: "artist" })}>
-                <Radio size={16} /> Artist
-              </button>
-            ) : null}
-            <button type="button" className={activeMode === "posts" ? "active" : ""} onClick={() => setSearchParams({ tab: "posts" })}>
-              <Grid3X3 size={16} /> Posts
-            </button>
-          </div>
-
-          <div className="profile-actions">
-            {!isOwnProfile && isAuthenticated ? (
-              <button type="button" className="profile-action-button" onClick={handleFollowToggle} disabled={isFollowLoading}>
-                <UserPlus size={16} /> {isFollowLoading ? "..." : followStatus?.isFollowing ? "Following" : "Follow"}
-              </button>
-            ) : null}
-            {isOwnProfile ? <button className="profile-action-button" type="button" onClick={() => setEditOpen(true)}>Edit Profile</button> : null}
-          </div>
-        </div>
-
-        {message ? <p className="profile-inline-error">{message}</p> : null}
-        {contentError ? <p className="profile-inline-error">{contentError}</p> : null}
-
-        {workspaceView === "dashboard" ? (
-          <ProfileDashboardView profile={profile} user={user} isArtist={isArtist} />
-        ) : workspaceView === "analytics" ? (
-          <CreatorAnalyticsView creatorInsights={creatorInsights} insightsNotice={insightsNotice} />
-        ) : activeMode === "artist" ? (
-          <div className="artist-page-grid">
-            <main className="artist-main-section">
-              <div className="artist-control-strip">
-                <button
-                  type="button"
-                  className="artist-play-button"
-                  onClick={() => audioTracks[0] && (getTrackId(activeTrack) === getTrackId(audioTracks[0]) ? handleTogglePlay() : handleSelectTrack(audioTracks[0]))}
-                  disabled={!audioTracks.length}
-                  aria-label="Play artist"
-                >
-                  {isPlaying && getTrackId(activeTrack) === getTrackId(audioTracks[0]) ? <Pause size={26} /> : <Play size={26} />}
+              <div className="profile-mode-tabs">
+                <button type="button" className={showProfileContent && activeMode === "posts" ? "active" : ""} onClick={() => { setWorkspaceView("profile"); setSearchParams({ tab: "posts" }); }}>
+                  <Grid3X3 size={16} /> Discussions
                 </button>
-                <div className="artist-stat-pill"><Eye size={16} /> {formatCompactNumber(artistStats.totalListens)} listens</div>
-                <div className="artist-stat-pill"><Heart size={16} /> {formatCompactNumber(artistStats.totalLikes)} likes</div>
-                <div className="artist-stat-pill"><Disc3 size={16} /> {formatCompactNumber(audioPagination.total)} tracks</div>
+                {isArtist ? (
+                  <button type="button" className={showProfileContent && activeMode === "artist" ? "active" : ""} onClick={() => { setWorkspaceView("profile"); setSearchParams({ tab: "artist" }); }}>
+                    <Radio size={16} /> Artist
+                  </button>
+                ) : null}
               </div>
+            </div>
 
-              <section className="artist-section">
-                <div className="artist-section-heading">
-                  <h2>Popular</h2>
-                  {contentLoading ? <span>Loading...</span> : null}
+            {isArtist ? (
+              <div className="profile-artist-switch">
+                <button type="button" className="profile-action-button primary" onClick={() => { setWorkspaceView("profile"); setSearchParams({ tab: activeMode === "artist" ? "posts" : "artist" }); }}>
+                  {activeMode === "artist" ? <Grid3X3 size={16} /> : <Radio size={16} />}
+                  {activeMode === "artist" ? "Back to discussions" : "Shift to artist"}
+                </button>
+              </div>
+            ) : null}
+
+            <div className="profile-mobile-identity">
+              <ProfileAvatar profile={profile} />
+              <div>
+                <strong>@{profile.username}</strong>
+                <span>{isArtist ? "Creator" : "Listener"} profile</span>
+              </div>
+            </div>
+
+            {message ? <p className="profile-inline-error">{message}</p> : null}
+            {contentError ? <p className="profile-inline-error">{contentError}</p> : null}
+
+            {workspaceView === "analytics" ? (
+              <CreatorAnalyticsView creatorInsights={creatorInsights} insightsNotice={insightsNotice} />
+            ) : workspaceView === "creator" && isArtist ? (
+              <CreatorWorkspaceView
+                audioCount={audioPagination.total}
+                vodCount={reelsPagination.total}
+                onOpenMusic={() => setCreatorUploadOpen("music")}
+                onOpenVod={() => setCreatorUploadOpen("vod")}
+              />
+            ) : activeMode === "artist" ? (
+              <div className="artist-page-grid">
+                <main className="artist-main-section">
+                  <div className="artist-control-strip">
+                    <button
+                      type="button"
+                      className="artist-play-button"
+                      onClick={() => audioTracks[0] && (getTrackId(activeTrack) === getTrackId(audioTracks[0]) ? handleTogglePlay() : handleSelectTrack(audioTracks[0]))}
+                      disabled={!audioTracks.length}
+                      aria-label="Play artist"
+                    >
+                      {isPlaying && getTrackId(activeTrack) === getTrackId(audioTracks[0]) ? <Pause size={26} /> : <Play size={26} />}
+                    </button>
+                    <div className="artist-stat-pill"><Eye size={16} /> {formatCompactNumber(artistStats.totalListens)} listens</div>
+                    <div className="artist-stat-pill"><Heart size={16} /> {formatCompactNumber(artistStats.totalLikes)} likes</div>
+                    <div className="artist-stat-pill"><Disc3 size={16} /> {formatCompactNumber(audioPagination.total)} tracks</div>
+                  </div>
+
+                  <section className="artist-section">
+                    <div className="artist-section-heading">
+                      <h2>Popular</h2>
+                      {contentLoading ? <span>Loading...</span> : null}
+                    </div>
+                    <div className="artist-track-list">
+                      {audioTracks.length ? audioTracks.map((track, index) => {
+                        const active = getTrackId(activeTrack) === getTrackId(track);
+                        return (
+                          <div className={`artist-track-row ${active ? "active" : ""}`} key={getTrackId(track)}>
+                            <button type="button" className="artist-track-play" onClick={() => handleSelectTrack(track)} aria-label={`Play ${track.title}`}>
+                              {active && isPlaying ? <Pause size={15} /> : <Play size={15} />}
+                            </button>
+                            <span className="artist-track-rank">{index + 1}</span>
+                            <div className="artist-track-art">{track.coverUrl ? <img src={track.coverUrl} alt="" /> : <Music2 size={18} />}</div>
+                            <div className="artist-track-copy">
+                              <strong>{track.title || "Untitled"}</strong>
+                              <span>{track.genre || "Uploads"}</span>
+                            </div>
+                            <span>{formatCompactNumber(getTrackListens(track, index))}</span>
+                            <span>{formatCompactNumber(getTrackLikes(track))} likes</span>
+                            <span>{formatDuration(track.duration)}</span>
+                            {isOwnProfile ? (
+                              <button type="button" className="artist-delete-track" onClick={() => handleDeleteAudio(getTrackId(track))}>Delete</button>
+                            ) : null}
+                          </div>
+                        );
+                      }) : (
+                        <div className="profile-empty-card">No public music yet.</div>
+                      )}
+                    </div>
+                    {audioPagination.hasNext ? <button type="button" className="profile-load-more" onClick={handleLoadMoreAudio}>Load more music</button> : null}
+                  </section>
+                </main>
+
+                <aside className="artist-side-section">
+                  <section className="artist-pick-card">
+                    <p className="profile-kicker">Artist Pick</p>
+                    {audioTracks[0] ? (
+                      <button type="button" onClick={() => handleSelectTrack(audioTracks[0])}>
+                        <span>{audioTracks[0].title}</span>
+                        <small>{audioTracks[0].genre || "New upload"}</small>
+                      </button>
+                    ) : (
+                      <p>New releases will show here.</p>
+                    )}
+                  </section>
+                  <section className="artist-pick-card">
+                    <p className="profile-kicker">Sound</p>
+                    <div className="profile-chip-row compact">
+                      {(artistStats.genres.length ? artistStats.genres : profileGenres.length ? profileGenres : ["Discovery"]).map((genre) => (
+                        <span className="profile-chip" key={genre}>{genre}</span>
+                      ))}
+                    </div>
+                  </section>
+                </aside>
+              </div>
+            ) : (
+              <div className="profile-posts-surface">
+                <div className="activity-tabs">
+                  <button type="button" className={activityTab === "posts" ? "active" : ""} onClick={() => setActivityTab("posts")}>
+                    <Grid3X3 size={15} /> Discussions {postsPagination.total}
+                  </button>
+                  {isArtist ? (
+                    <button type="button" className={activityTab === "vods" ? "active" : ""} onClick={() => setActivityTab("vods")}>
+                      <Sparkles size={15} /> Vods {reelsPagination.total}
+                    </button>
+                  ) : null}
+                  <button type="button" className={activityTab === "comments" ? "active" : ""} onClick={() => setActivityTab("comments")}>
+                    <MessageCircle size={15} /> Comments {commentedPagination.total}
+                  </button>
                 </div>
-                <div className="artist-track-list">
-                  {audioTracks.length ? audioTracks.map((track, index) => {
-                    const active = getTrackId(activeTrack) === getTrackId(track);
-                    return (
-                      <div className={`artist-track-row ${active ? "active" : ""}`} key={getTrackId(track)}>
-                        <button type="button" className="artist-track-play" onClick={() => handleSelectTrack(track)} aria-label={`Play ${track.title}`}>
-                          {active && isPlaying ? <Pause size={15} /> : <Play size={15} />}
-                        </button>
-                        <span className="artist-track-rank">{index + 1}</span>
-                        <div className="artist-track-art">{track.coverUrl ? <img src={track.coverUrl} alt="" /> : <Music2 size={18} />}</div>
-                        <div className="artist-track-copy">
-                          <strong>{track.title || "Untitled"}</strong>
-                          <span>{track.genre || "Uploads"}</span>
-                        </div>
-                        <span>{formatCompactNumber(getTrackListens(track, index))}</span>
-                        <span>{formatCompactNumber(getTrackLikes(track))} likes</span>
-                        <span>{formatDuration(track.duration)}</span>
-                        {isOwnProfile ? (
-                          <button type="button" className="artist-delete-track" onClick={() => handleDeleteAudio(getTrackId(track))}>Delete</button>
-                        ) : null}
+
+                {activityTab === "comments" ? (
+                  <div className="profile-comment-history">
+                    {commentHistory.length ? commentHistory.map(({ comment, post }) => (
+                      <button className="profile-comment-card" type="button" onClick={() => handleOpenComment(post, comment._id)} key={`${post._id}-${comment._id}`}>
+                        <span>{getRelativeTime(new Date(comment.createdAt))}</span>
+                        <strong>{getPostPreview(post)}</strong>
+                        <p>{decodeStoredText(comment.text)}</p>
+                      </button>
+                    )) : (
+                      <div className="profile-empty-card">No commented discussions yet.</div>
+                    )}
+                  </div>
+                ) : (
+                <div className="profile-post-grid">
+                  {selectedActivity.length ? selectedActivity.map((post) => (
+                    <button className="profile-post-tile" type="button" onClick={() => handleOpenPost(post)} key={post._id}>
+                      {post.mediaUrl && post.mediaType === "image" ? <img src={post.mediaUrl} alt="" /> : null}
+                      {post.mediaUrl && post.mediaType === "video" ? <video src={post.mediaUrl} muted playsInline /> : null}
+                      <div className="profile-post-overlay">
+                        <strong>{getPostPreview(post)}</strong>
+                        <span><Heart size={14} /> {post.likes?.length || 0}</span>
+                        <span><MessageCircle size={14} /> {(post.comments || []).length}</span>
                       </div>
-                    );
-                  }) : (
-                    <div className="profile-empty-card">No public music yet. Upload songs from Creator Hub to fill this artist page.</div>
+                    </button>
+                  )) : (
+                    <div className="profile-empty-card">
+                      {activityTab === "vods" ? "No vods yet." : activityTab === "comments" ? "No commented discussions yet." : "No discussions yet."}
+                    </div>
                   )}
                 </div>
-                {audioPagination.hasNext ? <button type="button" className="profile-load-more" onClick={handleLoadMoreAudio}>Load more music</button> : null}
-              </section>
-            </main>
-
-            <aside className="artist-side-section">
-              <section className="artist-pick-card">
-                <p className="profile-kicker">Artist Pick</p>
-                {audioTracks[0] ? (
-                  <button type="button" onClick={() => handleSelectTrack(audioTracks[0])}>
-                    <span>{audioTracks[0].title}</span>
-                    <small>{audioTracks[0].genre || "New upload"}</small>
-                  </button>
-                ) : (
-                  <p>New releases will show here.</p>
                 )}
-              </section>
-              <section className="artist-pick-card">
-                <p className="profile-kicker">Sound</p>
+
+                {selectedPagination.hasNext ? <button type="button" className="profile-load-more" onClick={handleLoadMoreActivity}>Load more</button> : null}
+              </div>
+            )}
+          </main>
+
+          <aside className="profile-identity-panel" aria-label="Profile details">
+            <div className="profile-identity-card">
+              <div className="profile-identity-banner" style={{ backgroundImage: profile.bannerUrl ? `url(${profile.bannerUrl})` : "" }}>
+                <div className="profile-identity-banner-glow" />
+              </div>
+              <div className="profile-identity-body">
+                <div className="profile-identity-avatar">
+                  <ProfileAvatar profile={profile} />
+                </div>
+                <p className="profile-kicker">{isArtist ? "KeyVoid Creator" : "KeyVoid Listener"}</p>
+                <h2>{profile.username}</h2>
+                <p>{profile.bio || "This profile is still tuning their signal."}</p>
+                <div className="profile-identity-stats">
+                  <span><strong>{formatCompactNumber(profile.followersCount)}</strong> Followers</span>
+                  <span><strong>{formatCompactNumber(profile.followingCount)}</strong> Following</span>
+                  {isArtist ? <span><strong>{formatCompactNumber(audioPagination.total)}</strong> Tracks</span> : null}
+                </div>
+                <div className="profile-detail-list">
+                  <div>
+                    <span>Location</span>
+                    <strong>{profile.location || "Not set"}</strong>
+                  </div>
+                  <div>
+                    <span>Website</span>
+                    {profile.website ? <a href={profile.website} target="_blank" rel="noreferrer">{profile.website}</a> : <strong>Not set</strong>}
+                  </div>
+                  <div>
+                    <span>Role</span>
+                    <strong>{isArtist ? "Creator" : "Listener"}</strong>
+                  </div>
+                </div>
                 <div className="profile-chip-row compact">
-                  {(artistStats.genres.length ? artistStats.genres : profile.favoriteGenres || ["Discovery"]).map((genre) => (
+                  {(profileGenres.length ? profileGenres : ["Discovery"]).map((genre) => (
                     <span className="profile-chip" key={genre}>{genre}</span>
                   ))}
                 </div>
-              </section>
-            </aside>
-          </div>
-        ) : (
-          <div className="profile-posts-surface">
-            <div className="activity-tabs">
-              <button type="button" className={activityTab === "posts" ? "active" : ""} onClick={() => setActivityTab("posts")}>
-                <Grid3X3 size={15} /> Posts {postsPagination.total}
-              </button>
-              {isArtist ? (
-                <button type="button" className={activityTab === "reels" ? "active" : ""} onClick={() => setActivityTab("reels")}>
-                  <Sparkles size={15} /> Reels {reelsPagination.total}
-                </button>
-              ) : null}
-              <button type="button" disabled>
-                <MessageCircle size={15} /> Commented
-              </button>
-            </div>
-
-            <div className="profile-post-grid">
-              {selectedActivity.length ? selectedActivity.map((post) => (
-                <button className="profile-post-tile" type="button" onClick={() => handleOpenPost(post)} key={post._id}>
-                  {post.mediaUrl && post.mediaType === "image" ? <img src={post.mediaUrl} alt="" /> : null}
-                  {post.mediaUrl && post.mediaType === "video" ? <video src={post.mediaUrl} muted playsInline /> : null}
-                  <div className="profile-post-overlay">
-                    <strong>{getPostPreview(post)}</strong>
-                    <span><Heart size={14} /> {post.likes?.length || 0}</span>
-                    <span><MessageCircle size={14} /> {(post.comments || []).length}</span>
-                  </div>
-                </button>
-              )) : (
-                <div className="profile-empty-card">
-                  {activityTab === "reels" ? "No reels yet." : "No posts yet. Discussions and commented threads will show here as activity grows."}
+                <div className="profile-identity-actions">
+                  {!isOwnProfile && isAuthenticated ? (
+                    <button type="button" className="profile-action-button primary" onClick={handleFollowToggle} disabled={isFollowLoading}>
+                      <UserPlus size={16} /> {isFollowLoading ? "..." : followStatus?.isFollowing ? "Following" : "Follow"}
+                    </button>
+                  ) : null}
+                  {isOwnProfile ? <button className="profile-action-button" type="button" onClick={() => setEditOpen(true)}>Edit Profile</button> : null}
                 </div>
-              )}
+              </div>
             </div>
-
-            {selectedPagination.hasNext ? <button type="button" className="profile-load-more" onClick={handleLoadMoreActivity}>Load more</button> : null}
-          </div>
-        )}
+          </aside>
+        </div>
       </div>
 
       {selectedPost ? createPortal(
         <ProfilePostViewer
           currentPost={selectedPost}
+          highlightCommentId={selectedCommentId}
           posts={selectedActivity}
           onSelectPost={handleOpenPost}
           onPostDeleted={handleDeletePost}
-          onClose={() => setSelectedPost(null)}
+          onClose={() => { setSelectedPost(null); setSelectedCommentId(""); }}
         />,
+        document.body
+      ) : null}
+
+      <CreatePostModal
+        isOpen={createDiscussionOpen}
+        onClose={() => setCreateDiscussionOpen(false)}
+        onPostCreated={handleDiscussionCreated}
+      />
+
+      {creatorUploadOpen === "music" ? createPortal(
+        <div className="profile-modal-backdrop" role="dialog" aria-modal="true" aria-label="Upload music">
+          <form className="profile-edit-modal creator-upload-modal" onSubmit={handleUploadMusic}>
+            <div className="profile-modal-header">
+              <div>
+                <p className="profile-kicker">Music</p>
+                <h2>Upload music</h2>
+              </div>
+              <button className="panel-collapse-btn" type="button" onClick={() => setCreatorUploadOpen("")} aria-label="Close upload music">
+                <X size={16} />
+              </button>
+            </div>
+            {musicNotice.message ? <p className={musicNotice.type === "success" ? "auth-success" : "auth-error"}>{musicNotice.message}</p> : null}
+            <div className="profile-edit-grid">
+              <label className="auth-field">
+                <span>Title</span>
+                <input maxLength="100" value={musicForm.title} onChange={(event) => setMusicForm((current) => ({ ...current, title: event.target.value }))} />
+              </label>
+              <label className="auth-field">
+                <span>Artist</span>
+                <input maxLength="80" value={musicForm.artist} onChange={(event) => setMusicForm((current) => ({ ...current, artist: event.target.value }))} />
+              </label>
+              <label className="auth-field">
+                <span>Release</span>
+                <select value={musicForm.releaseType} onChange={(event) => setMusicForm((current) => ({ ...current, releaseType: event.target.value }))}>
+                  <option value="track">Track</option>
+                  <option value="single">Single</option>
+                  <option value="ep">EP</option>
+                  <option value="album">Album</option>
+                </select>
+              </label>
+              <label className="auth-field">
+                <span>Genre</span>
+                <select value={musicForm.genre} onChange={(event) => setMusicForm((current) => ({ ...current, genre: event.target.value }))}>
+                  {MUSIC_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+                </select>
+              </label>
+              <label className="auth-field profile-wide-field">
+                <span>Tags</span>
+                <input maxLength="180" value={musicForm.tags} onChange={(event) => setMusicForm((current) => ({ ...current, tags: event.target.value }))} />
+              </label>
+              <label className="auth-field profile-wide-field">
+                <span>Audio files</span>
+                <input accept="audio/*" multiple onChange={handleMusicFileChange} type="file" />
+                <small>{musicForm.files.length ? `${musicForm.files.length} selected` : "No files selected"}</small>
+              </label>
+            </div>
+            <div className="profile-modal-actions">
+              <button className="profile-action-button" type="button" onClick={() => setCreatorUploadOpen("")}>Cancel</button>
+              <button className="profile-action-button primary" disabled={isUploadingMusic} type="submit">
+                <Upload size={16} /> {isUploadingMusic ? "Uploading..." : "Upload"}
+              </button>
+            </div>
+          </form>
+        </div>,
+        document.body
+      ) : null}
+
+      {creatorUploadOpen === "vod" ? createPortal(
+        <div className="profile-modal-backdrop" role="dialog" aria-modal="true" aria-label="Upload vod">
+          <form className="profile-edit-modal creator-upload-modal" onSubmit={handleCreateVod}>
+            <div className="profile-modal-header">
+              <div>
+                <p className="profile-kicker">Vod</p>
+                <h2>Upload vod</h2>
+              </div>
+              <button className="panel-collapse-btn" type="button" onClick={() => setCreatorUploadOpen("")} aria-label="Close upload vod">
+                <X size={16} />
+              </button>
+            </div>
+            {vodNotice.message ? <p className={vodNotice.type === "success" ? "auth-success" : "auth-error"}>{vodNotice.message}</p> : null}
+            <div className="profile-edit-grid">
+              <label className="auth-field profile-wide-field">
+                <span>Caption</span>
+                <textarea maxLength="500" rows="4" value={vodText} onChange={(event) => setVodText(event.target.value)} />
+              </label>
+              <label className="auth-field profile-wide-field">
+                <span>Media</span>
+                <input accept="video/*,image/*" onChange={handleVodMediaChange} type="file" />
+              </label>
+              {vodPreviewUrl ? (
+                <div className="creator-vod-preview profile-wide-field">
+                  {vodMedia?.type.startsWith("video/") ? <video src={vodPreviewUrl} controls /> : <img src={vodPreviewUrl} alt="" />}
+                  <button type="button" onClick={clearVodMedia}><X size={16} /></button>
+                </div>
+              ) : null}
+            </div>
+            <div className="profile-modal-actions">
+              <button className="profile-action-button" type="button" onClick={() => setCreatorUploadOpen("")}>Cancel</button>
+              <button className="profile-action-button primary" disabled={!vodMedia || isCreatingVod} type="submit">
+                <Upload size={16} /> {isCreatingVod ? "Uploading..." : "Upload vod"}
+              </button>
+            </div>
+          </form>
+        </div>,
         document.body
       ) : null}
 
@@ -959,7 +1360,7 @@ export default function PublicProfile({ ownProfile = false }) {
                 <X size={16} />
               </button>
             </div>
-            <p>This permanently removes your account, posts, reels, uploaded media, playlists, sessions, and profile images.</p>
+            <p>This permanently removes your account, discussions, vods, uploaded media, playlists, sessions, and profile images.</p>
             <input value={deleteAccountConfirm} onChange={(event) => setDeleteAccountConfirm(event.target.value)} placeholder="Type DELETE" />
             <div className="profile-modal-actions">
               <button className="profile-action-button" type="button" onClick={() => setDeleteOpen(false)}>Cancel</button>

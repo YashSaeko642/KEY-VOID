@@ -26,7 +26,7 @@ export default function BottomPlayer() {
   const audioElement = (
     <audio
       ref={audioRef}
-      src={audioSrc || ""}
+      src={audioSrc || undefined}
       onTimeUpdate={handleTimeUpdate}
       onLoadedMetadata={handleLoadedMetadata}
       onEnded={handleTrackEnded}

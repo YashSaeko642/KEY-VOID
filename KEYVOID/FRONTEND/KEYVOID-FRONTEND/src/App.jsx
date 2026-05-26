@@ -10,7 +10,6 @@ import Navbar from "../components/Navbar";
 import ProtectedRoute from "../components/ProtectedRoute";
 import RainEffect from "../components/RainEffect";
 import CreatorHub from "../pages/CreatorHub";
-import Dashboard from "../pages/Dashboard";
 import Home from "../pages/Home";
 import Login from "../pages/Login";
 import PublicProfile from "../pages/PublicProfile";
@@ -28,7 +27,7 @@ import "./App.css";
 
 const AUTH_ROUTES = ["/login", "/reset-password"];
 
-const APP_ROUTES = ["/dashboard", "/creator", "/admin", "/profile", "/search","/feed", "/reels", "/music", "/roadmap"];
+const APP_ROUTES = ["/creator", "/admin", "/profile", "/search","/feed", "/reels", "/music", "/roadmap"];
 const MotionDiv = motion.div;
 const MotionP = motion.p;
 
@@ -70,14 +69,6 @@ function AppLayout() {
               <Route path="/" element={<Home />} />
               <Route path="/login" element={<Login />} />
               <Route path="/reset-password" element={<ResetPassword />} />
-              <Route
-                path="/dashboard"
-                element={
-                  <ProtectedRoute>
-                    <Dashboard />
-                  </ProtectedRoute>
-                }
-              />
               <Route
                 path="/creator"
                 element={

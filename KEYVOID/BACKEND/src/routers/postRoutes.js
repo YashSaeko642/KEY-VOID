@@ -11,6 +11,7 @@ const {
   getMyFeedMeta,
   getTrendingFeed,
   getUserPosts,
+  getUserCommentedPosts,
   toggleLike,
   deletePost,
   getFollowingFeed,
@@ -34,6 +35,7 @@ router.get("/meta/me", protect, getMyFeedMeta);
 router.get("/trending", getTrendingFeed);
 router.get("/reels", getReels);
 router.get("/creator/insights", protect, getCreatorInsights);
+router.get("/user/:userId/comments", getUserCommentedPosts);
 router.get("/user/:userId", getUserPosts);
 router.get("/following", protect, getFollowingFeed);
 

@@ -65,11 +65,6 @@ export default function Navbar() {
             Vision
           </a>
           {isAuthenticated ? (
-            <Link className="text-sm text-slate-300" to="/dashboard">
-              Dashboard
-            </Link>
-          ) : null}
-          {isAuthenticated ? (
             <Link className="text-sm text-slate-300" to="/music">
               Music
             </Link>
