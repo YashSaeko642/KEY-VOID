@@ -53,6 +53,10 @@ function normalizeCategory(category = "general") {
   return POST_CATEGORIES.has(normalized) ? normalized : "general";
 }
 
+function escapeRegex(value = "") {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function extractSlashTags(...values) {
   const tags = new Set();
   const pattern = /(^|\s)\/([a-zA-Z][a-zA-Z0-9_-]{1,29})\b/g;
@@ -99,6 +103,14 @@ function buildPostQuery(query = {}) {
     safetyStatus: { $ne: "restricted" }
   };
 
+  const type = String(query.type || query.contentType || "").trim().toLowerCase();
+  if (type === "post" || type === "reel") {
+    baseQuery.contentType = type;
+  } else if (type === "discussion") {
+    baseQuery.contentType = "post";
+    baseQuery.category = "discussion";
+  }
+
   const category = String(query.category || "").trim().toLowerCase();
   if (POST_CATEGORIES.has(category) && category !== "general") {
     baseQuery.category = category;
@@ -110,6 +122,42 @@ function buildPostQuery(query = {}) {
   }
 
   return baseQuery;
+}
+
+async function buildSearchablePostQuery(query = {}) {
+  const baseQuery = buildPostQuery(query);
+  const searchTerm = String(query.search || query.q || "").trim();
+
+  if (searchTerm.length < 2) {
+    return baseQuery;
+  }
+
+  const searchRegex = new RegExp(escapeRegex(searchTerm), "i");
+  const authorMatches = await User.find({
+    $or: [
+      { username: searchRegex },
+      { displayName: searchRegex }
+    ]
+  })
+    .select("_id")
+    .limit(50)
+    .lean();
+
+  const searchClauses = [
+    { title: searchRegex },
+    { body: searchRegex },
+    { text: searchRegex },
+    { tags: searchRegex }
+  ];
+
+  if (authorMatches.length > 0) {
+    searchClauses.push({ author: { $in: authorMatches.map((user) => user._id) } });
+  }
+
+  return {
+    ...baseQuery,
+    $or: searchClauses
+  };
 }
 
 function getRecommendationScore(post) {
@@ -140,6 +188,51 @@ function getRecommendationReason(post) {
   if (likes + comments >= 8) return "Recommended because people are engaging with it";
   if (post.mediaUrl) return "Recommended because media posts get more discovery";
   return "Recommended because it is fresh";
+}
+
+function normalizeObjectIdList(values = []) {
+  return values
+    .map((value) => value?._id || value)
+    .filter((value) => isValidObjectId(value));
+}
+
+function getSimilarityScore(post, seedPost, viewer = null) {
+  if (!seedPost) return getRecommendationScore(post);
+
+  const seedTags = new Set((seedPost.tags || []).map((tag) => String(tag).toLowerCase()));
+  const postTags = (post.tags || []).map((tag) => String(tag).toLowerCase());
+  const sharedTags = postTags.filter((tag) => seedTags.has(tag)).length;
+  const sameCategory = post.category && seedPost.category && post.category === seedPost.category;
+  const sameType = post.contentType && seedPost.contentType && post.contentType === seedPost.contentType;
+  const sameAuthor = String(post.author?._id || post.author) === String(seedPost.author?._id || seedPost.author);
+  const viewerLikes = viewer?.likedTags || new Set();
+  const viewerTagHits = postTags.filter((tag) => viewerLikes.has(tag)).length;
+  const viewerAuthorHit = viewer?.likedAuthors?.has(String(post.author?._id || post.author));
+
+  return (
+    getRecommendationScore(post) +
+    sharedTags * 38 +
+    (sameCategory ? 28 : 0) +
+    (sameType ? 18 : 0) +
+    (sameAuthor ? 12 : 0) +
+    viewerTagHits * 14 +
+    (viewerAuthorHit ? 16 : 0)
+  );
+}
+
+function getDiscoveryReason(post, seedPost, viewer = null) {
+  if (seedPost) {
+    const seedTags = new Set((seedPost.tags || []).map((tag) => String(tag).toLowerCase()));
+    const sharedTag = (post.tags || []).find((tag) => seedTags.has(String(tag).toLowerCase()));
+    if (sharedTag) return `More like /${sharedTag}`;
+    if (post.category && seedPost.category && post.category === seedPost.category) return `More ${post.category.replace("_", " ")}`;
+    if (post.contentType === "reel") return "Similar vod";
+  }
+
+  const tagHit = (post.tags || []).find((tag) => viewer?.likedTags?.has(String(tag).toLowerCase()));
+  if (tagHit) return `Because you engage with /${tagHit}`;
+
+  return getRecommendationReason(post);
 }
 
 function attachRecommendationMeta(posts = []) {
@@ -470,7 +563,7 @@ exports.getFeed = async (req, res) => {
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
     const skip = (page - 1) * limit;
     const sortMode = String(req.query.sort || "recommended").toLowerCase();
-    const baseQuery = buildPostQuery(req.query);
+    const baseQuery = await buildSearchablePostQuery(req.query);
 
     // Get posts and total count
     const [posts, total] = await Promise.all([
@@ -514,7 +607,7 @@ exports.getTrendingFeed = async (req, res) => {
     const skip = (page - 1) * limit;
     const since = new Date(Date.now() - 48 * 60 * 60 * 1000);
     const baseQuery = {
-      ...buildPostQuery(req.query),
+      ...(await buildSearchablePostQuery(req.query)),
       createdAt: { $gte: since }
     };
 
@@ -546,6 +639,89 @@ exports.getTrendingFeed = async (req, res) => {
   } catch (err) {
     console.error("Get trending feed error:", err);
     res.status(500).json({ message: "Failed to load trending posts" });
+  }
+};
+
+exports.getDiscoveryFeed = async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(36, Math.max(1, parseInt(req.query.limit, 10) || 24));
+    const skip = (page - 1) * limit;
+    const seedPostId = String(req.query.seedPostId || "").trim();
+    const baseQuery = await buildSearchablePostQuery(req.query);
+    const excludeIds = normalizeObjectIdList(String(req.query.exclude || "").split(","));
+
+    let seedPost = null;
+    if (isValidObjectId(seedPostId)) {
+      seedPost = await Post.findOne({
+        _id: seedPostId,
+        isDeleted: false,
+        safetyStatus: { $ne: "restricted" }
+      }).lean();
+
+      if (seedPost) {
+        excludeIds.push(seedPost._id);
+      }
+    }
+
+    const query = { ...baseQuery };
+    if (excludeIds.length > 0) {
+      query._id = { ...(query._id || {}), $nin: excludeIds };
+    }
+
+    const viewer = { likedTags: new Set(), likedAuthors: new Set() };
+    if (req.user?._id) {
+      const likedPosts = await Post.find({
+        likes: req.user._id,
+        isDeleted: false,
+        safetyStatus: { $ne: "restricted" }
+      })
+        .select("author tags")
+        .sort({ updatedAt: -1 })
+        .limit(80)
+        .lean();
+
+      likedPosts.forEach((post) => {
+        if (post.author) viewer.likedAuthors.add(String(post.author));
+        (post.tags || []).forEach((tag) => viewer.likedTags.add(String(tag).toLowerCase()));
+      });
+    }
+
+    const fetchLimit = Math.min(220, Math.max(limit * 6, 72));
+    const [posts, total] = await Promise.all([
+      Post.find(query)
+        .populate("author", "username avatarUrl role")
+        .populate("comments.author", "username avatarUrl")
+        .sort({ createdAt: -1 })
+        .skip(seedPost ? 0 : skip)
+        .limit(fetchLimit)
+        .lean(),
+      Post.countDocuments(query)
+    ]);
+
+    const rankedPosts = posts
+      .map((post) => ({
+        ...post,
+        recommendationScore: Number(getSimilarityScore(post, seedPost, viewer).toFixed(2)),
+        recommendationReason: getDiscoveryReason(post, seedPost, viewer)
+      }))
+      .sort((a, b) => b.recommendationScore - a.recommendationScore || new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(seedPost ? skip : 0, seedPost ? skip + limit : limit);
+
+    res.json({
+      posts: rankedPosts,
+      seedPost: seedPost ? { _id: seedPost._id, tags: seedPost.tags || [], category: seedPost.category, contentType: seedPost.contentType } : null,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+        hasNext: page * limit < total
+      }
+    });
+  } catch (err) {
+    console.error("Get discovery feed error:", err);
+    res.status(500).json({ message: "Failed to load discovery posts" });
   }
 };
 
@@ -881,15 +1057,15 @@ exports.getFollowingFeed = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // include own posts also (optional but recommended)
     const followingIds = [...user.following, userId];
+    const followingIdSet = new Set(followingIds.map((id) => String(id)));
 
     const followingQuery = {
-      ...buildPostQuery(req.query),
+      ...(await buildSearchablePostQuery(req.query)),
       author: { $in: followingIds },
     };
 
-    const [posts, total] = await Promise.all([
+    const [followedPosts, followedTotal] = await Promise.all([
       Post.find(followingQuery)
         .populate("author", "username avatarUrl role")
         .populate("comments.author", "username avatarUrl")
@@ -900,20 +1076,58 @@ exports.getFollowingFeed = async (req, res) => {
       Post.countDocuments(followingQuery)
     ]);
 
+    let blendedPosts = followedPosts.map((post) => ({
+      ...post,
+      recommendationReason: String(post.author?._id || post.author) === String(userId)
+        ? "Your latest upload"
+        : "From someone you follow"
+    }));
+
+    if (page === 1 && blendedPosts.length < limit) {
+      const trendingQuery = await buildSearchablePostQuery(req.query);
+      trendingQuery.author = { $nin: [...followingIds] };
+      const trendingPosts = await Post.find(trendingQuery)
+        .populate("author", "username avatarUrl role")
+        .populate("comments.author", "username avatarUrl")
+        .sort({ createdAt: -1 })
+        .limit(limit - blendedPosts.length + 8)
+        .lean();
+
+      const trendingRanked = attachRecommendationMeta(trendingPosts)
+        .sort((a, b) => b.recommendationScore - a.recommendationScore)
+        .slice(0, limit - blendedPosts.length)
+        .map((post) => ({
+          ...post,
+          recommendationReason: post.recommendationReason || "Trending outside your follows"
+        }));
+
+      blendedPosts = [...blendedPosts, ...trendingRanked];
+    }
+
     const rankedPosts = sortMode === "recommended"
-      ? attachRecommendationMeta(posts)
+      ? attachRecommendationMeta(blendedPosts)
+          .map((post, index) => ({
+            ...post,
+            recommendationScore: post.recommendationScore + (followingIdSet.has(String(post.author?._id || post.author)) ? 22 : 0),
+            recommendationReason: blendedPosts[index]?.recommendationReason || post.recommendationReason
+          }))
           .sort((a, b) => b.recommendationScore - a.recommendationScore)
           .slice(0, limit)
-      : attachRecommendationMeta(posts);
+      : attachRecommendationMeta(blendedPosts)
+          .map((post, index) => ({
+            ...post,
+            recommendationReason: blendedPosts[index]?.recommendationReason || post.recommendationReason
+          }))
+          .slice(0, limit);
 
     res.json({
       posts: rankedPosts,
       pagination: {
         page,
         limit,
-        total,
-        pages: Math.ceil(total / limit),
-        hasNext: page * limit < total
+        total: followedTotal,
+        pages: Math.ceil(followedTotal / limit),
+        hasNext: page * limit < followedTotal
       }
     });
   } catch (err) {
@@ -928,15 +1142,17 @@ exports.getReels = async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
 
+    const reelsQuery = await buildSearchablePostQuery({ ...req.query, type: "reel" });
+
     const [posts, total] = await Promise.all([
-      Post.find({ contentType: "reel", isDeleted: false, safetyStatus: { $ne: "restricted" } })
+      Post.find(reelsQuery)
         .populate("author", "username avatarUrl role favoriteGenres")
         .populate("comments.author", "username avatarUrl")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
-      Post.countDocuments({ contentType: "reel", isDeleted: false, safetyStatus: { $ne: "restricted" } })
+      Post.countDocuments(reelsQuery)
     ]);
 
     // Return consistent response format

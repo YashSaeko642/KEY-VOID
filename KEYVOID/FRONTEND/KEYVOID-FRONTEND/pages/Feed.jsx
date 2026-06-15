@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, CircleHelp, Headphones, Info, Lightbulb, MessageSquare, Newspaper, Palette, Plus, Search, Sparkles, Tags, TrendingUp, Users, X } from "lucide-react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../src/context/useAuth";
 import API, { getApiErrorMessage } from "../services/api";
 import CreatePostModal from "../components/CreatePostModal";
@@ -47,9 +47,15 @@ const CATEGORY_CARDS = [
 ];
 
 const MODE_LABELS = {
-  global: "For You",
+  global: "Community Mix",
   following: "Following",
   trending: "Trending"
+};
+
+const SEARCH_TYPE_LABELS = {
+  post: "Posts",
+  discussion: "Discussions",
+  reel: "Vods"
 };
 
 const isCompactViewport = () =>
@@ -81,7 +87,7 @@ function Feed() {
   const [hasNext, setHasNext] = useState(true);
   const loadMoreTrigger = useRef(null);
 
-  const [mode, setMode] = useState("global");
+  const [mode, setMode] = useState(() => isAuthenticated ? "following" : "trending");
   const [sort, setSort] = useState("recommended");
   const [category, setCategory] = useState("");
   const [tag, setTag] = useState("");
@@ -99,17 +105,30 @@ function Feed() {
   }, [location.pathname, location.state, navigate]);
 
   const endpoint = useMemo(() => {
-    if (mode === "following") return "/posts/following";
+    if (mode === "following" && isAuthenticated) return "/posts/following";
     if (mode === "trending") return "/posts/trending";
     return "/posts";
-  }, [mode]);
+  }, [isAuthenticated, mode]);
+
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const searchTerm = searchParams.get("search")?.trim() || "";
+  const searchType = searchParams.get("type")?.trim().toLowerCase() || "";
+  const isSearchResultsView = searchTerm.length > 0;
 
   const fetchPosts = useCallback(async (pageNum = 1) => {
     try {
       setIsLoading(true);
       setError(null);
       const res = await API.get(endpoint, {
-        params: { page: pageNum, limit: 10, sort, category: category || undefined, tag: tag || undefined }
+        params: {
+          page: pageNum,
+          limit: isSearchResultsView ? 12 : 10,
+          sort,
+          category: category || undefined,
+          tag: tag || undefined,
+          search: searchTerm || undefined,
+          type: searchType || undefined
+        }
       });
       const postsData = Array.isArray(res.data.posts) ? res.data.posts : [];
       const pagination = res.data.pagination || {};
@@ -128,7 +147,7 @@ function Feed() {
     } finally {
       setIsLoading(false);
     }
-  }, [category, endpoint, sort, tag]);
+  }, [category, endpoint, isSearchResultsView, searchTerm, searchType, sort, tag]);
 
   const fetchFeedMeta = useCallback(async () => {
     try {
@@ -152,11 +171,17 @@ function Feed() {
   useEffect(() => { fetchFeedMeta(); }, [fetchFeedMeta]);
 
   useEffect(() => {
+    if (!isAuthenticated && mode === "following") {
+      setMode("trending");
+    }
+  }, [isAuthenticated, mode]);
+
+  useEffect(() => {
     setPosts([]);
     setHasNext(true);
     setPage(1);
     fetchPosts(1);
-  }, [mode, sort, category, tag, fetchPosts]);
+  }, [mode, sort, category, tag, searchTerm, searchType, fetchPosts]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -194,13 +219,20 @@ function Feed() {
     applyTagFilter("");
   };
 
-  const activeTitle = tag
-    ? `/${tag}`
-    : category
-      ? CATEGORY_CARDS.find((c) => c.key === category)?.title || "Category"
-      : MODE_LABELS[mode];
+  const clearSearch = () => {
+    navigate("/feed");
+  };
+
+  const activeTitle = isSearchResultsView
+    ? `${SEARCH_TYPE_LABELS[searchType] || "Feed"} matching "${searchTerm}"`
+    : tag
+      ? `/${tag}`
+      : category
+        ? CATEGORY_CARDS.find((c) => c.key === category)?.title || "Category"
+        : MODE_LABELS[mode];
 
   const activeCategoryCard = CATEGORY_CARDS.find((c) => c.key === category);
+  const activeSearchTypeLabel = SEARCH_TYPE_LABELS[searchType] || "posts and discussions";
 
   return (
     <ErrorBoundary>
@@ -239,9 +271,9 @@ function Feed() {
             {/* Mode */}
             <div className="drawer-section">
               <span className="drawer-section-label">Feed</span>
-              <button className={mode === "global" ? "drawer-channel active" : "drawer-channel"} onClick={() => setMode("global")} title="For You">
+              <button className={mode === "global" ? "drawer-channel active" : "drawer-channel"} onClick={() => setMode("global")} title="Community Mix">
                 <Sparkles size={14} />
-                <span className="drawer-item-text">For You</span>
+                <span className="drawer-item-text">Community Mix</span>
               </button>
               <button className={mode === "following" ? "drawer-channel active" : "drawer-channel"} onClick={() => setMode("following")} title="Following">
                 <Users size={14} />
@@ -320,7 +352,7 @@ function Feed() {
             <button type="button" className="rail-toggle" onClick={() => setDrawerOpen(true)} aria-label="Open filters" title="Open filters">
               <ChevronRight size={17} />
             </button>
-            <button type="button" className={mode === "global" ? "rail-btn active" : "rail-btn"} onClick={() => setMode("global")} aria-label="For You" title="For You">
+            <button type="button" className={mode === "global" ? "rail-btn active" : "rail-btn"} onClick={() => setMode("global")} aria-label="Community Mix" title="Community Mix">
               <Sparkles size={17} />
             </button>
             <button type="button" className={mode === "following" ? "rail-btn active" : "rail-btn"} onClick={() => setMode("following")} aria-label="Following" title="Following">
@@ -488,42 +520,63 @@ function Feed() {
                   <p className="feed-kicker">KeyVoid community</p>
                   <h1 className="feed-title">{activeTitle}</h1>
                   <p className="feed-subtitle">
-                    {activeCategoryCard
+                    {isSearchResultsView
+                      ? `Showing filtered ${activeSearchTypeLabel.toLowerCase()} from the KeyVoid community.`
+                      : activeCategoryCard
                       ? activeCategoryCard.prompt
-                      : "Music threads for artists, listeners, teachers, and people discovering what to play next."}
+                      : mode === "following"
+                      ? "Recent uploads from people you follow, blended with trending posts when your circle is quiet."
+                      : mode === "trending"
+                      ? "What the KeyVoid community is watching, liking, and discussing right now."
+                      : "A wider community mix across music threads, vods, and creator posts."}
                   </p>
                 </div>
                 {isAuthenticated && (
-                  <button className="start-discussion-btn" type="button" onClick={() => setIsModalOpen(true)}>
-                    <Plus size={17} /> Start Discussion
-                  </button>
+                  <div className="feed-header-actions">
+                    <Link className="start-discussion-btn feed-grid-link" to="/grid">
+                      <Palette size={17} /> Grid
+                    </Link>
+                    <button className="start-discussion-btn" type="button" onClick={() => setIsModalOpen(true)}>
+                      <Plus size={17} /> Start Discussion
+                    </button>
+                  </div>
                 )}
               </section>
 
               {/* Category cards */}
-              <section className="category-card-grid" aria-label="Community categories">
-                {CATEGORY_CARDS.map((item) => (
-                  <button
-                    key={item.key}
-                    className={category === item.key ? "community-card active" : "community-card"}
-                    style={{ "--category-art": item.image }}
-                    onClick={() => setCategory(item.key)}
-                    type="button"
-                  >
-                    <span className="community-card-art" />
-                    <span className="community-card-title">{item.title}</span>
-                    <span className="community-card-prompt">{item.prompt}</span>
-                    <span className="community-card-footer">
-                      Join discussion
-                      <small>{feedMeta.categories?.[item.key] || 0} posts</small>
-                    </span>
+              {isSearchResultsView ? (
+                <section className="feed-search-summary" aria-label="Search filters">
+                  <span><Search size={15} /> {activeSearchTypeLabel}</span>
+                  <strong>{searchTerm}</strong>
+                  <button type="button" onClick={clearSearch}>
+                    <X size={15} /> Clear
                   </button>
-                ))}
-              </section>
+                </section>
+              ) : (
+                <section className="category-card-grid" aria-label="Community categories">
+                  {CATEGORY_CARDS.map((item) => (
+                    <button
+                      key={item.key}
+                      className={category === item.key ? "community-card active" : "community-card"}
+                      style={{ "--category-art": item.image }}
+                      onClick={() => setCategory(item.key)}
+                      type="button"
+                    >
+                      <span className="community-card-art" />
+                      <span className="community-card-title">{item.title}</span>
+                      <span className="community-card-prompt">{item.prompt}</span>
+                      <span className="community-card-footer">
+                        Join discussion
+                        <small>{feedMeta.categories?.[item.key] || 0} posts</small>
+                      </span>
+                    </button>
+                  ))}
+                </section>
+              )}
 
               {/* Sort row */}
               <div className="feed-sort-row">
-                <button className={sort === "recommended" ? "active" : ""} onClick={() => setSort("recommended")}>Recommended</button>
+                <button className={sort === "recommended" ? "active" : ""} onClick={() => setSort("recommended")}>{mode === "following" ? "Best mix" : "Recommended"}</button>
                 <button className={sort === "recent" ? "active" : ""} onClick={() => setSort("recent")}>Recent</button>
               </div>
 
@@ -543,8 +596,12 @@ function Feed() {
                 ) : posts.length === 0 ? (
                   <div className="empty-state">
                     <KVMark size={34} />
-                    <h3>No threads yet</h3>
-                    <p>{category ? `Be the first to post in ${activeCategoryCard?.title || category}.` : "Start a discussion or loosen the filters."}</p>
+                    <h3>{isSearchResultsView ? "No matches found" : "No threads yet"}</h3>
+                    <p>
+                      {isSearchResultsView
+                        ? `No ${activeSearchTypeLabel.toLowerCase()} matched "${searchTerm}".`
+                        : category ? `Be the first to post in ${activeCategoryCard?.title || category}.` : "Start a discussion or loosen the filters."}
+                    </p>
                   </div>
                 ) : (
                   posts.map((post) => (

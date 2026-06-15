@@ -331,27 +331,29 @@ exports.searchProfiles = async (req, res) => {
 
     // Build search regex (case-insensitive)
     const searchRegex = new RegExp(escapeRegex(searchTerm), "i");
+    const creatorOnly = String(req.query.creatorOnly || req.query.role || "").toLowerCase() === "true"
+      || String(req.query.role || "").toLowerCase() === "creator";
+
+    const profileSearchClause = {
+      $or: [
+        { username: searchRegex },
+        { bio: searchRegex },
+        { displayName: searchRegex }
+      ]
+    };
+    const creatorClause = { $or: [{ role: "creator" }, { isCreator: true }] };
+    const searchQuery = creatorOnly
+      ? { $and: [creatorClause, profileSearchClause] }
+      : profileSearchClause;
 
     // Find matching users
     const [users, total] = await Promise.all([
-      User.find({
-        $or: [
-          { username: searchRegex },
-          { bio: searchRegex },
-          { displayName: searchRegex }
-        ]
-      })
+      User.find(searchQuery)
         .select("_id username displayName bio avatarUrl isCreator role followers following followersCount followingCount")
         .limit(pageLimit)
         .skip(pageSkip)
         .lean(),
-      User.countDocuments({
-        $or: [
-          { username: searchRegex },
-          { bio: searchRegex },
-          { displayName: searchRegex }
-        ]
-      })
+      User.countDocuments(searchQuery)
     ]);
 
     // Build profile payloads for results
@@ -365,6 +367,7 @@ exports.searchProfiles = async (req, res) => {
         displayName: user.displayName || user.username,
         bio: user.bio || "",
         avatarUrl: user.avatarUrl || "",
+        role: user.role || (user.isCreator ? "creator" : "user"),
         isCreator: user.role === "creator" || user.isCreator,
         followersCount: Math.max(Number(user.followersCount) || 0, followersLength),
         followingCount: Math.max(Number(user.followingCount) || 0, followingLength)

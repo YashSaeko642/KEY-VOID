@@ -29,8 +29,8 @@ export function getApiErrorMessage(error, fallback = "Request failed") {
 }
 
 // Profile search
-export const searchProfiles = (query, limit = 10, skip = 0) => 
-  API.get("/profiles/search", { params: { q: query, limit, skip } });
+export const searchProfiles = (query, limit = 10, skip = 0, options = {}) =>
+  API.get("/profiles/search", { params: { q: query, limit, skip, ...options } });
 
 // Follower operations
 export const followUser = (userId) => API.post(`/followers/follow/${userId}`);
@@ -71,5 +71,6 @@ export const deletePlaylist = (playlistId) => API.post("/playlists/delete", { pl
 export const addTrackToPlaylist = (playlistId, trackId) => API.post("/playlists/add-track", { playlistId, trackId });
 export const removeTrackFromPlaylist = (playlistId, trackId) => API.post("/playlists/remove-track", { playlistId, trackId });
 export const toggleLikedTrack = (trackId) => API.post("/playlists/like", { trackId });
+export const getTrafficStats = () => API.get("/stats/traffic");
 
 export default API;

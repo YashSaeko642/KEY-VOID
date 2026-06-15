@@ -160,7 +160,7 @@ function getTrackSearchScore(track, query) {
 }
 
 export function PlayerProvider({ children }) {
-  const { user } = useAuth();
+  const { isAuthenticated, isBootstrapping, user } = useAuth();
   const [library, setLibrary] = useState([]);
   const [localTracks, setLocalTracks] = useState([]);
   const [activeTrack, setActiveTrack] = useState(null);
@@ -181,6 +181,7 @@ export function PlayerProvider({ children }) {
   const audioRef = useRef(null);
   const audioObjectUrlRef = useRef("");
   const libraryCacheRef = useRef(new Map());
+  const wasAuthenticatedRef = useRef(false);
 
   // KEY FIX for Bug 1:
   // Track the ID of the last track we actually loaded audio for.
@@ -189,6 +190,31 @@ export function PlayerProvider({ children }) {
   const loadedTrackIdRef = useRef("");
 
   const ownerKey = user?.id ? `user:${user.id}` : "guest";
+
+  const clearPlayerState = useCallback(() => {
+    setIsPlaying(false);
+    setActiveTrack(null);
+    setAudioSrc("");
+    setPosition(0);
+    setDuration(0);
+    setPlaybackQueue([]);
+    setPlaybackQueueName("Music library");
+    setManualQueue([]);
+    setPlaylists([]);
+    setError(null);
+    loadedTrackIdRef.current = "";
+
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.removeAttribute("src");
+      audioRef.current.load();
+    }
+
+    if (audioObjectUrlRef.current) {
+      URL.revokeObjectURL(audioObjectUrlRef.current);
+      audioObjectUrlRef.current = "";
+    }
+  }, []);
 
   const getCacheKey = useCallback((page = 1) => `${searchQuery.trim().toLowerCase()}::${page}`, [searchQuery]);
 
@@ -248,6 +274,16 @@ export function PlayerProvider({ children }) {
       setIsPlaying(false);
     }
   }, [activeTrack, ownerKey]);
+
+  useEffect(() => {
+    if (isBootstrapping) return;
+
+    if (wasAuthenticatedRef.current && !isAuthenticated) {
+      clearPlayerState();
+    }
+
+    wasAuthenticatedRef.current = isAuthenticated;
+  }, [clearPlayerState, isAuthenticated, isBootstrapping]);
 
   const refreshLibrary = () => {
     libraryCacheRef.current.clear();
@@ -777,7 +813,8 @@ export function PlayerProvider({ children }) {
       handleLocalFileChange, updateUploadedTrack, deleteUploadedTrack, deleteLocalTrack,
       handleTogglePlay, handleSkip, submitTrackTag, removeTrackTag,
       queueTrack, removeQueuedTrack, clearManualQueue,
-      handleSeek, handleTimeUpdate, handleLoadedMetadata, handleTrackEnded, stopPlayback, setError
+      handleSeek, handleTimeUpdate, handleLoadedMetadata, handleTrackEnded,
+      stopPlayback, clearPlayerState, setError
     }}>
       {children}
     </PlayerContext.Provider>

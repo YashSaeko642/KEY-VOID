@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { useEnterVoid } from "../src/context/useEnterVoid";
 import "./EnterVoidModal.css";
 
@@ -52,7 +53,7 @@ export default function EnterVoidModal({ isOpen, onClose, onSessionStart }) {
 
   if (!isOpen) return null;
 
-  return (
+  const modal = (
     <div className="void-modal-overlay" onClick={onClose}>
       <div className="void-modal-content" onClick={(e) => e.stopPropagation()}>
         <button className="void-modal-close" onClick={onClose} aria-label="Close">
@@ -187,4 +188,6 @@ export default function EnterVoidModal({ isOpen, onClose, onSessionStart }) {
       </div>
     </div>
   );
+
+  return createPortal(modal, document.body);
 }
