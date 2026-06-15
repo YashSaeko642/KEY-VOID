@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { BarChart3, Disc3, Eye, Grid3X3, Heart, Menu, MessageCircle, Music2, Pause, Pencil, Play, Plus, Radio, Search, Settings, Sparkles, Trash2, TrendingUp, Upload, UserPlus, Video, X } from "lucide-react";
+import { BarChart3, Disc3, Eye, Grid3X3, Heart, Menu, MessageCircle, Music2, Pause, Pencil, Play, Plus, Radio, Settings, Sparkles, Trash2, TrendingUp, Upload, UserPlus, Video, X } from "lucide-react";
 import API, { followUser, unfollowUser, getFollowStatus, getApiErrorMessage, getUserAudioUploads, getUserCommentedPosts, getUserPosts, getCreatorInsights, trackPostView, uploadCreatorSongs } from "../services/api";
 import CreatePostModal from "../components/CreatePostModal";
 import PostCard from "../components/PostCard";
@@ -899,8 +899,8 @@ export default function PublicProfile({ ownProfile = false }) {
                     <BarChart3 size={17} /> Creator analytics
                   </button>
                 ) : null}
-                <Link className="profile-side-link" to="/search">
-                  <Search size={17} /> Search creators
+                <Link className="profile-side-link" to="/feed">
+                  <TrendingUp size={17} /> Explore feed
                 </Link>
               </div>
 

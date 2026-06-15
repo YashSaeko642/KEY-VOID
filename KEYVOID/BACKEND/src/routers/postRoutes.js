@@ -10,6 +10,7 @@ const {
   getFeedMeta,
   getMyFeedMeta,
   getTrendingFeed,
+  getDiscoveryFeed,
   getUserPosts,
   getUserCommentedPosts,
   toggleLike,
@@ -22,7 +23,7 @@ const {
   getCreatorInsights
 } = require("../controllers/post-controller");
 
-const { protect } = require("../middleware/authMiddleware");
+const { protect, optionalProtect } = require("../middleware/authMiddleware");
 const { handleUploadError, postMediaUpload, reelMediaUpload } = require("../middleware/uploadMiddleware");
 const { postCreationRateLimit, likeRateLimit } = require("../middleware/securityMiddleware");
 
@@ -33,6 +34,7 @@ router.get("/", getFeed);
 router.get("/meta", getFeedMeta);
 router.get("/meta/me", protect, getMyFeedMeta);
 router.get("/trending", getTrendingFeed);
+router.get("/discover", optionalProtect, getDiscoveryFeed);
 router.get("/reels", getReels);
 router.get("/creator/insights", protect, getCreatorInsights);
 router.get("/user/:userId/comments", getUserCommentedPosts);

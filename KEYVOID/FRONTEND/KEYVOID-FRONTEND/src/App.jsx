@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { AnimatePresence, motion } from "framer-motion";
 import { useState } from "react";
@@ -10,11 +10,11 @@ import Navbar from "../components/Navbar";
 import ProtectedRoute from "../components/ProtectedRoute";
 import RainEffect from "../components/RainEffect";
 import CreatorHub from "../pages/CreatorHub";
+import CommunityGrid from "../pages/CommunityGrid";
 import Home from "../pages/Home";
 import Login from "../pages/Login";
 import PublicProfile from "../pages/PublicProfile";
 import ResetPassword from "../pages/ResetPassword";
-import Search from "../pages/Search";
 import Reels from "../pages/Reels";
 import Music from "../pages/Music";
 import RoadmapFeedback from "../pages/RoadmapFeedback";
@@ -27,7 +27,7 @@ import "./App.css";
 
 const AUTH_ROUTES = ["/login", "/reset-password"];
 
-const APP_ROUTES = ["/creator", "/admin", "/profile", "/search","/feed", "/reels", "/music", "/roadmap"];
+const APP_ROUTES = ["/creator", "/admin", "/profile", "/feed", "/grid", "/reels", "/music", "/roadmap"];
 const MotionDiv = motion.div;
 const MotionP = motion.p;
 
@@ -93,12 +93,19 @@ function AppLayout() {
                   </ProtectedRoute>
                 }
               />
-              <Route path="/search" element={<Search />} />
+              <Route path="/search" element={<Navigate to="/feed" replace />} />
               <Route path="/u/:username" element={<PublicProfile />} />
               <Route path="/feed"
                 element={
                   <ProtectedRoute>
                     <Feed />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="/grid"
+                element={
+                  <ProtectedRoute>
+                    <CommunityGrid />
                   </ProtectedRoute>
                 }
               />

@@ -410,8 +410,8 @@ export default function Reels() {
       setIsLoading(true);
       setError(null);
 
-      const res = await API.get("/posts/reels", {
-        params: { page: pageNum, limit: 5 }
+      const res = await API.get("/posts/discover", {
+        params: { page: pageNum, limit: 5, type: "reel" }
       });
 
       const reelsData = res.data.posts || res.data;
