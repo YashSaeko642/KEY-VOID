@@ -1406,7 +1406,7 @@
   display: grid;
   justify-items: center;
   gap: 1.1rem;
-  min-height: min(58vh, 620px);
+  min-height: min(62vh, 660px);
   padding: clamp(1.75rem, 5vw, 4.5rem) clamp(1rem, 4vw, 3rem);
   overflow: hidden;
   text-align: center;
@@ -1475,10 +1475,10 @@
 .home-redesign h1 {
   display: grid;
   gap: 0.7rem;
-  max-width: 13ch;
+  max-width: 14ch;
   margin: 0;
   color: #f8fbff;
-  font-size: clamp(2.6rem, 7vw, 5.9rem);
+  font-size: clamp(2.45rem, 6.2vw, 5.35rem);
   line-height: 0.98;
   text-wrap: balance;
 }
@@ -1583,7 +1583,7 @@
 .feature-showcase-copy h2 {
   margin: 0.25rem 0 0;
   color: #f8fbff;
-  font-size: clamp(1.35rem, 3vw, 2.35rem);
+  font-size: clamp(1.18rem, 2.35vw, 2rem);
   line-height: 1.15;
 }
 
@@ -1622,7 +1622,7 @@
   position: relative;
   display: grid;
   align-content: space-between;
-  min-height: 190px;
+  min-height: 156px;
   padding: 1rem;
   overflow: hidden;
   border: 1px solid rgba(101, 130, 214, 0.16);
@@ -1733,10 +1733,10 @@
 .traffic-card strong {
   position: relative;
   z-index: 1;
-  margin-top: 1.5rem;
+  margin-top: 1rem;
   color: #f8fbff;
   font-family: "Michroma", "Trebuchet MS", sans-serif;
-  font-size: clamp(2rem, 4vw, 3.2rem);
+  font-size: clamp(1.65rem, 3vw, 2.55rem);
   line-height: 1;
   text-shadow: 0 0 26px color-mix(in srgb, var(--card-glow) 18%, transparent);
 }
@@ -1778,6 +1778,39 @@
   max-width: 54ch;
 }
 
+.feature-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 0.35rem;
+}
+
+.feature-pill-row a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 0.9rem;
+  border: 1px solid rgba(105, 216, 255, 0.22);
+  border-radius: 999px;
+  color: rgba(231, 251, 255, 0.9);
+  background: rgba(7, 24, 42, 0.54);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.feature-pill-row a:hover {
+  transform: translateY(-2px);
+  border-color: rgba(105, 216, 255, 0.5);
+  box-shadow: 0 0 24px rgba(105, 216, 255, 0.14);
+}
+
 .home-redesign .feature-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.9rem;
@@ -1786,8 +1819,9 @@
 .home-redesign .feature-tile {
   position: relative;
   display: grid;
-  gap: 0.85rem;
-  min-height: 220px;
+  align-content: start;
+  gap: 0.75rem;
+  min-height: 238px;
   padding: 1.1rem;
   overflow: hidden;
   border-color: rgba(101, 130, 214, 0.16);
@@ -1814,6 +1848,44 @@
   margin: 0;
   color: #f8fbff;
   font-size: 1.03rem;
+}
+
+.home-redesign .feature-tile small {
+  position: relative;
+  z-index: 1;
+  width: fit-content;
+  color: color-mix(in srgb, var(--card-glow) 78%, #ffffff);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.home-redesign .feature-tile p {
+  max-width: 38ch;
+  color: rgba(214, 223, 250, 0.74);
+  font-size: 0.88rem;
+}
+
+.feature-hover-cue {
+  position: relative;
+  z-index: 1;
+  align-self: end;
+  width: fit-content;
+  margin-top: auto;
+  color: rgba(248, 251, 255, 0.46);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transition:
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.home-redesign .feature-tile:hover .feature-hover-cue {
+  color: var(--card-glow);
+  transform: translateX(4px);
 }
 
 .void-stars {
