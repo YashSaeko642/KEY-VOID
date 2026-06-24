@@ -273,7 +273,6 @@ export default function CommunityGrid() {
         <div>
           <p className="feed-kicker">Community Grid</p>
           <h1 className="feed-title">{searchTerm ? `${activeTypeLabel} matching "${searchTerm}"` : "Explore"}</h1>
-          <p className="feed-subtitle">Discover posts and vods based on tags, categories, engagement, and what you interact with. Open a tile and scroll into similar content.</p>
         </div>
         <Link className="start-discussion-btn" to="/feed">
           Feed

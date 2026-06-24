@@ -27,6 +27,15 @@ const MUSIC_CATEGORIES = [
   "Indie"
 ];
 
+const VOD_CATEGORIES = [
+  { value: "tutorial", label: "Tutorial" },
+  { value: "music", label: "Music video" },
+  { value: "performance", label: "Live performance" },
+  { value: "behind_the_scenes", label: "Behind the scenes" },
+  { value: "discover", label: "Discovery" },
+  { value: "general", label: "Other" }
+];
+
 function trackTagsToText(track) {
   return (track?.audienceTags || []).map((tag) => tag.tag).join(", ");
 }
@@ -50,7 +59,7 @@ export default function CreatorHub() {
   const [insightsNotice, setInsightsNotice] = useState("");
 
   // Vod creation state
-  const [reelText, setReelText] = useState("");
+  const [reelForm, setReelForm] = useState({ title: "", text: "", vodCategory: "music", audienceTags: "" });
   const [reelMedia, setReelMedia] = useState(null);
   const [mediaPreviewUrl, setMediaPreviewUrl] = useState("");
   const [isCreatingReel, setIsCreatingReel] = useState(false);
@@ -214,16 +223,17 @@ export default function CreatorHub() {
       setReelError("");
 
       const formData = new FormData();
-      if (reelText.trim()) {
-        formData.append("text", reelText);
-      }
+      formData.append("title", reelForm.title.trim());
+      formData.append("text", reelForm.text.trim());
+      formData.append("vodCategory", reelForm.vodCategory);
+      formData.append("audienceTags", reelForm.audienceTags);
       formData.append("media", reelMedia);
 
       formData.append("contentType", "reel");
       const response = await API.post("/posts/reel", formData);
 
       if (response.status === 201) {
-        setReelText("");
+        setReelForm({ title: "", text: "", vodCategory: "music", audienceTags: "" });
         clearReelMedia();
         setReelNotice({ type: "success", message: "Vod created successfully." });
       }
@@ -537,13 +547,62 @@ export default function CreatorHub() {
             </div>
           )}
 
-          <div style={{ marginBottom: "16px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "12px", marginBottom: "16px" }}>
+            <input
+              placeholder="Vod title"
+              value={reelForm.title}
+              onChange={(e) => setReelForm((current) => ({ ...current, title: e.target.value }))}
+              maxLength={140}
+              style={{
+                gridColumn: "1 / -1",
+                width: "100%",
+                padding: "12px",
+                border: "1px solid #374151",
+                borderRadius: "8px",
+                background: "#1f2937",
+                color: "white",
+                fontSize: "14px"
+              }}
+            />
+            <select
+              value={reelForm.vodCategory}
+              onChange={(e) => setReelForm((current) => ({ ...current, vodCategory: e.target.value }))}
+              style={{
+                width: "100%",
+                padding: "12px",
+                border: "1px solid #374151",
+                borderRadius: "8px",
+                background: "#1f2937",
+                color: "white",
+                fontSize: "14px"
+              }}
+            >
+              {VOD_CATEGORIES.map((category) => (
+                <option key={category.value} value={category.value}>{category.label}</option>
+              ))}
+            </select>
+            <input
+              placeholder="Audience tags: guitar, beginner, live"
+              value={reelForm.audienceTags}
+              onChange={(e) => setReelForm((current) => ({ ...current, audienceTags: e.target.value }))}
+              maxLength={180}
+              style={{
+                width: "100%",
+                padding: "12px",
+                border: "1px solid #374151",
+                borderRadius: "8px",
+                background: "#1f2937",
+                color: "white",
+                fontSize: "14px"
+              }}
+            />
             <textarea
-              placeholder="Add a caption to your vod (optional)..."
-              value={reelText}
-              onChange={(e) => setReelText(e.target.value)}
+              placeholder="Add a description for this vod..."
+              value={reelForm.text}
+              onChange={(e) => setReelForm((current) => ({ ...current, text: e.target.value }))}
               maxLength={500}
               style={{
+                gridColumn: "1 / -1",
                 width: "100%",
                 minHeight: "80px",
                 padding: "12px",
@@ -556,7 +615,7 @@ export default function CreatorHub() {
               }}
             />
             <div style={{ textAlign: "right", fontSize: "12px", color: "#9ca3af", marginTop: "4px" }}>
-              {reelText.length}/500
+              {reelForm.text.length}/500
             </div>
           </div>
 

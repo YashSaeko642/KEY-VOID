@@ -8,29 +8,25 @@ import { useAuth } from "../src/context/useAuth";
 import API from "../services/api";
 import "./RoadmapFeedback.css";
 
-const CURRENT_VERSION = "v0.4.2";
+const CURRENT_VERSION = "v0.5.0";
 const PAGE_SIZE = 5;
 
 const nextFeatures = [
   {
-    title: "Smarter music discovery",
+    title: "improve artist page and music uploads",
     status: "In progress",
-    detail: "Genre onboarding, recommended and explore shelves, recent listening signals, and better outside-your-loop discovery."
+    detail: "Improved artist page with better music upload flow, track management, and analytics."
   },
   {
-    title: "Reels stability",
-    status: "In progress",
-    detail: "A lighter reel viewer with explicit arrow navigation, media unloading, and a cleaner comment drawer."
+    title: "A proper functional chat system",
+    status: "planned",
+    detail: "A proper chat system with real-time messaging, typing indicators, and read receipts."
   },
+  
   {
-    title: "Profile gating (listeners vs creators)",
+    title: "A proper sharing system",
     status: "Planned",
-    detail: "Hide creator-only panels and avoid loading creator endpoints for listener accounts."
-  },
-  {
-    title: "Better social media features such as sharing and embeds",
-    status: "Planned",
-    detail: "Easier sharing of tracks, playlists, and profiles to other platforms."
+    detail: "Share links to tracks, reels, and profiles with a proper share sheet and social previews."
   },
   {
     title: "Better animated UI",

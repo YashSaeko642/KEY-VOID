@@ -28,6 +28,12 @@ function buildProfilePayload(user, { includePrivate = false } = {}) {
     avatarUrl: user.avatarUrl || "",
     bannerUrl: user.bannerUrl || "",
     favoriteGenres: user.favoriteGenres || [],
+    onboardingPreferences: user.onboardingPreferences || {
+      accountType: role === "creator" ? "creator" : "listener",
+      listenerInterests: [],
+      creatorIntents: [],
+      completedAt: null
+    },
     followersCount: user.followersCount || 0,
     followingCount: user.followingCount || 0,
     joinedAt: user.createdAt
@@ -231,8 +237,21 @@ exports.updateMyProfile = async (req, res) => {
       req.user.username = usernameValidation.value;
     }
 
+    const nextOnboardingPreferences = {
+      accountType: req.user.role === "creator" || req.user.role === "admin" ? "creator" : "listener",
+      listenerInterests: profileInput.value.onboardingPreferences.listenerInterests,
+      creatorIntents: req.user.role === "creator" || req.user.role === "admin"
+        ? profileInput.value.onboardingPreferences.creatorIntents
+        : [],
+      completedAt: new Date()
+    };
+
     // Apply validated text fields to user document
-    Object.assign(req.user, profileInput.value);
+    req.user.bio = profileInput.value.bio;
+    req.user.location = profileInput.value.location;
+    req.user.website = profileInput.value.website;
+    req.user.favoriteGenres = profileInput.value.favoriteGenres;
+    req.user.onboardingPreferences = nextOnboardingPreferences;
 
     // Handle image uploads to Cloudinary and update URLs
     const imageError = await applyProfileImages(req.user, req.files, req.body);

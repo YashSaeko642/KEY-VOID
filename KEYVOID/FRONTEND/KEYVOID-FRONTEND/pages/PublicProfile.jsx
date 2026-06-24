@@ -52,12 +52,38 @@ const EMPTY_PROFILE_FORM = {
   bio: "",
   location: "",
   website: "",
-  favoriteGenres: ""
+  favoriteGenres: "",
+  listenerInterests: [],
+  creatorIntents: []
 };
 
 const IMAGE_LIMIT_BYTES = 2 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 const MUSIC_CATEGORIES = ["Metal", "Blues", "Electronic", "Rock", "Pop", "Hip-Hop", "Jazz", "Classical", "Folk", "Country", "R&B", "Punk", "Ambient", "Indie"];
+const VOD_CATEGORIES = [
+  { value: "tutorial", label: "Tutorial" },
+  { value: "music", label: "Music video" },
+  { value: "performance", label: "Live performance" },
+  { value: "behind_the_scenes", label: "Behind the scenes" },
+  { value: "discover", label: "Discovery" },
+  { value: "general", label: "Other" }
+];
+const LISTENER_INTEREST_OPTIONS = [
+  { value: "tutorials", label: "Tutorials" },
+  { value: "music_videos", label: "Music videos" },
+  { value: "live_performances", label: "Live performances" },
+  { value: "new_artists", label: "New artists" },
+  { value: "instruments", label: "Instruments" },
+  { value: "production", label: "Production" }
+];
+const CREATOR_SPECIALTIES = [
+  { value: "musician", label: "Musician" },
+  { value: "artist", label: "Artist" },
+  { value: "teacher", label: "Teacher" },
+  { value: "producer", label: "Producer" },
+  { value: "instrumentalist", label: "Instrumentalist" },
+  { value: "reviewer", label: "Reviewer" }
+];
 
 function profileToForm(profile = {}) {
   return {
@@ -65,8 +91,19 @@ function profileToForm(profile = {}) {
     bio: profile.bio || "",
     location: profile.location || "",
     website: profile.website || "",
-    favoriteGenres: Array.isArray(profile.favoriteGenres) ? profile.favoriteGenres.join(", ") : ""
+    favoriteGenres: Array.isArray(profile.favoriteGenres) ? profile.favoriteGenres.join(", ") : "",
+    listenerInterests: profile.onboardingPreferences?.listenerInterests || [],
+    creatorIntents: profile.onboardingPreferences?.creatorIntents || []
   };
+}
+
+function toggleValue(list = [], value) {
+  return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
+}
+
+function getOptionLabels(options, values = []) {
+  const labels = new Map(options.map((option) => [option.value, option.label]));
+  return values.map((value) => labels.get(value) || value.replaceAll("_", " ")).filter(Boolean);
 }
 
 function ProfileAvatar({ profile, className = "" }) {
@@ -314,11 +351,14 @@ export default function PublicProfile({ ownProfile = false }) {
   const [musicForm, setMusicForm] = useState({ title: "", artist: user?.username || "", genre: MUSIC_CATEGORIES[0], tags: "", releaseType: "track", files: [] });
   const [musicNotice, setMusicNotice] = useState({ type: "", message: "" });
   const [isUploadingMusic, setIsUploadingMusic] = useState(false);
-  const [vodText, setVodText] = useState("");
+  const [vodForm, setVodForm] = useState({ title: "", text: "", vodCategory: "music", audienceTags: "" });
   const [vodMedia, setVodMedia] = useState(null);
   const [vodPreviewUrl, setVodPreviewUrl] = useState("");
   const [vodNotice, setVodNotice] = useState({ type: "", message: "" });
   const [isCreatingVod, setIsCreatingVod] = useState(false);
+  const [editingVod, setEditingVod] = useState(null);
+  const [pendingDeleteVod, setPendingDeleteVod] = useState(null);
+  const [isDeletingVod, setIsDeletingVod] = useState(false);
 
   const requestedMode = searchParams.get("tab") || "posts";
   const isArtist = profile?.role === "creator" || profile?.role === "admin" || profile?.isCreator;
@@ -500,6 +540,12 @@ export default function PublicProfile({ ownProfile = false }) {
     }
     return [];
   }, [profile?.favoriteGenres]);
+  const listenerInterestLabels = useMemo(() => (
+    getOptionLabels(LISTENER_INTEREST_OPTIONS, profile?.onboardingPreferences?.listenerInterests || [])
+  ), [profile?.onboardingPreferences?.listenerInterests]);
+  const creatorSpecialtyLabels = useMemo(() => (
+    getOptionLabels(CREATOR_SPECIALTIES, profile?.onboardingPreferences?.creatorIntents || [])
+  ), [profile?.onboardingPreferences?.creatorIntents]);
   const commentHistory = useMemo(() => {
     if (!profile?.id) return [];
     return commentedPosts.flatMap((post) => (
@@ -556,6 +602,11 @@ export default function PublicProfile({ ownProfile = false }) {
   };
 
   const handleOpenPost = (post, commentId = "") => {
+    if (post?.contentType === "reel") {
+      navigate(`/reels/${post._id}`);
+      return;
+    }
+
     setSelectedCommentId(commentId || "");
     setSelectedPost(post);
 
@@ -701,13 +752,16 @@ export default function PublicProfile({ ownProfile = false }) {
       setIsCreatingVod(true);
       setVodNotice({ type: "", message: "" });
       const formData = new FormData();
-      if (vodText.trim()) formData.append("text", vodText.trim());
+      formData.append("title", vodForm.title.trim());
+      formData.append("text", vodForm.text.trim());
+      formData.append("vodCategory", vodForm.vodCategory);
+      formData.append("audienceTags", vodForm.audienceTags);
       formData.append("media", vodMedia);
       formData.append("contentType", "reel");
       const response = await API.post("/posts/reel", formData);
       const nextVod = response.data?.post || response.data;
 
-      setVodText("");
+      setVodForm({ title: "", text: "", vodCategory: "music", audienceTags: "" });
       clearVodMedia();
       if (nextVod?._id) {
         setReels((current) => [nextVod, ...current.filter((post) => post._id !== nextVod._id)]);
@@ -729,9 +783,64 @@ export default function PublicProfile({ ownProfile = false }) {
     }
   };
 
+  const openEditVod = (post) => {
+    setEditingVod({
+      _id: post._id,
+      title: post.title || "",
+      text: post.text || "",
+      vodCategory: post.vodCategory || "general",
+      audienceTags: (post.audienceTags || post.tags || []).join(", ")
+    });
+    setVodNotice({ type: "", message: "" });
+  };
+
+  const handleUpdateVod = async (event) => {
+    event.preventDefault();
+    if (!editingVod?._id) return;
+
+    try {
+      setVodNotice({ type: "", message: "" });
+      const { data } = await API.patch(`/posts/${editingVod._id}`, {
+        title: editingVod.title,
+        text: editingVod.text,
+        vodCategory: editingVod.vodCategory,
+        audienceTags: editingVod.audienceTags,
+        tags: editingVod.audienceTags
+      });
+
+      const nextVod = data.post || data;
+      setReels((current) => current.map((post) => post._id === nextVod._id ? nextVod : post));
+      setEditingVod(null);
+      setVodNotice({ type: "success", message: "Vod updated." });
+    } catch (error) {
+      setVodNotice({ type: "error", message: getApiErrorMessage(error, "Unable to update vod.") });
+    }
+  };
+
+  const handleConfirmDeleteVod = async () => {
+    if (!pendingDeleteVod?._id || isDeletingVod) return;
+
+    try {
+      setIsDeletingVod(true);
+      setVodNotice({ type: "", message: "" });
+      await API.delete(`/posts/${pendingDeleteVod._id}`);
+      handleDeletePost(pendingDeleteVod._id);
+      setPendingDeleteVod(null);
+      setVodNotice({ type: "success", message: "Vod deleted." });
+    } catch (error) {
+      setVodNotice({ type: "error", message: getApiErrorMessage(error, "Unable to delete vod.") });
+    } finally {
+      setIsDeletingVod(false);
+    }
+  };
+
   const handleEditChange = (event) => {
     const { name, value } = event.target;
     setEditFormData((current) => ({ ...current, [name]: value }));
+  };
+
+  const toggleEditChoice = (field, value) => {
+    setEditFormData((current) => ({ ...current, [field]: toggleValue(current[field] || [], value) }));
   };
 
   const handleImageChange = (event) => {
@@ -802,6 +911,8 @@ export default function PublicProfile({ ownProfile = false }) {
       profileForm.append("location", editFormData.location);
       profileForm.append("website", editFormData.website);
       profileForm.append("favoriteGenres", editFormData.favoriteGenres);
+      profileForm.append("listenerInterests", editFormData.listenerInterests.join(","));
+      profileForm.append("creatorIntents", editFormData.creatorIntents.join(","));
       profileForm.append("removeAvatar", String(imageState.removeAvatar));
       profileForm.append("removeBanner", String(imageState.removeBanner));
 
@@ -1107,8 +1218,36 @@ export default function PublicProfile({ ownProfile = false }) {
                     <button className="profile-post-tile" type="button" onClick={() => handleOpenPost(post)} key={post._id}>
                       {post.mediaUrl && post.mediaType === "image" ? <img src={post.mediaUrl} alt="" /> : null}
                       {post.mediaUrl && post.mediaType === "video" ? <video src={post.mediaUrl} muted playsInline /> : null}
+                      {isOwnProfile && post.contentType === "reel" ? (
+                        <span className="profile-vod-tile-actions">
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            onClick={(event) => { event.stopPropagation(); openEditVod(post); }}
+                            onKeyDown={(event) => { if (event.key === "Enter") { event.stopPropagation(); openEditVod(post); } }}
+                          >
+                            <Pencil size={14} />
+                          </span>
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`Delete ${getPostPreview(post)}`}
+                            onClick={(event) => { event.stopPropagation(); setPendingDeleteVod(post); }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                setPendingDeleteVod(post);
+                              }
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </span>
+                        </span>
+                      ) : null}
                       <div className="profile-post-overlay">
                         <strong>{getPostPreview(post)}</strong>
+                        {post.contentType === "reel" ? <span>{VOD_CATEGORIES.find((category) => category.value === post.vodCategory)?.label || "Vod"}</span> : null}
                         <span><Heart size={14} /> {post.likes?.length || 0}</span>
                         <span><MessageCircle size={14} /> {(post.comments || []).length}</span>
                       </div>
@@ -1161,6 +1300,14 @@ export default function PublicProfile({ ownProfile = false }) {
                   {(profileGenres.length ? profileGenres : ["Discovery"]).map((genre) => (
                     <span className="profile-chip" key={genre}>{genre}</span>
                   ))}
+                </div>
+                <div className="profile-detail-list">
+                  <div>
+                    <span>{isArtist ? "Specialty" : "Looking for"}</span>
+                    <strong>
+                      {(isArtist ? creatorSpecialtyLabels : listenerInterestLabels).slice(0, 3).join(", ") || "Not set"}
+                    </strong>
+                  </div>
                 </div>
                 <div className="profile-identity-actions">
                   {!isOwnProfile && isAuthenticated ? (
@@ -1267,8 +1414,22 @@ export default function PublicProfile({ ownProfile = false }) {
             {vodNotice.message ? <p className={vodNotice.type === "success" ? "auth-success" : "auth-error"}>{vodNotice.message}</p> : null}
             <div className="profile-edit-grid">
               <label className="auth-field profile-wide-field">
-                <span>Caption</span>
-                <textarea maxLength="500" rows="4" value={vodText} onChange={(event) => setVodText(event.target.value)} />
+                <span>Title</span>
+                <input maxLength="140" value={vodForm.title} onChange={(event) => setVodForm((current) => ({ ...current, title: event.target.value }))} placeholder="Name this VOD" />
+              </label>
+              <label className="auth-field">
+                <span>Category</span>
+                <select value={vodForm.vodCategory} onChange={(event) => setVodForm((current) => ({ ...current, vodCategory: event.target.value }))}>
+                  {VOD_CATEGORIES.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}
+                </select>
+              </label>
+              <label className="auth-field">
+                <span>Audience tags</span>
+                <input maxLength="180" value={vodForm.audienceTags} onChange={(event) => setVodForm((current) => ({ ...current, audienceTags: event.target.value }))} placeholder="guitar, beginner, live" />
+              </label>
+              <label className="auth-field profile-wide-field">
+                <span>Description</span>
+                <textarea maxLength="500" rows="4" value={vodForm.text} onChange={(event) => setVodForm((current) => ({ ...current, text: event.target.value }))} />
               </label>
               <label className="auth-field profile-wide-field">
                 <span>Media</span>
@@ -1288,6 +1449,87 @@ export default function PublicProfile({ ownProfile = false }) {
               </button>
             </div>
           </form>
+        </div>,
+        document.body
+      ) : null}
+
+      {editingVod ? createPortal(
+        <div className="profile-modal-backdrop" role="dialog" aria-modal="true" aria-label="Edit vod">
+          <form className="profile-edit-modal creator-upload-modal" onSubmit={handleUpdateVod}>
+            <div className="profile-modal-header">
+              <div>
+                <p className="profile-kicker">Vod</p>
+                <h2>Edit vod</h2>
+              </div>
+              <button className="panel-collapse-btn" type="button" onClick={() => setEditingVod(null)} aria-label="Close edit vod">
+                <X size={16} />
+              </button>
+            </div>
+            {vodNotice.message ? <p className={vodNotice.type === "success" ? "auth-success" : "auth-error"}>{vodNotice.message}</p> : null}
+            <div className="profile-edit-grid">
+              <label className="auth-field profile-wide-field">
+                <span>Title</span>
+                <input maxLength="140" value={editingVod.title} onChange={(event) => setEditingVod((current) => ({ ...current, title: event.target.value }))} />
+              </label>
+              <label className="auth-field">
+                <span>Category</span>
+                <select value={editingVod.vodCategory} onChange={(event) => setEditingVod((current) => ({ ...current, vodCategory: event.target.value }))}>
+                  {VOD_CATEGORIES.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}
+                </select>
+              </label>
+              <label className="auth-field">
+                <span>Audience tags</span>
+                <input maxLength="180" value={editingVod.audienceTags} onChange={(event) => setEditingVod((current) => ({ ...current, audienceTags: event.target.value }))} />
+              </label>
+              <label className="auth-field profile-wide-field">
+                <span>Description</span>
+                <textarea maxLength="500" rows="4" value={editingVod.text} onChange={(event) => setEditingVod((current) => ({ ...current, text: event.target.value }))} />
+              </label>
+            </div>
+            <div className="profile-modal-actions">
+              <button className="profile-action-button" type="button" onClick={() => setEditingVod(null)}>Cancel</button>
+              <button className="profile-action-button primary" type="submit">Save vod</button>
+            </div>
+          </form>
+        </div>,
+        document.body
+      ) : null}
+
+      {pendingDeleteVod ? createPortal(
+        <div
+          className="profile-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirm vod deletion"
+          onMouseDown={() => !isDeletingVod && setPendingDeleteVod(null)}
+        >
+          <div className="profile-delete-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="profile-modal-header">
+              <div>
+                <p className="profile-kicker">Delete vod</p>
+                <h2>Delete this video?</h2>
+              </div>
+              <button
+                className="panel-collapse-btn"
+                type="button"
+                disabled={isDeletingVod}
+                onClick={() => setPendingDeleteVod(null)}
+                aria-label="Close delete confirmation"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <p>"{getPostPreview(pendingDeleteVod)}" will be permanently removed.</p>
+            {vodNotice.type === "error" ? <p className="auth-error">{vodNotice.message}</p> : null}
+            <div className="profile-modal-actions">
+              <button className="profile-action-button" type="button" disabled={isDeletingVod} onClick={() => setPendingDeleteVod(null)}>
+                Cancel
+              </button>
+              <button className="profile-action-button danger" type="button" disabled={isDeletingVod} onClick={handleConfirmDeleteVod}>
+                {isDeletingVod ? "Deleting..." : "Delete vod"}
+              </button>
+            </div>
+          </div>
         </div>,
         document.body
       ) : null}
@@ -1326,6 +1568,38 @@ export default function PublicProfile({ ownProfile = false }) {
                 <span>Favorite genres</span>
                 <input name="favoriteGenres" onChange={handleEditChange} type="text" value={editFormData.favoriteGenres} />
               </label>
+              <div className="auth-field profile-wide-field">
+                <span>Content you want recommended</span>
+                <div className="auth-choice-grid">
+                  {LISTENER_INTEREST_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={editFormData.listenerInterests.includes(option.value) ? "auth-choice-chip active" : "auth-choice-chip"}
+                      onClick={() => toggleEditChoice("listenerInterests", option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {isArtist ? (
+                <div className="auth-field profile-wide-field">
+                  <span>Creator specialty</span>
+                  <div className="auth-choice-grid">
+                    {CREATOR_SPECIALTIES.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={editFormData.creatorIntents.includes(option.value) ? "auth-choice-chip active" : "auth-choice-chip"}
+                        onClick={() => toggleEditChoice("creatorIntents", option.value)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               <label className="auth-field">
                 <span>Avatar image</span>
                 <input accept="image/png,image/jpeg,image/webp,image/gif" name="avatar" onChange={handleImageChange} type="file" />

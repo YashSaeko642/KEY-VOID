@@ -374,11 +374,8 @@ export default function Profile() {
             Profile
           </p>
           <h1 className="font-['Michroma'] text-[clamp(2rem,4vw,3.4rem)] leading-tight text-slate-50">
-            Shape your public identity.
+            Profile
           </h1>
-          <p className="text-slate-300/80">
-            This is the profile listeners and creators will see around KeyVoid.
-          </p>
 
           {status === "loading" ? <p className="auth-success">Loading profile...</p> : null}
           {message ? (

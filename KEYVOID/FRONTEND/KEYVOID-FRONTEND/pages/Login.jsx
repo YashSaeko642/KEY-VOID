@@ -17,12 +17,32 @@ const ROLE_OPTIONS = [
   }
 ];
 
+const LISTENER_INTERESTS = [
+  { value: "music", label: "Music" },
+  { value: "instruments", label: "Instruments" },
+  { value: "tutorials", label: "Tutorials" },
+  { value: "production", label: "Production" },
+  { value: "live_sessions", label: "Live sessions" },
+  { value: "new_artists", label: "New artists" }
+];
+
+const CREATOR_INTENTS = [
+  { value: "teacher", label: "Teacher" },
+  { value: "musician", label: "Musician" },
+  { value: "producer", label: "Producer" },
+  { value: "instrumentalist", label: "Instrumentalist" },
+  { value: "reviewer", label: "Reviewer" },
+  { value: "community_host", label: "Community host" }
+];
+
 const INITIAL_FORM = {
   email: "",
   password: "",
   confirmPassword: "",
   username: "",
-  role: "user"
+  role: "user",
+  listenerInterests: [],
+  creatorIntents: []
 };
 
 export default function Login() {
@@ -42,6 +62,61 @@ export default function Login() {
   function handleChange(event) {
     const { name, value } = event.target;
     setFormData((current) => ({ ...current, [name]: value }));
+  }
+
+  function toggleArrayValue(field, value) {
+    setFormData((current) => {
+      const values = current[field] || [];
+      return {
+        ...current,
+        [field]: values.includes(value)
+          ? values.filter((item) => item !== value)
+          : [...values, value]
+      };
+    });
+  }
+
+  function renderOnboardingChoices() {
+    if (!isSignup && !isCompletingProfile) return null;
+    const isCreator = formData.role === "creator";
+
+    return (
+      <div className="auth-onboarding-stack">
+        <div>
+          <span className="auth-choice-title">What are you into?</span>
+          <div className="auth-choice-grid" aria-label="Listener interests">
+            {LISTENER_INTERESTS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={formData.listenerInterests.includes(option.value) ? "auth-choice-chip active" : "auth-choice-chip"}
+                onClick={() => toggleArrayValue("listenerInterests", option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {isCreator ? (
+          <div>
+            <span className="auth-choice-title">What do you want to do on KeyVoid?</span>
+            <div className="auth-choice-grid" aria-label="Creator goals">
+              {CREATOR_INTENTS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={formData.creatorIntents.includes(option.value) ? "auth-choice-chip active" : "auth-choice-chip"}
+                  onClick={() => toggleArrayValue("creatorIntents", option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
   }
 
   function resetForm(newMode) {
@@ -90,7 +165,9 @@ export default function Login() {
     const result = await googleAuth({
       credential: pendingGoogleCredential,
       username: formData.username,
-      role: formData.role
+      role: formData.role,
+      listenerInterests: formData.listenerInterests,
+      creatorIntents: formData.creatorIntents
     });
 
     if (!result.success) {
@@ -132,7 +209,9 @@ export default function Login() {
         password: formData.password,
         confirmPassword: formData.confirmPassword,
         username: formData.username,
-        role: formData.role
+        role: formData.role,
+        listenerInterests: formData.listenerInterests,
+        creatorIntents: formData.creatorIntents
       });
 
       if (!result.success) {
@@ -250,6 +329,7 @@ export default function Login() {
                   );
                 })}
               </div>
+              {renderOnboardingChoices()}
             </>
           ) : isForgotPassword ? (
             <label className="auth-field">
@@ -347,6 +427,7 @@ export default function Login() {
                       );
                     })}
                   </div>
+                  {renderOnboardingChoices()}
                 </>
               ) : null}
             </>

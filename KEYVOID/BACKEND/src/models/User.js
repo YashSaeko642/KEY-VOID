@@ -95,6 +95,25 @@ const userSchema = new mongoose.Schema(
       type: [String],
       default: []
     },
+    onboardingPreferences: {
+      accountType: {
+        type: String,
+        enum: ["listener", "creator"],
+        default: "listener"
+      },
+      listenerInterests: {
+        type: [String],
+        default: []
+      },
+      creatorIntents: {
+        type: [String],
+        default: []
+      },
+      completedAt: {
+        type: Date,
+        default: null
+      }
+    },
     featuredContent: {
       type: [mongoose.Schema.Types.ObjectId],
       ref: "Post",
