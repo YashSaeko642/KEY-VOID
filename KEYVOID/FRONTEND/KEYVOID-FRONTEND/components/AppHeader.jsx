@@ -70,7 +70,7 @@ function getSearchIntent(value, fallbackMode) {
 export default function AppHeader() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isAdmin, logout, user } = useAuth();
+  const { isAdmin, isAuthenticated, logout, user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSearchMode, setSelectedSearchMode] = useState("user");
   const [searchResults, setSearchResults] = useState([]);
@@ -181,28 +181,39 @@ export default function AppHeader() {
     setIsSearchOpen(false);
   }
 
-  const isActive = (path) => location.pathname === path;
-  const navItems = [
-    ...baseNavItems,
-    ...(isAdmin ? [{ path: "/admin", label: "Admin" }] : [])
-  ];
+  const isActive = (path) => (
+    path === "/"
+      ? location.pathname === "/"
+      : location.pathname === path || location.pathname.startsWith(`${path}/`)
+  );
+  const navItems = isAuthenticated
+    ? [
+        ...baseNavItems,
+        ...(user?.role === "creator" || isAdmin ? [{ path: "/creator", label: "Creator" }] : []),
+        ...(isAdmin ? [{ path: "/admin", label: "Admin" }] : [])
+      ]
+    : [
+        { path: "/", label: "Home" },
+        { path: "/music", label: "Music" },
+        { path: "/reels", label: "Vods" }
+      ];
 
   return (
     <>
       <header className="mobile-app-header">
       <div className="mobile-app-header-inner">
-        <Link to="/profile" className="mobile-app-brand">
+        <Link to={isAuthenticated ? "/profile" : "/"} className="mobile-app-brand">
           KeyVoid
         </Link>
 
-        <div className="mobile-app-user">
+        {isAuthenticated ? <div className="mobile-app-user">
           <span className="mobile-app-chip mobile-app-chip-user">
             {user?.username || "Account"}
           </span>
           <span className="mobile-app-chip mobile-app-chip-role">
-            {isAdmin ? "Admin" : user?.role === "creator" ? "Creator" : "User"}
+            {isAdmin ? "Admin" : user?.role === "creator" ? "Creator" : "Listener"}
           </span>
-        </div>
+        </div> : null}
 
         <nav className="mobile-app-nav" aria-label="Application">
           {navItems.map((item) => (
@@ -216,7 +227,7 @@ export default function AppHeader() {
           ))}
         </nav>
 
-        <form ref={searchRef} onSubmit={handleSearch} className={`mobile-app-search${isSearchOpen ? " is-open" : ""}`}>
+        {isAuthenticated ? <form ref={searchRef} onSubmit={handleSearch} className={`mobile-app-search${isSearchOpen ? " is-open" : ""}`}>
           <div className="mobile-app-search-field">
             <SearchIcon size={16} />
             <input
@@ -306,14 +317,14 @@ export default function AppHeader() {
               )}
             </div>
           ) : null}
-        </form>
+        </form> : null}
 
-        <div className="mobile-app-actions">
+        {isAuthenticated ? <div className="mobile-app-actions">
           <button
             className="void-nav-btn"
             onClick={() => setShowVoidModal(true)}
             type="button"
-            title="Enter the void for guided music discovery"
+            title="Start a guided music discovery session"
           >
             <span className="void-nav-btn-icon">🌌</span>
             <span className="void-nav-btn-text">Enter Void</span>
@@ -327,7 +338,11 @@ export default function AppHeader() {
           >
             Logout
           </button>
-        </div>
+        </div> : (
+          <div className="mobile-app-actions">
+            <Link className="mobile-app-login" to="/login">Sign in</Link>
+          </div>
+        )}
 
       </div>
     </header>

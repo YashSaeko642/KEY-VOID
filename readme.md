@@ -1,175 +1,66 @@
 # KEYVOID
 
-> **The Digital Space Where Creators Find Their Sound and Find Their Sound.**
+KeyVoid is a creator-first social platform built for artists, musicians, and content creators who want a more personal and immersive space to share their work. The idea is simple: give creators a place where their audience can discover them, listen to their music, explore their content, and feel connected to their journey.
 
-KEYVOID is a decentralized, user-centric social platform designed to bridge the gap between independent creators and authentic audiences. Unlike mainstream social media, KEYVOID focuses on **quality, discovery, and community**, providing a seamless ecosystem where creators can share their art (music, video, voice) and connect with engaged followers.
+You can explore the live version here:
+- Frontend: https://key-void.vercel.app
+- Backend: https://keyvoid-backend.onrender.com
 
----
+## What KeyVoid is about
 
-## 🎯 Mission & Vision
+KeyVoid is not just another social app. It is designed to feel more expressive, more musical, and more community-driven. Instead of only scrolling through generic content, users can discover creators, follow their work, explore their pages, and enjoy a more immersive experience around audio and media.
 
-### **Mission**
-To empower independent creators by providing a platform where authentic connection, high-quality content, and fair exposure drive engagement. We aim to reduce the noise of traditional social networks by focusing on genuine interactions and content merit.
+The main goal of KeyVoid is to help creators grow in a space that feels closer to their art and their audience.
 
-### **Vision**
-To become the primary digital hub for creator discovery, where artists, musicians, and influencers can build lasting relationships with their audience through meaningful content and seamless social features.
+## What KeyVoid offers
 
----
+### Feed Page
+A place where users can discover fresh content, follow what matters to them, and stay connected with creators they enjoy.
 
-## 🚀 Key Features
+### Reels / Video Page
+A dedicated space for short-form, visual content where creators can share moments, performances, and engaging media in a more dynamic way.
 
-### **1. Creator Profile System**
-*   **Identity & Portfolio**: Dedicated profiles showcasing username, verified badges, bio, and social links.
-*   **Customization**: Users can display personalized avatars, cover photos, and profile banners.
-*   **Verification**: Badge system to distinguish verified creators from regular users.
-*   **Networking**: Follow, unfollow, and connect with other users to build an audience.
+### Artist / Creator Page
+Each creator gets a personal space to showcase their identity, music, posts, and presence. It is built to feel like a digital home for artists and their audience.
 
-### **2. Content Sharing & Discovery**
-*   **Rich Media Posts**: Create and share text, images, and audio clips.
-*   **Search & Explore**: Advanced search functionality to find creators by username or browse by interest.
-*   **Feed Integration**: Real-time updates visible to followers and search results.
-*   **Media Types**: Support for static images and audio posts with embedded players.
+### Music Page
+A focused area for audio discovery, where users can browse and enjoy music-related content in a smoother, more immersive experience.
 
-### **3. Social Interaction**
-*   **Engagement**: Like, comment, and share on content.
-*   **Real-time Updates**: Optimistic UI updates for likes and interactions.
-*   **Notifications**: Keep creators informed about their activity and audience engagement.
+### Playlist & Listening Experience
+Users can save, organize, and enjoy music in a more personal way with playlists and a continuous listening experience.
 
-### **4. Authentication & Security**
-*   **Secure Login**: Support for both local accounts and OAuth providers (e.g., Google).
-*   **Token Management**: Automatic refresh token rotation for seamless, secure sessions.
-*   **Role-Based Access**: Admin privileges for moderation and user management.
-*   **Audit Logs**: Comprehensive logging of security-sensitive actions.
+### Void Sessions
+A special part of the experience designed to make listening feel more immersive and memorable, giving users a deeper connection with the music and the creator.
 
-### **5. User Experience**
-*   **Modern UI**: Dark-themed, responsive design optimized for mobile and desktop.
-*   **Smooth Animations**: Interactive elements using Framer Motion for a polished feel.
-*   **SEO Optimization**: Structured metadata and clean URLs for search engine visibility.
+### Community & Feedback
+KeyVoid also includes a feedback and roadmap space where users can share ideas, report issues, and help shape what comes next.
 
----
+## What we used to build it
 
-## 🛠️ Technical Architecture
+KeyVoid is built using a modern web stack with a polished frontend and a strong backend:
 
-KEYVOID is built with a modern, component-based architecture using React and Node.js, ensuring scalability and maintainability.
+- React for the user interface
+- Vite for fast frontend development
+- Node.js and Express for the backend
+- MongoDB for storing user and content data
+- Cloudinary for media uploads
+- JWT authentication for secure login and sessions
+- Framer Motion for smooth animations and transitions
 
-### **Frontend (React + Vite)**
-*   **Core Framework**: React 19 (Latest) with Vite for high-performance bundling.
-*   **State Management**: React Hooks (`useState`, `useEffect`, `useRef`) for local and global state.
-*   **Styling**: Tailwind CSS for utility-first, responsive styling.
-*   **Animations**: Framer Motion for smooth transitions and micro-interactions.
-*   **Icons**: Lucide React for consistent, lightweight iconography.
-*   **Routing**: React Router for client-side navigation.
+## Upcoming features
 
-### **Backend (Node.js + Express)**
-*   **Runtime**: Node.js environment.
-*   **HTTP Framework**: Express.js for routing and request handling.
-*   **Database**: MongoDB (via `mongoose`) for flexible schema and high scalability.
-*   **Authentication**: JWT (JSON Web Tokens) with access token refresh logic.
-*   **Validation**: Built-in validation for request bodies.
+The roadmap for KeyVoid is already growing. Some planned improvements include:
 
-### **Key Technologies Stack**
-| Category | Technology | Purpose |
-| :--- | :--- | :--- |
-| **Frontend** | React, Vite | UI & State Management |
-| **Styling** | Tailwind CSS | Utility Styling |
-| **Animation** | Framer Motion | UI Transitions |
-| **Backend** | Node.js, Express | API & Business Logic |
-| **Database** | MongoDB, Mongoose | Data Storage |
-| **Security** | JWT, bcrypt | Auth & Password Hashing |
-| **Deployment** | Vercel, Railway | Hosting & CI/CD |
+- a better and more polished artist page
+- improved music upload and track management
+- a proper chat system with real-time messaging
+- a stronger sharing system for profiles, tracks, and reels
+- more animated and refined UI interactions
 
----
+These features are part of the next step in making KeyVoid feel even more complete and creator-friendly.
 
-## 📊 Current Status & Roadmap
+## Why KeyVoid exists
 
-### **✅ Production-Ready (Core)**
-The system is currently live and stable for:
-*   User Authentication (Login/Logout/Refresh).
-*   Profile Creation & Management.
-*   Content Posting (Text, Images, Audio).
-*   Search & Discovery Features.
-*   Basic Social Features (Follow, Like, Comment).
+KeyVoid was created with one simple idea in mind: creators deserve a space that feels meaningful, expressive, and built around real connection. It brings together social discovery, music, creator identity, and immersive experiences in one place.
 
-### **🚧 Upcoming Enhancements**
-1.  **Creator Analytics**: View posts, engagement metrics, and follower growth.
-2.  **Advanced Filtering**: Search by tags, media type, or date.
-3.  **Audio Player**: Enhanced audio waveform visualizations and equalizer.
-4.  **Playlist Management**: Curate and share custom playlists.
-5.  **Messaging System**: Direct message functionality between users.
-
----
-
-## 🤝 Contributing
-
-We welcome contributions from the community! Whether you're interested in backend logic, frontend UI, or documentation, your input is valued.
-
-1.  **Fork** the repository.
-2.  **Create** a feature branch (`git checkout -b feature/AmazingFeature`).
-3.  **Commit** your changes (`git commit -m 'Add some AmazingFeature'`).
-4.  **Push** to the branch (`git push origin feature/AmazingFeature`).
-5.  **Open** a Pull Request.
-
-### **Development Setup**
-
-#### **Prerequisites**
-*   Node.js (v18+)
-*   MongoDB (Local or Cloud Atlas)
-*   Git
-
-#### **Installation**
-
-**Frontend (`KEYVOID-FRONTEND`)**
-```bash
-cd KEYVOID-FRONTEND
-npm install
-npm run dev
-# or
-npm run build
-```
-
-**Backend**
-```bash
-cd KEYVOID/BACKEND
-npm install
-npm start
-```
-
-#### **Environment Variables**
-Ensure `.env` files are configured:
-
-**Frontend (`.env`)**
-```env
-NEXT_PUBLIC_API_URL=http://localhost:5000/api
-NEXT_PUBLIC_APP_URL=http://localhost:5173
-```
-
-**Backend (`.env`)**
-```env
-NODE_ENV=development
-PORT=5000
-MONGODB_URI=mongodb://localhost:27017/keyvoid
-JWT_SECRET=your_super_secret_jwt_key
-ACCESS_TOKEN_TTL=15m
-REFRESH_TOKEN_TTL=7d
-CLIENT_URL=http://localhost:5173
-```
-
-
-
----
-
-## 👨‍💻 Authors
-
-*   **KEYVOID Team** - Built with passion for creators.
-*   **Maintained by** - Yash Kanwar
-
----
-
-## 📝 Contributing to Documentation
-
-If you notice any issues with this README or need updates to reflect new features, please open an issue or submit a PR.
-
-<div style="display: flex; gap: 10px;">
-  <a href="https://github.com/YashSaeko642/KEY-VOID" target="_blank" style="display: inline-block; padding: 5px 10px; border: 1px solid #ccc; background: #f5f5f5; border-radius: 4px; text-decoration: none; color: #333;">GitHub</a>
-  <a href="#" style="display: inline-block; padding: 5px 10px; border: 1px solid #ccc; background: #f5f5f5; border-radius: 4px; text-decoration: none; color: #333;">Documentation</a>
-</div>
+If you enjoy discovering new creators or want to experience content in a more personal and artistic way, KeyVoid is built for that.

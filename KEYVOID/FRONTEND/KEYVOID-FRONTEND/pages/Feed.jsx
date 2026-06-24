@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, CircleHelp, Headphones, Info, Lightbulb, MessageSquare, Newspaper, Palette, Plus, Search, Sparkles, Tags, TrendingUp, Users, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, CircleHelp, Headphones, Lightbulb, MessageSquare, Newspaper, Palette, Plus, Search, Sparkles, Tags, TrendingUp, Users, X } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../src/context/useAuth";
 import API, { getApiErrorMessage } from "../services/api";
@@ -54,8 +54,7 @@ const MODE_LABELS = {
 
 const SEARCH_TYPE_LABELS = {
   post: "Posts",
-  discussion: "Discussions",
-  reel: "Vods"
+  discussion: "Discussions"
 };
 
 const isCompactViewport = () =>
@@ -424,35 +423,6 @@ function Feed() {
             <div className="right-panel-divider" />
 
             <div className="right-panel-section">
-              <p className="feed-kicker"><Info size={14} /> <span className="right-panel-text">About KeyVoid</span></p>
-              <div className="about-panel-stats">
-                <div className="about-stat" title="Creator posts">
-                  <span className="about-stat-icon"><Sparkles size={14} /></span>
-                  <div className="right-panel-text">
-                    <strong>Creator posts</strong>
-                    <p>Creators can post reels and music uploads.</p>
-                  </div>
-                </div>
-                <div className="about-stat" title="Listener threads">
-                  <span className="about-stat-icon"><MessageSquare size={14} /></span>
-                  <div className="right-panel-text">
-                    <strong>Listener threads</strong>
-                    <p>Join discussions, ask questions, and build the community.</p>
-                  </div>
-                </div>
-                <div className="about-stat" title="Server-friendly">
-                  <span className="about-stat-icon"><TrendingUp size={14} /></span>
-                  <div className="right-panel-text">
-                    <strong>Server-friendly</strong>
-                    <p>10 posts per page, 60 post memory cap.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="right-panel-divider" />
-
-            <div className="right-panel-section">
               <p className="feed-kicker"><Lightbulb size={14} /> <span className="right-panel-text">Post prompts</span></p>
               <div className="prompt-list">
                 {[
@@ -492,9 +462,6 @@ function Feed() {
             <button type="button" className="rail-btn" onClick={() => setRightPanelOpen(true)} aria-label="Trending tags" title="Trending tags">
               <Tags size={17} />
             </button>
-            <button type="button" className="rail-btn" onClick={() => setRightPanelOpen(true)} aria-label="About KeyVoid" title="About KeyVoid">
-              <Info size={17} />
-            </button>
             <button type="button" className="rail-btn" onClick={() => setRightPanelOpen(true)} aria-label="Post prompts" title="Post prompts">
               <Lightbulb size={17} />
             </button>
@@ -519,17 +486,6 @@ function Feed() {
                 <div>
                   <p className="feed-kicker">KeyVoid community</p>
                   <h1 className="feed-title">{activeTitle}</h1>
-                  <p className="feed-subtitle">
-                    {isSearchResultsView
-                      ? `Showing filtered ${activeSearchTypeLabel.toLowerCase()} from the KeyVoid community.`
-                      : activeCategoryCard
-                      ? activeCategoryCard.prompt
-                      : mode === "following"
-                      ? "Recent uploads from people you follow, blended with trending posts when your circle is quiet."
-                      : mode === "trending"
-                      ? "What the KeyVoid community is watching, liking, and discussing right now."
-                      : "A wider community mix across music threads, vods, and creator posts."}
-                  </p>
                 </div>
                 {isAuthenticated && (
                   <div className="feed-header-actions">
@@ -564,7 +520,6 @@ function Feed() {
                     >
                       <span className="community-card-art" />
                       <span className="community-card-title">{item.title}</span>
-                      <span className="community-card-prompt">{item.prompt}</span>
                       <span className="community-card-footer">
                         Join discussion
                         <small>{feedMeta.categories?.[item.key] || 0} posts</small>

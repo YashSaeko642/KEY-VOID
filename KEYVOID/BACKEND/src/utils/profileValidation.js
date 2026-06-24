@@ -1,6 +1,7 @@
 // Constants for profile field validation
 const URL_REGEX = /^https?:\/\/[^\s/$.?#].[^\s]*$/i;
 const GENRE_LIMIT = 8;
+const PREFERENCE_LIMIT = 12;
 
 /**
  * Normalizes a string by trimming whitespace
@@ -79,6 +80,19 @@ function validateGenres(value = []) {
   return { valid: true, value: uniqueGenres };
 }
 
+function validatePreferenceList(value = []) {
+  const rawValues = Array.isArray(value) ? value : String(value || "").split(",");
+
+  return {
+    valid: true,
+    value: [...new Set(
+      rawValues
+        .map((item) => normalizeString(item).toLowerCase().replace(/\s+/g, "_"))
+        .filter((item) => /^[a-z][a-z0-9_-]{1,31}$/.test(item))
+    )].slice(0, PREFERENCE_LIMIT)
+  };
+}
+
 /**
  * Validates all profile input fields
  * Validates: bio, location, website, and favoriteGenres
@@ -106,6 +120,8 @@ function validateProfileInput(input = {}) {
 
   // Validate genres field
   const favoriteGenres = validateGenres(input.favoriteGenres);
+  const listenerInterests = validatePreferenceList(input.listenerInterests);
+  const creatorIntents = validatePreferenceList(input.creatorIntents);
 
   return {
     valid: true,
@@ -113,7 +129,12 @@ function validateProfileInput(input = {}) {
       bio: bio.value,
       location: location.value,
       website: website.value,
-      favoriteGenres: favoriteGenres.value
+      favoriteGenres: favoriteGenres.value,
+      onboardingPreferences: {
+        accountType: String(input.role || "").toLowerCase() === "creator" ? "creator" : undefined,
+        listenerInterests: listenerInterests.value,
+        creatorIntents: creatorIntents.value
+      }
     }
   };
 }

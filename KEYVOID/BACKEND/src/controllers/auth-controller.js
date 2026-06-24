@@ -15,6 +15,7 @@ const { hardDeletePostsByAuthor } = require("./post-controller");
 const { logAuthEvent } = require("../utils/auditLogger");
 const {
   validateGoogleProfileInput,
+  normalizeOnboardingPreferences,
   validateEmail,
   validateLocalLogin,
   validateLocalRegistration,
@@ -57,6 +58,12 @@ function buildUserPayload(user) {
     avatarUrl: user.avatarUrl || "",
     bannerUrl: user.bannerUrl || "",
     favoriteGenres: user.favoriteGenres || [],
+    onboardingPreferences: user.onboardingPreferences || {
+      accountType: role === "creator" ? "creator" : "listener",
+      listenerInterests: [],
+      creatorIntents: [],
+      completedAt: null
+    },
     followersCount: user.followersCount || 0,
     followingCount: user.followingCount || 0
   };
@@ -317,7 +324,12 @@ exports.googleAuth = async (req, res) => {
         email,
         googleId,
         authProvider: "google",
-        role: requestedRole
+        role: requestedRole,
+        onboardingPreferences: normalizeOnboardingPreferences({
+          role: requestedRole,
+          listenerInterests: req.body?.listenerInterests,
+          creatorIntents: req.body?.creatorIntents
+        })
       });
     }
 
@@ -429,7 +441,12 @@ exports.localRegister = async (req, res) => {
       email: normalizedEmail,
       password: passwordHash,
       authProvider: "local",
-      role: requestedRole
+      role: requestedRole,
+      onboardingPreferences: normalizeOnboardingPreferences({
+        role: requestedRole,
+        listenerInterests: req.body?.listenerInterests,
+        creatorIntents: req.body?.creatorIntents
+      })
     });
 
     const sessionPayload = await issueSession(user, req, res);

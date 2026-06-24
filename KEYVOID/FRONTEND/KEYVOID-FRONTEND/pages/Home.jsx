@@ -61,7 +61,7 @@ function formatStat(value) {
 }
 
 export default function Home() {
-  const { isAuthenticated, role, user } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
   const [showVoidModal, setShowVoidModal] = useState(false);
   const [trafficStats, setTrafficStats] = useState(fallbackStats);
@@ -98,44 +98,34 @@ export default function Home() {
     ? `Welcome back, ${user?.displayName || user?.username || "Voidwalker"}`
     : "Welcome wanderer";
 
-  const introLine = isAuthenticated
-    ? role === "creator"
-      ? "Your signal is live. Shape the next sound people find."
-      : "Tune into the void, follow new artists, and let the next loop find you."
-    : "Care to become one with the void? Log in and start discovering the sound beneath the noise.";
-
   const trafficCards = useMemo(
     () => [
       {
         icon: UsersRound,
         label: "Online Now",
         value: trafficStats.online,
-        detail: statsState === "live" ? "Active in the last five minutes" : "Listening for a signal",
         accent: "cyan"
       },
       {
         icon: Headphones,
         label: "Listeners",
         value: trafficStats.listeners,
-        detail: "Wanderers mapping new taste trails",
         accent: "violet"
       },
       {
         icon: Sparkles,
         label: "Creators",
         value: trafficStats.creators,
-        detail: "Artists feeding the discovery engine",
         accent: "rose"
       },
       {
         icon: Eclipse,
         label: "Total Users",
         value: trafficStats.totalUsers,
-        detail: `${formatStat(trafficStats.tracks)} tracks, ${formatStat(trafficStats.posts)} posts, ${formatStat(trafficStats.reels)} reels`,
         accent: "amber"
       }
     ],
-    [statsState, trafficStats]
+    [trafficStats]
   );
 
   const handleEnterVoid = () => {
@@ -180,8 +170,6 @@ export default function Home() {
             {greeting}
             <span>{isAuthenticated ? "enter the pulse" : "care to enter the void?"}</span>
           </h1>
-          <p className="home-intro-copy">{introLine}</p>
-
           <div className="home-hero-actions">
             <button type="button" className="primary-action void-action" onClick={handleEnterVoid}>
               {isAuthenticated ? "Enter The Void" : "Login To Begin"}
@@ -217,7 +205,6 @@ export default function Home() {
                     <small>{card.label}</small>
                   </div>
                   <strong>{formatStat(card.value)}</strong>
-                  <p>{card.detail}</p>
                 </article>
               );
             })}
@@ -227,11 +214,7 @@ export default function Home() {
         <div className="feature-showcase" id="vision">
           <div className="feature-showcase-copy">
             <p className="eyebrow">Major Features</p>
-            <h2>Music discovery with a little gravity.</h2>
-            <p>
-              KeyVoid keeps the best parts close: listening, posting, creator growth,
-              and discovery sessions that feel intentional without becoming predictable.
-            </p>
+            <h2>Music discovery</h2>
           </div>
 
           <div className="feature-grid">
@@ -245,7 +228,6 @@ export default function Home() {
                     <Icon size={22} />
                   </span>
                   <h3>{feature.title}</h3>
-                  <p>{feature.text}</p>
                 </article>
               );
             })}

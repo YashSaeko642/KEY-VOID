@@ -103,11 +103,11 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  async function googleAuth({ credential, role = "user", username }) {
+  async function googleAuth({ credential, role = "user", username, listenerInterests = [], creatorIntents = [] }) {
     setLoading(true);
 
     try {
-      const { data } = await API.post("/auth/google", { credential, role, username });
+      const { data } = await API.post("/auth/google", { credential, role, username, listenerInterests, creatorIntents });
 
       if (data.profileRequired) {
         return {
@@ -148,7 +148,7 @@ export function AuthProvider({ children }) {
     }
   }
 
-  async function localRegister({ email, password, confirmPassword, username, role = "user" }) {
+  async function localRegister({ email, password, confirmPassword, username, role = "user", listenerInterests = [], creatorIntents = [] }) {
     setLoading(true);
 
     try {
@@ -157,7 +157,9 @@ export function AuthProvider({ children }) {
         password,
         confirmPassword,
         username,
-        role
+        role,
+        listenerInterests,
+        creatorIntents
       });
 
       setToken(data.token);

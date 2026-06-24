@@ -6,7 +6,6 @@ import AdminHub from "../pages/AdminHub";
 import AppHeader from "../components/AppHeader";
 import AuthHeader from "../components/AuthHeader";
 import BottomPlayer from "../components/BottomPlayer";
-import Navbar from "../components/Navbar";
 import ProtectedRoute from "../components/ProtectedRoute";
 import RainEffect from "../components/RainEffect";
 import CreatorHub from "../pages/CreatorHub";
@@ -34,7 +33,7 @@ const MotionP = motion.p;
 function AppLayout() {
   const location = useLocation();
   const isAuthRoute = AUTH_ROUTES.includes(location.pathname);
-  const isAppRoute = APP_ROUTES.includes(location.pathname) || location.pathname.startsWith("/u/");
+  const isAppRoute = APP_ROUTES.includes(location.pathname) || location.pathname.startsWith("/u/") || location.pathname.startsWith("/reels/");
   const isFeedRoute = location.pathname === "/feed";
   const isMusicRoute = location.pathname === "/music";
   const shellClassName = isAuthRoute
@@ -52,8 +51,7 @@ function AppLayout() {
     <div className={shellClassName}>
       <RainEffect />
       {isAuthRoute ? <AuthHeader /> : null}
-      {isAppRoute ? <AppHeader /> : null}
-      {!isAuthRoute && !isAppRoute ? <Navbar /> : null}
+      {!isAuthRoute ? <AppHeader /> : null}
 
       <main className={mainClassName}>
         <AnimatePresence mode="wait">
@@ -111,6 +109,7 @@ function AppLayout() {
               />
               <Route path="/music" element={<Music />} />
               <Route path="/reels" element={<Reels />} />
+              <Route path="/reels/:vodId" element={<Reels />} />
               <Route path="/roadmap" element={<RoadmapFeedback />} />
             </Routes>
           </MotionDiv>

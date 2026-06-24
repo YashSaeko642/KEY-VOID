@@ -7,6 +7,7 @@ const {
   addComment,
   deleteComment,
   getFeed,
+  getPostById,
   getFeedMeta,
   getMyFeedMeta,
   getTrendingFeed,
@@ -17,6 +18,7 @@ const {
   deletePost,
   getFollowingFeed,
   getReels,
+  getVodSections,
   createReel,
   trackPostView,
   reportPost,
@@ -35,11 +37,13 @@ router.get("/meta", getFeedMeta);
 router.get("/meta/me", protect, getMyFeedMeta);
 router.get("/trending", getTrendingFeed);
 router.get("/discover", optionalProtect, getDiscoveryFeed);
+router.get("/vods/sections", optionalProtect, getVodSections);
 router.get("/reels", getReels);
 router.get("/creator/insights", protect, getCreatorInsights);
 router.get("/user/:userId/comments", getUserCommentedPosts);
 router.get("/user/:userId", getUserPosts);
 router.get("/following", protect, getFollowingFeed);
+router.get("/:postId", optionalProtect, getPostById);
 
 router.patch("/:postId/like", protect, likeRateLimit, toggleLike);
 router.patch("/:postId", protect, updatePost);

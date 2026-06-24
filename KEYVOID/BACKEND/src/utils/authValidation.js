@@ -1,5 +1,9 @@
 const DISPLAY_NAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9 ._-]*[a-zA-Z0-9._-]$/;
 const PUBLIC_SIGNUP_ROLES = ["user", "creator"];
+const ONBOARDING_LIMITS = {
+  listenerInterests: 12,
+  creatorIntents: 12
+};
 
 function normalizeRole(role = "") {
   const normalizedRole = String(role || "user")
@@ -130,6 +134,31 @@ function validateLocalRegistration({ email = "", password = "", confirmPassword 
   };
 }
 
+function normalizePreferenceList(value = [], limit = 12) {
+  const values = Array.isArray(value) ? value : String(value || "").split(",");
+
+  return [...new Set(
+    values
+      .map((item) => String(item || "").trim().toLowerCase().replace(/\s+/g, "_"))
+      .filter((item) => /^[a-z][a-z0-9_-]{1,31}$/.test(item))
+  )].slice(0, limit);
+}
+
+function normalizeOnboardingPreferences({ role = "user", listenerInterests = [], creatorIntents = [] } = {}) {
+  const isCreator = String(role || "user").toLowerCase() === "creator";
+  const normalizedListenerInterests = normalizePreferenceList(listenerInterests, ONBOARDING_LIMITS.listenerInterests);
+  const normalizedCreatorIntents = isCreator
+    ? normalizePreferenceList(creatorIntents, ONBOARDING_LIMITS.creatorIntents)
+    : [];
+
+  return {
+    accountType: isCreator ? "creator" : "listener",
+    listenerInterests: normalizedListenerInterests,
+    creatorIntents: normalizedCreatorIntents,
+    completedAt: normalizedListenerInterests.length || normalizedCreatorIntents.length ? new Date() : null
+  };
+}
+
 function validateGoogleProfileInput({ username = "", role = "user" }) {
   const usernameValidation = validateDisplayName(username);
   const roleValidation = normalizeRole(role);
@@ -153,6 +182,7 @@ function validateGoogleProfileInput({ username = "", role = "user" }) {
 
 module.exports = {
   normalizeRole,
+  normalizeOnboardingPreferences,
   validateDisplayName,
   validateEmail,
   validatePassword,

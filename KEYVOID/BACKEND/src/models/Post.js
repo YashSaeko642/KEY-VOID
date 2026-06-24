@@ -51,6 +51,15 @@ const postSchema = new mongoose.Schema(
       enum: ["post", "reel"],
       default: "post"
     },
+    vodCategory: {
+      type: String,
+      enum: ["tutorial", "music", "discover", "performance", "behind_the_scenes", "general"],
+      default: "general"
+    },
+    audienceTags: {
+      type: [String],
+      default: []
+    },
     likes: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -134,6 +143,8 @@ const postSchema = new mongoose.Schema(
 postSchema.index({ isDeleted: 1, createdAt: -1 });
 postSchema.index({ author: 1, isDeleted: 1, createdAt: -1 });
 postSchema.index({ isDeleted: 1, contentType: 1, createdAt: -1 });
+postSchema.index({ isDeleted: 1, contentType: 1, vodCategory: 1, createdAt: -1 });
+postSchema.index({ isDeleted: 1, contentType: 1, audienceTags: 1, viewCount: -1 });
 postSchema.index({ isDeleted: 1, category: 1, createdAt: -1 });
 postSchema.index({ isDeleted: 1, tags: 1, createdAt: -1 });
 postSchema.index({ author: 1, isDeleted: 1, viewCount: -1 });

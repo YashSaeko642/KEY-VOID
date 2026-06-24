@@ -11,6 +11,7 @@ const { validateAndSanitizeText } = require("../utils/sanitization");
 
 const ALLOWED_MEDIA_TYPES = new Set(["", "image", "video", "audio"]);
 const POST_CATEGORIES = new Set(["discussion", "question", "news", "recommendation", "fan_content", "general"]);
+const VOD_CATEGORIES = new Set(["tutorial", "music", "discover", "performance", "behind_the_scenes", "general"]);
 const HTTPS_URL_PATTERN = /^https:\/\/[^\s/$.?#].[^\s]*$/i;
 const REPORT_REASONS = new Set([
   "Spam",
@@ -53,6 +54,11 @@ function normalizeCategory(category = "general") {
   return POST_CATEGORIES.has(normalized) ? normalized : "general";
 }
 
+function normalizeVodCategory(category = "general") {
+  const normalized = String(category || "general").trim().toLowerCase();
+  return VOD_CATEGORIES.has(normalized) ? normalized : "general";
+}
+
 function escapeRegex(value = "") {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -85,6 +91,10 @@ function normalizeProvidedTags(tags) {
     .slice(0, 12);
 }
 
+function normalizeAudienceTags(tags) {
+  return normalizeProvidedTags(tags).slice(0, 8);
+}
+
 function restoreSlashTags(text = "") {
   return String(text || "").replace(/&#x2F;/g, "/");
 }
@@ -104,16 +114,24 @@ function buildPostQuery(query = {}) {
   };
 
   const type = String(query.type || query.contentType || "").trim().toLowerCase();
-  if (type === "post" || type === "reel") {
+  const allowVods = query.allowVods === true || query.includeVods === "true";
+  if (type === "post" || (type === "reel" && allowVods)) {
     baseQuery.contentType = type;
   } else if (type === "discussion") {
     baseQuery.contentType = "post";
     baseQuery.category = "discussion";
+  } else if (!allowVods) {
+    baseQuery.contentType = "post";
   }
 
   const category = String(query.category || "").trim().toLowerCase();
   if (POST_CATEGORIES.has(category) && category !== "general") {
     baseQuery.category = category;
+  }
+
+  const vodCategory = String(query.vodCategory || query.section || "").trim().toLowerCase();
+  if (VOD_CATEGORIES.has(vodCategory) && vodCategory !== "general") {
+    baseQuery.vodCategory = vodCategory;
   }
 
   const tag = String(query.tag || "").replace(/^\/+/, "").trim().toLowerCase();
@@ -183,7 +201,7 @@ function getRecommendationReason(post) {
     : 0;
   const views = Number(post.viewCount) || 0;
 
-  if (post.contentType === "reel") return "Recommended because Reels perform well";
+  if (post.contentType === "reel") return "Recommended because viewers are engaging with this VOD";
   if (views >= 100) return `Recommended because ${compactNumber(views)} people viewed it`;
   if (likes + comments >= 8) return "Recommended because people are engaging with it";
   if (post.mediaUrl) return "Recommended because media posts get more discovery";
@@ -472,6 +490,8 @@ exports.createPost = async (req, res) => {
       text: cleanText || cleanBody.slice(0, 500),
       category: normalizeCategory(req.body.category),
       tags,
+      vodCategory: contentType === "reel" ? normalizeVodCategory(req.body.vodCategory) : "general",
+      audienceTags: contentType === "reel" ? normalizeAudienceTags(req.body.audienceTags || req.body.tags) : [],
       mediaUrl: media.mediaUrl,
       mediaPublicId: media.mediaPublicId,
       mediaType: media.mediaType,
@@ -508,16 +528,12 @@ exports.updatePost = async (req, res) => {
       return res.status(403).json({ message: "Unauthorized to edit this post" });
     }
 
-    if (post.contentType === "reel") {
-      return res.status(400).json({ message: "Reels cannot be edited from the feed yet" });
-    }
-
     const titleValidation = validateOptionalText(req.body?.title || "", { maxLength: 140 });
     if (!titleValidation.valid) {
       return res.status(400).json({ message: titleValidation.error });
     }
 
-    const bodyValidation = validateOptionalText(req.body?.body || "", { maxLength: 4000 });
+    const bodyValidation = validateOptionalText(req.body?.body || "", { maxLength: post.contentType === "reel" ? 500 : 4000 });
     if (!bodyValidation.valid) {
       return res.status(400).json({ message: bodyValidation.error });
     }
@@ -539,10 +555,14 @@ exports.updatePost = async (req, res) => {
     const parsedTags = extractSlashTags(req.body?.title, req.body?.body, req.body?.text);
 
     post.title = cleanTitle;
-    post.body = cleanBody;
+    post.body = post.contentType === "reel" ? "" : cleanBody;
     post.text = cleanText || cleanBody.slice(0, 500);
-    post.category = normalizeCategory(req.body?.category || post.category);
+    post.category = post.contentType === "reel" ? "general" : normalizeCategory(req.body?.category || post.category);
     post.tags = [...new Set([...providedTags, ...parsedTags])].slice(0, 12);
+    if (post.contentType === "reel") {
+      post.vodCategory = normalizeVodCategory(req.body?.vodCategory || post.vodCategory);
+      post.audienceTags = normalizeAudienceTags(req.body?.audienceTags || req.body?.tags);
+    }
     post.isEdited = true;
     post.editedAt = new Date();
 
@@ -554,6 +574,34 @@ exports.updatePost = async (req, res) => {
   } catch (err) {
     console.error("Update post error:", err);
     res.status(500).json({ message: "Failed to update post" });
+  }
+};
+
+exports.getPostById = async (req, res) => {
+  try {
+    const { postId } = req.params;
+
+    if (!isValidObjectId(postId)) {
+      return res.status(400).json({ message: "Invalid post ID" });
+    }
+
+    const post = await Post.findOne({
+      _id: postId,
+      isDeleted: false,
+      safetyStatus: { $ne: "restricted" }
+    })
+      .populate("author", "username avatarUrl role favoriteGenres onboardingPreferences followersCount")
+      .populate("comments.author", "username avatarUrl")
+      .lean();
+
+    if (!post) {
+      return res.status(404).json({ message: "Post not found" });
+    }
+
+    res.json({ post: attachRecommendationMeta([post])[0] });
+  } catch (err) {
+    console.error("Get post by ID error:", err);
+    res.status(500).json({ message: "Failed to load post" });
   }
 };
 
@@ -727,7 +775,7 @@ exports.getDiscoveryFeed = async (req, res) => {
 
 exports.getFeedMeta = async (_req, res) => {
   try {
-    const baseMatch = { isDeleted: false, safetyStatus: { $ne: "restricted" } };
+    const baseMatch = { isDeleted: false, safetyStatus: { $ne: "restricted" }, contentType: "post" };
     const [categoryCounts, tagCounts] = await Promise.all([
       Post.aggregate([
         { $match: baseMatch },
@@ -764,6 +812,7 @@ exports.getMyFeedMeta = async (req, res) => {
           author: req.user._id,
           isDeleted: false,
           safetyStatus: { $ne: "restricted" },
+          contentType: "post",
           tags: { $exists: true, $ne: [] }
         }
       },
@@ -1142,7 +1191,7 @@ exports.getReels = async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
 
-    const reelsQuery = await buildSearchablePostQuery({ ...req.query, type: "reel" });
+    const reelsQuery = await buildSearchablePostQuery({ ...req.query, type: "reel", allowVods: true });
 
     const [posts, total] = await Promise.all([
       Post.find(reelsQuery)
@@ -1172,6 +1221,89 @@ exports.getReels = async (req, res) => {
   }
 };
 
+exports.getVodSections = async (req, res) => {
+  try {
+    const rowLimit = Math.min(16, Math.max(4, parseInt(req.query.limit, 10) || 10));
+    const baseQuery = {
+      isDeleted: false,
+      safetyStatus: { $ne: "restricted" },
+      contentType: "reel"
+    };
+
+    const sections = [
+      {
+        key: "discover",
+        title: "Discover",
+        description: "Fresh and trending VODs from across KeyVoid.",
+        query: baseQuery,
+        sort: { viewCount: -1, createdAt: -1 }
+      },
+      {
+        key: "tutorial",
+        title: "Tutorials",
+        description: "Lessons, walkthroughs, technique breakdowns, and teaching clips.",
+        query: { ...baseQuery, vodCategory: "tutorial" },
+        sort: { createdAt: -1 }
+      },
+      {
+        key: "music",
+        title: "Music VODs",
+        description: "Songs, sessions, listening cuts, and creator music videos.",
+        query: { ...baseQuery, vodCategory: "music" },
+        sort: { createdAt: -1 }
+      },
+      {
+        key: "following",
+        title: "Following",
+        description: "VODs from creators you follow.",
+        query: null,
+        sort: { createdAt: -1 }
+      }
+    ];
+
+    if (req.user?._id) {
+      const viewer = await User.findById(req.user._id).select("following").lean();
+      const following = viewer?.following || [];
+      sections.find((section) => section.key === "following").query = {
+        ...baseQuery,
+        author: { $in: following }
+      };
+    }
+
+    const rows = await Promise.all(
+      sections.map(async (section) => {
+        if (!section.query) {
+          return {
+            key: section.key,
+            title: section.title,
+            description: section.description,
+            items: []
+          };
+        }
+
+        const items = await Post.find(section.query)
+          .populate("author", "username avatarUrl role favoriteGenres")
+          .populate("comments.author", "username avatarUrl")
+          .sort(section.sort)
+          .limit(rowLimit)
+          .lean();
+
+        return {
+          key: section.key,
+          title: section.title,
+          description: section.description,
+          items: attachRecommendationMeta(items)
+        };
+      })
+    );
+
+    res.json({ sections: rows });
+  } catch (err) {
+    console.error("Get VOD sections error:", err);
+    res.status(500).json({ message: "Failed to load VOD sections" });
+  }
+};
+
 // ✅ CREATE REEL (with larger file limits)
 exports.createReel = async (req, res) => {
   try {
@@ -1179,7 +1311,7 @@ exports.createReel = async (req, res) => {
       return res.status(403).json({ message: "Creator access required to post reels" });
     }
 
-    const { text, mediaUrl, mediaType } = req.body;
+    const { text, mediaUrl, mediaType, title, vodCategory, audienceTags } = req.body;
 
     // Validate and sanitize text input (optional for reels)
     const validation = validateOptionalText(text || "", { maxLength: 500 });
@@ -1214,9 +1346,11 @@ exports.createReel = async (req, res) => {
     const post = new Post({
       author: req.user.id,
       text: restoreSlashTags(validation.text),
-      title: restoreSlashTags(validation.text).slice(0, 140),
+      title: restoreSlashTags(title || validation.text).slice(0, 140),
       category: "general",
       tags: extractSlashTags(text),
+      vodCategory: normalizeVodCategory(vodCategory),
+      audienceTags: normalizeAudienceTags(audienceTags || text),
       mediaUrl: media.mediaUrl,
       mediaPublicId: media.mediaPublicId,
       mediaType: media.mediaType,
