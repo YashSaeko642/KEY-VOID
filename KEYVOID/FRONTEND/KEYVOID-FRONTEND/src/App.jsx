@@ -92,13 +92,62 @@ function AppLayout() {
                 }
               />
               <Route path="/search" element={<Navigate to="/feed" replace />} />
-              <Route path="/u/:username" element={<PublicProfile />} />
-              <Route path="/feed" element={<Feed />} />
-              <Route path="/grid" element={<CommunityGrid />} />
-              <Route path="/music" element={<Music />} />
-              <Route path="/reels" element={<Reels />} />
-              <Route path="/reels/:vodId" element={<Reels />} />
-              <Route path="/roadmap" element={<RoadmapFeedback />} />
+              <Route
+                path="/u/:username"
+                element={
+                  <ProtectedRoute>
+                    <PublicProfile />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/feed"
+                element={
+                  <ProtectedRoute>
+                    <Feed />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/grid"
+                element={
+                  <ProtectedRoute>
+                    <CommunityGrid />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/music"
+                element={
+                  <ProtectedRoute>
+                    <Music />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/reels"
+                element={
+                  <ProtectedRoute>
+                    <Reels />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/reels/:vodId"
+                element={
+                  <ProtectedRoute>
+                    <Reels />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/roadmap"
+                element={
+                  <ProtectedRoute>
+                    <RoadmapFeedback />
+                  </ProtectedRoute>
+                }
+              />
             </Routes>
           </MotionDiv>
         </AnimatePresence>

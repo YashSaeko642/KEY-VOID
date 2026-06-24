@@ -27,7 +27,7 @@ const featureBlocks = [
   {
     icon: Headphones,
     title: "Music Page",
-    text: "Browse tracks, listen from the player, and find new sounds without needing an account first.",
+    text: "Browse tracks, listen from the player, and find new sounds once your account is signed in.",
     meta: "Tracks + playback",
     accent: "cyan"
   },
@@ -41,7 +41,7 @@ const featureBlocks = [
   {
     icon: UsersRound,
     title: "Grid Page",
-    text: "Explore the public grid of creators, listeners, posts, discussions, and reels before signing up.",
+    text: "Explore the member grid of creators, listeners, posts, discussions, and reels after signing in.",
     meta: "People + activity",
     accent: "rose"
   },
@@ -72,6 +72,12 @@ export default function Home() {
   useEffect(() => {
     let ignore = false;
 
+    if (!isAuthenticated) {
+      setTrafficStats(fallbackStats);
+      setStatsState("quiet");
+      return undefined;
+    }
+
     async function loadTrafficStats() {
       try {
         const { data } = await getTrafficStats();
@@ -94,7 +100,7 @@ export default function Home() {
       ignore = true;
       window.clearInterval(intervalId);
     };
-  }, []);
+  }, [isAuthenticated]);
 
   const greeting = isAuthenticated
     ? `Welcome back, ${user?.displayName || user?.username || "Voidwalker"}`
@@ -174,13 +180,13 @@ export default function Home() {
           </h1>
           <p className="home-intro-copy">
             KeyVoid is a neon little corner for finding songs, creators, vods, and the people circling around them.
-            Browse the public grid first, then make an account when you want to leave a signal of your own.
+            Sign in to browse the grid, play tracks, watch vods, and leave a signal of your own.
           </p>
           <div className="home-hero-actions">
             <button type="button" className="primary-action void-action" onClick={handleEnterVoid}>
               {isAuthenticated ? "Enter The Void" : "Login To Begin"}
             </button>
-            <Link className="secondary-action void-link-action" to="/grid">
+            <Link className="secondary-action void-link-action" to={isAuthenticated ? "/grid" : "/login"}>
               Explore The Grid
             </Link>
           </div>
@@ -223,13 +229,13 @@ export default function Home() {
             <h2>Music discovery with the full KeyVoid grid around it.</h2>
             <p>
               The homepage should feel like a doorway, not an empty loading room. These are the current KeyVoid pieces
-              new visitors can understand before they register.
+              new visitors can understand before they sign in.
             </p>
             <div className="feature-pill-row" aria-label="Current KeyVoid areas">
-              <Link to="/music">Music</Link>
-              <Link to="/feed">Feed</Link>
-              <Link to="/grid">Grid</Link>
-              <Link to="/reels">Vods</Link>
+              <Link to={isAuthenticated ? "/music" : "/login"}>Music</Link>
+              <Link to={isAuthenticated ? "/feed" : "/login"}>Feed</Link>
+              <Link to={isAuthenticated ? "/grid" : "/login"}>Grid</Link>
+              <Link to={isAuthenticated ? "/reels" : "/login"}>Vods</Link>
             </div>
           </div>
 

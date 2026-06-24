@@ -1,6 +1,6 @@
 const express = require("express");
 const { audioUpload, handleUploadError } = require("../middleware/uploadMiddleware");
-const { optionalProtect, protect, authorizeRoles } = require("../middleware/authMiddleware");
+const { protect, authorizeRoles } = require("../middleware/authMiddleware");
 const {
   getLibrary,
   streamTrack,
@@ -16,12 +16,12 @@ const {
 
 const router = express.Router();
 
-router.get("/library", optionalProtect, getLibrary);
+router.get("/library", protect, getLibrary);
 router.post("/upload", protect, authorizeRoles("creator"), audioUpload.array("songs", 10), handleUploadError, uploadUserTracks);
 router.get("/my-uploads", protect, authorizeRoles("creator"), getMyUploads);
-router.get("/user/:userId", optionalProtect, getUserUploads);
-router.get("/stream/:trackId", optionalProtect, streamTrack);
-router.get("/metadata/:trackId", optionalProtect, getTrackMetadata);
+router.get("/user/:userId", protect, getUserUploads);
+router.get("/stream/:trackId", protect, streamTrack);
+router.get("/metadata/:trackId", protect, getTrackMetadata);
 router.post("/:trackId/tags", protect, addTrackTag);
 router.delete("/:trackId/tags", protect, removeTrackTag);
 router.patch("/:trackId", protect, updateUserTrack);

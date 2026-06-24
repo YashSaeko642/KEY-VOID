@@ -30,16 +30,16 @@ router.post("/unfollow/:userId", protect, unfollowUser);
 /**
  * GET /followers/:userId/followers
  * Get followers of a user
- * @access Public
+ * @access Private
  */
-router.get("/:userId/followers", getFollowers);
+router.get("/:userId/followers", protect, getFollowers);
 
 /**
  * GET /followers/:userId/following
  * Get users that a user is following
- * @access Public
+ * @access Private
  */
-router.get("/:userId/following", getFollowing);
+router.get("/:userId/following", protect, getFollowing);
 
 /**
  * GET /followers/:userId/status

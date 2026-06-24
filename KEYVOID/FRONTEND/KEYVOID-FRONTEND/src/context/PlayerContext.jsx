@@ -219,6 +219,14 @@ export function PlayerProvider({ children }) {
   const getCacheKey = useCallback((page = 1) => `${searchQuery.trim().toLowerCase()}::${page}`, [searchQuery]);
 
   const loadLibraryPage = useCallback(async (page = 1, { append = false, force = false } = {}) => {
+    if (!isAuthenticated) {
+      libraryCacheRef.current.clear();
+      setLibrary([]);
+      setPagination(defaultPagination);
+      setError(null);
+      return;
+    }
+
     const nextPage = Math.max(Number(page) || 1, 1);
     const cacheKey = getCacheKey(nextPage);
     const cachedPage = libraryCacheRef.current.get(cacheKey);
@@ -247,7 +255,7 @@ export function PlayerProvider({ children }) {
     } finally {
       setIsLibraryLoading(false);
     }
-  }, [getCacheKey, searchQuery]);
+  }, [getCacheKey, isAuthenticated, searchQuery]);
 
   useEffect(() => {
     const id = window.setTimeout(() => loadLibraryPage(1), 250);
@@ -257,6 +265,11 @@ export function PlayerProvider({ children }) {
   useEffect(() => {
     let ignore = false;
     async function loadLocal() {
+      if (!isAuthenticated) {
+        setLocalTracks([]);
+        return;
+      }
+
       try {
         const tracks = await loadStoredLocalTracks(ownerKey);
         if (!ignore) setLocalTracks((tracks || []).sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0)));
@@ -266,7 +279,7 @@ export function PlayerProvider({ children }) {
     }
     loadLocal();
     return () => { ignore = true; };
-  }, [ownerKey]);
+  }, [isAuthenticated, ownerKey]);
 
   useEffect(() => {
     if (activeTrack?.source === "local" && activeTrack.ownerKey !== ownerKey) {

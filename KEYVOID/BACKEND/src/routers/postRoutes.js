@@ -25,29 +25,29 @@ const {
   getCreatorInsights
 } = require("../controllers/post-controller");
 
-const { protect, optionalProtect } = require("../middleware/authMiddleware");
+const { protect } = require("../middleware/authMiddleware");
 const { handleUploadError, postMediaUpload, reelMediaUpload } = require("../middleware/uploadMiddleware");
 const { postCreationRateLimit, likeRateLimit } = require("../middleware/securityMiddleware");
 
 router.post("/", protect, postCreationRateLimit, postMediaUpload.single("media"), handleUploadError, createPost);
 router.post("/reel", protect, postCreationRateLimit, reelMediaUpload.single("media"), handleUploadError, createReel);
 
-router.get("/", getFeed);
-router.get("/meta", getFeedMeta);
+router.get("/", protect, getFeed);
+router.get("/meta", protect, getFeedMeta);
 router.get("/meta/me", protect, getMyFeedMeta);
-router.get("/trending", getTrendingFeed);
-router.get("/discover", optionalProtect, getDiscoveryFeed);
-router.get("/vods/sections", optionalProtect, getVodSections);
-router.get("/reels", getReels);
+router.get("/trending", protect, getTrendingFeed);
+router.get("/discover", protect, getDiscoveryFeed);
+router.get("/vods/sections", protect, getVodSections);
+router.get("/reels", protect, getReels);
 router.get("/creator/insights", protect, getCreatorInsights);
-router.get("/user/:userId/comments", getUserCommentedPosts);
-router.get("/user/:userId", getUserPosts);
+router.get("/user/:userId/comments", protect, getUserCommentedPosts);
+router.get("/user/:userId", protect, getUserPosts);
 router.get("/following", protect, getFollowingFeed);
-router.get("/:postId", optionalProtect, getPostById);
+router.get("/:postId", protect, getPostById);
 
 router.patch("/:postId/like", protect, likeRateLimit, toggleLike);
 router.patch("/:postId", protect, updatePost);
-router.post("/:postId/view", trackPostView);
+router.post("/:postId/view", protect, trackPostView);
 router.post("/:postId/report", protect, reportPost);
 
 router.post("/:postId/comments", protect, addComment);

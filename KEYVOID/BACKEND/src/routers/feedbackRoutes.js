@@ -1,6 +1,5 @@
 const express = require("express");
 const { protect, authorizeRoles } = require("../middleware/authMiddleware");
-const { optionalProtect } = require("../middleware/authMiddleware");
 const {
   submitFeedback,
   getAllFeedback,
@@ -10,11 +9,11 @@ const {
 
 const router = express.Router();
 
-// Public — anyone can view all feedback
-router.get("/", getAllFeedback);
+// Signed-in users can view roadmap feedback.
+router.get("/", protect, getAllFeedback);
 
-// Optional auth — logged in users get their username attached, guests submit as Anonymous
-router.post("/", optionalProtect, submitFeedback);
+// Signed-in users get their username attached.
+router.post("/", protect, submitFeedback);
 
 // Admin only — update status + reply
 router.patch("/:id", protect, authorizeRoles("admin"), updateFeedback);
