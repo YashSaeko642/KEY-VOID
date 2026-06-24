@@ -44,15 +44,15 @@ router.patch(
 /**
  * GET /profiles/search
  * Searches for profiles by username or bio
- * @access Public
+ * @access Private
  */
-router.get("/search", searchRateLimit, searchProfiles);
+router.get("/search", protect, searchRateLimit, searchProfiles);
 
 /**
  * GET /profiles/:username
  * Retrieves public profile by username
- * @access Public
+ * @access Private
  */
-router.get("/:username", getPublicProfile);
+router.get("/:username", protect, getPublicProfile);
 
 module.exports = router;

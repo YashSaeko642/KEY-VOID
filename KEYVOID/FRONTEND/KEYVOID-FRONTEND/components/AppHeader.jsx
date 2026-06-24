@@ -16,7 +16,7 @@ const baseNavItems = [
   { path: "/profile", label: "Profile" }
 ];
 
-const publicNavItems = baseNavItems.filter((item) => item.path !== "/profile");
+const publicNavItems = baseNavItems.filter((item) => item.path === "/");
 
 const SEARCH_LIMIT = 6;
 const SEARCH_MODES = [
