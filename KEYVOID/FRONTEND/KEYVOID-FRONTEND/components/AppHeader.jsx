@@ -16,6 +16,8 @@ const baseNavItems = [
   { path: "/profile", label: "Profile" }
 ];
 
+const publicNavItems = baseNavItems.filter((item) => item.path !== "/profile");
+
 const SEARCH_LIMIT = 6;
 const SEARCH_MODES = [
   { id: "user", label: "People", command: "/user", icon: UserRound },
@@ -192,11 +194,7 @@ export default function AppHeader() {
         ...(user?.role === "creator" || isAdmin ? [{ path: "/creator", label: "Creator" }] : []),
         ...(isAdmin ? [{ path: "/admin", label: "Admin" }] : [])
       ]
-    : [
-        { path: "/", label: "Home" },
-        { path: "/music", label: "Music" },
-        { path: "/reels", label: "Vods" }
-      ];
+    : publicNavItems;
 
   return (
     <>

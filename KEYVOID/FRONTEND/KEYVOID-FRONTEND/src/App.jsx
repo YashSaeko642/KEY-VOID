@@ -93,20 +93,8 @@ function AppLayout() {
               />
               <Route path="/search" element={<Navigate to="/feed" replace />} />
               <Route path="/u/:username" element={<PublicProfile />} />
-              <Route path="/feed"
-                element={
-                  <ProtectedRoute>
-                    <Feed />
-                  </ProtectedRoute>
-                }
-              />
-              <Route path="/grid"
-                element={
-                  <ProtectedRoute>
-                    <CommunityGrid />
-                  </ProtectedRoute>
-                }
-              />
+              <Route path="/feed" element={<Feed />} />
+              <Route path="/grid" element={<CommunityGrid />} />
               <Route path="/music" element={<Music />} />
               <Route path="/reels" element={<Reels />} />
               <Route path="/reels/:vodId" element={<Reels />} />

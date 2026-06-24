@@ -5,8 +5,6 @@ import {
   Eclipse,
   Flame,
   Headphones,
-  Orbit,
-  Radio,
   Sparkles,
   UsersRound,
   Zap
@@ -27,27 +25,31 @@ const fallbackStats = {
 
 const featureBlocks = [
   {
-    icon: Radio,
-    title: "Void Sessions",
-    text: "Drop into guided discovery when your usual rotation starts sounding too familiar.",
+    icon: Headphones,
+    title: "Music Page",
+    text: "Browse tracks, listen from the player, and find new sounds without needing an account first.",
+    meta: "Tracks + playback",
     accent: "cyan"
   },
   {
-    icon: AudioLines,
-    title: "Creator Signals",
-    text: "Artists can upload music, publish reels, and turn releases into visible community moments.",
+    icon: Flame,
+    title: "Feed Page",
+    text: "See posts, conversations, reactions, and music updates so the homepage leads naturally into the community.",
+    meta: "Posts + comments",
     accent: "violet"
   },
   {
-    icon: Flame,
-    title: "Culture Feed",
-    text: "Posts, reactions, clips, and conversations keep the story around each sound alive.",
+    icon: UsersRound,
+    title: "Grid Page",
+    text: "Explore the public grid of creators, listeners, posts, discussions, and reels before signing up.",
+    meta: "People + activity",
     accent: "rose"
   },
   {
-    icon: Orbit,
-    title: "Taste Graph",
-    text: "Follows, tags, likes, playlists, and listens shape discovery without flattening it.",
+    icon: AudioLines,
+    title: "Vods Page",
+    text: "Watch short creator clips, previews, and visual drops that give the platform more motion.",
+    meta: "Clips + previews",
     accent: "mint"
   }
 ];
@@ -170,12 +172,16 @@ export default function Home() {
             {greeting}
             <span>{isAuthenticated ? "enter the pulse" : "care to enter the void?"}</span>
           </h1>
+          <p className="home-intro-copy">
+            KeyVoid is a neon little corner for finding songs, creators, vods, and the people circling around them.
+            Browse the public grid first, then make an account when you want to leave a signal of your own.
+          </p>
           <div className="home-hero-actions">
             <button type="button" className="primary-action void-action" onClick={handleEnterVoid}>
               {isAuthenticated ? "Enter The Void" : "Login To Begin"}
             </button>
-            <Link className="secondary-action void-link-action" to={isAuthenticated ? "/music" : "/login"}>
-              {isAuthenticated ? "Open Music" : "Create Your Signal"}
+            <Link className="secondary-action void-link-action" to="/grid">
+              Explore The Grid
             </Link>
           </div>
         </div>
@@ -214,7 +220,17 @@ export default function Home() {
         <div className="feature-showcase" id="vision">
           <div className="feature-showcase-copy">
             <p className="eyebrow">Major Features</p>
-            <h2>Music discovery</h2>
+            <h2>Music discovery with the full KeyVoid grid around it.</h2>
+            <p>
+              The homepage should feel like a doorway, not an empty loading room. These are the current KeyVoid pieces
+              new visitors can understand before they register.
+            </p>
+            <div className="feature-pill-row" aria-label="Current KeyVoid areas">
+              <Link to="/music">Music</Link>
+              <Link to="/feed">Feed</Link>
+              <Link to="/grid">Grid</Link>
+              <Link to="/reels">Vods</Link>
+            </div>
           </div>
 
           <div className="feature-grid">
@@ -227,7 +243,10 @@ export default function Home() {
                   <span className="feature-icon">
                     <Icon size={22} />
                   </span>
+                  <small>{feature.meta}</small>
                   <h3>{feature.title}</h3>
+                  <p>{feature.text}</p>
+                  <span className="feature-hover-cue">Hover signal</span>
                 </article>
               );
             })}
