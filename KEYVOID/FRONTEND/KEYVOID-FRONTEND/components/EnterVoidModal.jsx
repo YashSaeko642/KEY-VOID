@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useEnterVoid } from "../src/context/useEnterVoid";
+import { usePlayer } from "../src/context/PlayerContext";
 import "./EnterVoidModal.css";
 
 const GENRES = [
@@ -24,6 +25,7 @@ const DURATIONS = [5, 10, 30, 60, 120];
 
 export default function EnterVoidModal({ isOpen, onClose, onSessionStart }) {
   const { startSession, sessionError, setSessionError } = useEnterVoid();
+  const { audioFetchState } = usePlayer();
   const [mode, setMode] = useState("familiar");
   const [genre, setGenre] = useState("All Genres");
   const [duration, setDuration] = useState(30);
@@ -32,6 +34,17 @@ export default function EnterVoidModal({ isOpen, onClose, onSessionStart }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!audioFetchState.isComplete) {
+      const total = audioFetchState.total || 0;
+      const fetched = audioFetchState.fetched || 0;
+      setSessionError(
+        total
+          ? `Please wait while KeyVoid finishes preparing music. ${fetched}/${total} songs are ready.`
+          : "Please wait while KeyVoid reads the music library."
+      );
+      return;
+    }
+
     setIsLoading(true);
     setSessionError(null);
 
@@ -70,6 +83,12 @@ export default function EnterVoidModal({ isOpen, onClose, onSessionStart }) {
         {sessionError && (
           <div className="void-modal-error" role="alert">
             {sessionError}
+          </div>
+        )}
+
+        {!audioFetchState.isComplete && (
+          <div className="void-modal-error" role="status">
+            Music is still preparing: {audioFetchState.fetched}/{audioFetchState.total || 0} songs ready.
           </div>
         )}
 
@@ -179,10 +198,10 @@ export default function EnterVoidModal({ isOpen, onClose, onSessionStart }) {
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || !audioFetchState.isComplete}
             className={`void-submit-btn ${isLoading ? "loading" : ""}`}
           >
-            {isLoading ? "Entering..." : "Enter The Void"}
+            {isLoading ? "Entering..." : audioFetchState.isComplete ? "Enter The Void" : "Preparing Music..."}
           </button>
         </form>
       </div>

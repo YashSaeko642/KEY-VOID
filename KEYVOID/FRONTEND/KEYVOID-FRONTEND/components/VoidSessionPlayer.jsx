@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { FastForward, LogOut, TimerReset, X } from "lucide-react";
 import { useEnterVoid } from "../src/context/useEnterVoid";
 import { usePlayer } from "../src/context/PlayerContext";
+import { getApiErrorMessage, streamAudioTrack } from "../services/api";
 import "./VoidSessionPlayer.css";
 
 export default function VoidSessionPlayer() {
@@ -23,6 +24,7 @@ export default function VoidSessionPlayer() {
   const { stopPlayback } = usePlayer();
 
   const audioRef = useRef(null);
+  const audioObjectUrlRef = useRef("");
   const timerRef = useRef(null);
   const notificationTimeoutRef = useRef(null);
   const skipTimerRef = useRef(null);
@@ -30,6 +32,8 @@ export default function VoidSessionPlayer() {
   const [canSkip, setCanSkip] = useState(false);
   const [skipCountdown, setSkipCountdown] = useState(0);
   const [showNotification, setShowNotification] = useState(false);
+  const [audioSrc, setAudioSrc] = useState("");
+  const [playbackError, setPlaybackError] = useState("");
 
   const handleSessionEnd = useCallback(async () => {
     if (!session?.id) return;
@@ -37,6 +41,11 @@ export default function VoidSessionPlayer() {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
     }
+    if (audioObjectUrlRef.current) {
+      URL.revokeObjectURL(audioObjectUrlRef.current);
+      audioObjectUrlRef.current = "";
+    }
+    setAudioSrc("");
     await exitVoid(session.id);
   }, [exitVoid, session?.id]);
 
@@ -55,6 +64,7 @@ export default function VoidSessionPlayer() {
     try {
       const track = await getNextTrack(session.id);
       if (track) {
+        setPlaybackError("");
         setCurrentTrack(track);
         const delay = session.skipDelay ?? 30;
         setSkipCountdown(delay);
@@ -136,26 +146,67 @@ export default function VoidSessionPlayer() {
 
   // Auto-advance when track ends
   useEffect(() => {
-    if (!isActive || !session || !currentTrack) return undefined;
+    if (!isActive || !session || !currentTrack || !audioSrc) return undefined;
     const audio = audioRef.current;
     if (!audio) return undefined;
 
     const handleEnded = async () => {
-      await logTrack(session.id, currentTrack.id, false, currentTrack.duration);
+      await logTrack(session.id, currentTrack.id, false, audio.duration || currentTrack.duration || 0);
       loadNextTrack();
     };
 
     audio.addEventListener("ended", handleEnded);
     return () => audio.removeEventListener("ended", handleEnded);
-  }, [currentTrack, isActive, loadNextTrack, logTrack, session]);
+  }, [audioSrc, currentTrack, isActive, loadNextTrack, logTrack, session]);
 
-  // Autoplay when track changes
+  // Fetch protected stream through authenticated API, then autoplay the object URL.
   useEffect(() => {
-    if (!isActive || !session || !currentTrack) return;
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.play().catch((err) => console.warn("Auto-play failed:", err));
+    let ignore = false;
+
+    async function loadAudioSource() {
+      if (!isActive || !session || !currentTrack?.id) return;
+
+      if (audioObjectUrlRef.current) {
+        URL.revokeObjectURL(audioObjectUrlRef.current);
+        audioObjectUrlRef.current = "";
+      }
+
+      setAudioSrc("");
+      setPlaybackError("");
+
+      try {
+        const response = await streamAudioTrack(currentTrack.id);
+        if (ignore) return;
+
+        const objectUrl = URL.createObjectURL(response.data);
+        audioObjectUrlRef.current = objectUrl;
+        setAudioSrc(objectUrl);
+      } catch (error) {
+        if (!ignore) {
+          setPlaybackError(getApiErrorMessage(error, "Unable to load this void track."));
+        }
+      }
+    }
+
+    loadAudioSource();
+    return () => { ignore = true; };
   }, [currentTrack, isActive, session]);
+
+  useEffect(() => {
+    if (!audioSrc || !audioRef.current) return;
+    audioRef.current.play().catch((err) => {
+      console.warn("Void autoplay failed:", err);
+      setPlaybackError("Tap skip or try another track if the browser blocked playback.");
+    });
+  }, [audioSrc]);
+
+  useEffect(() => {
+    return () => {
+      if (audioObjectUrlRef.current) {
+        URL.revokeObjectURL(audioObjectUrlRef.current);
+      }
+    };
+  }, []);
 
   // Load first track on mount
   useEffect(() => {
@@ -230,6 +281,10 @@ export default function VoidSessionPlayer() {
           <div className="void-notice">{sessionError}</div>
         )}
 
+        {playbackError && (
+          <div className="void-notice">{playbackError}</div>
+        )}
+
         {/* Main content */}
         <div className="void-content">
           {isLoading && !currentTrack ? (
@@ -297,8 +352,8 @@ export default function VoidSessionPlayer() {
         </p>
       </div>
 
-      {currentTrack && (
-        <audio ref={audioRef} src={currentTrack.url} crossOrigin="anonymous" />
+      {currentTrack && audioSrc && (
+        <audio ref={audioRef} src={audioSrc} />
       )}
     </div>
   );
