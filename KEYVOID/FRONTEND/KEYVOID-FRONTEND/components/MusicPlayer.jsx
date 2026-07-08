@@ -136,13 +136,15 @@ export default function MusicPlayer() {
   const {
     library, filteredLibrary, activeTrack, isPlaying, searchQuery, error,
     position, duration, pagination, localTracks, isLibraryLoading,
+    audioFetchState,
     playlists, isPlaylistLoading, isUploadingTracks, playbackQueue, playbackQueueName, manualQueue,
     handleSelectTrack, setSearchQuery, refreshLibrary,
     handleLoadNextPage, handlePageChange, loadPlaylists,
     createUserPlaylist, updateUserPlaylist, addTrackToUserPlaylist, toggleTrackLike, deleteUserPlaylist,
     handleLocalFileChange, deleteUploadedTrack, deleteLocalTrack,
     handleTogglePlay, handleSkip, submitTrackTag, removeTrackTag,
-    queueTrack, removeQueuedTrack, clearManualQueue
+    queueTrack, removeQueuedTrack, clearManualQueue,
+    prioritizeAudioFetch, retryAudioFetch
   } = usePlayer();
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -163,6 +165,7 @@ export default function MusicPlayer() {
   const [viewSearchQuery, setViewSearchQuery] = useState(searchQuery);
   const [playlistPickerTrack, setPlaylistPickerTrack] = useState(null);
   const [showQueueModal, setShowQueueModal] = useState(false);
+  const [showFetchPanel, setShowFetchPanel] = useState(false);
   const [showPreferenceModal, setShowPreferenceModal] = useState(false);
   const [hasPreferenceChoice, setHasPreferenceChoice] = useState(
     () => localStorage.getItem(PREFERENCE_STORAGE_KEY) !== null
@@ -262,6 +265,13 @@ export default function MusicPlayer() {
   const activeIndex = useMemo(
     () => playbackQueue.findIndex((t) => getTrackId(t) === getTrackId(activeTrack)),
     [playbackQueue, activeTrack]
+  );
+  const audioFetchPercent = audioFetchState.total
+    ? Math.round((audioFetchState.fetched / audioFetchState.total) * 100)
+    : 0;
+  const currentFetchTrack = useMemo(
+    () => audioFetchState.tracks.find((track) => getTrackId(track) === audioFetchState.currentTrackId),
+    [audioFetchState.currentTrackId, audioFetchState.tracks]
   );
   const upcomingSourceQueue = useMemo(() => {
     const nextIndex = Math.max(activeIndex + 1, 0);
@@ -644,6 +654,66 @@ export default function MusicPlayer() {
     </div>
   ) : null;
 
+  const FetchPanelModal = showFetchPanel ? (
+    <div className="music-modal-overlay" onMouseDown={() => setShowFetchPanel(false)}>
+      <div className="music-fetch-modal" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="playlist-picker-header">
+          <div>
+            <p className="player-kicker">Library fetch</p>
+            <h2>{audioFetchState.fetched} of {audioFetchState.total || 0} songs ready</h2>
+          </div>
+          <button type="button" className="track-icon-btn" onClick={() => setShowFetchPanel(false)} aria-label="Close fetch panel">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="music-fetch-progress">
+          <span style={{ width: `${audioFetchPercent}%` }} />
+        </div>
+
+        <div className="music-fetch-summary">
+          <span>{audioFetchState.isCatalogLoading ? "Reading catalog" : audioFetchState.isFetching ? "Fetching audio files" : audioFetchState.isComplete ? "Library ready" : "Waiting"}</span>
+          <small>{audioFetchState.failed ? `${audioFetchState.failed} need retry` : `${audioFetchPercent}% complete`}</small>
+        </div>
+
+        <div className="music-fetch-list">
+          {audioFetchState.tracks.length > 0 ? audioFetchState.tracks.map((track) => {
+            const trackId = getTrackId(track);
+            const isFetching = track.fetchStatus === "fetching";
+            const isFetched = track.fetchStatus === "fetched";
+            const isFailed = track.fetchStatus === "error";
+            const isPriority = audioFetchState.priorityTrackId === trackId;
+            return (
+              <div className={`music-fetch-row ${isFetching ? "active" : ""}`} key={trackId}>
+                <span className="queue-item-thumb">
+                  {track.coverUrl ? <img src={track.coverUrl} alt="" /> : <Disc3 size={15} />}
+                </span>
+                <span className="queue-item-copy">
+                  <strong>{track.title || "Untitled track"}</strong>
+                  <small>{track.artist || track.genre || track.fetchStatusLabel}</small>
+                </span>
+                <span className={`music-fetch-status ${track.fetchStatus}`}>
+                  {isPriority && !isFetched ? "Priority" : track.fetchStatusLabel}
+                </span>
+                {isFailed ? (
+                  <button type="button" className="see-more-button" onClick={() => retryAudioFetch(track)}>
+                    Retry
+                  </button>
+                ) : (
+                  <button type="button" className="see-more-button" disabled={isFetched || isFetching} onClick={() => prioritizeAudioFetch(track)}>
+                    {isFetched ? "Ready" : isFetching ? "Now" : "Prioritize"}
+                  </button>
+                )}
+              </div>
+            );
+          }) : (
+            <div className="empty-library">No songs have been found yet.</div>
+          )}
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   const renderArtistButton = (track, className = "artist-link") => (
     <button
       type="button"
@@ -717,6 +787,28 @@ export default function MusicPlayer() {
                 </button>
               </div>
             </div>
+
+            <button type="button" className="music-fetch-card" onClick={() => setShowFetchPanel(true)}>
+              <span className="music-fetch-card-top">
+                <span>
+                  <strong>{audioFetchState.fetched}/{audioFetchState.total || 0}</strong>
+                  <small>{audioFetchState.isComplete ? "Ready to play" : audioFetchState.isCatalogLoading ? "Reading catalog" : "Fetching files"}</small>
+                </span>
+                <ListMusic size={16} />
+              </span>
+              <span className="music-fetch-progress">
+                <span style={{ width: `${audioFetchPercent}%` }} />
+              </span>
+              <span className="music-fetch-card-note">
+                {currentFetchTrack
+                  ? `Now fetching: ${currentFetchTrack.title || "Untitled track"}`
+                  : audioFetchState.failed
+                  ? `${audioFetchState.failed} song${audioFetchState.failed === 1 ? "" : "s"} need retry`
+                  : audioFetchState.isComplete
+                  ? "All songs are available."
+                  : "Preparing songs for playback."}
+              </span>
+            </button>
 
             <button type="button" className={`playlist-dock-item ${selectedPlaylistId === "library" ? "active" : ""}`} onClick={() => {
               setSelectedPlaylistId("library");
@@ -1210,6 +1302,7 @@ export default function MusicPlayer() {
       </div>
 
       {PlaylistPickerModal}
+      {FetchPanelModal}
       {QueueModal}
       {CreatePlaylistModal}
       {DeletePlaylistModal}

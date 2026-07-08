@@ -19,6 +19,7 @@ import { useAuth } from "./useAuth";
 
 const PlayerContext = createContext(null);
 const MUSIC_PAGE_SIZE = 10;
+const MUSIC_PREFETCH_PAGE_SIZE = 50;
 const LOCAL_MUSIC_DB = "keyvoid-local-music";
 const LOCAL_MUSIC_STORE = "tracks";
 const memoryLocalTracks = new Map();
@@ -109,6 +110,13 @@ function mergeTracks(currentTracks, nextTracks) {
   });
 }
 
+function getTrackStatusLabel(status) {
+  if (status === "fetched") return "Ready";
+  if (status === "fetching") return "Fetching";
+  if (status === "error") return "Needs retry";
+  return "Waiting";
+}
+
 function getTagVoteCount(tag) {
   return Number(tag?.count || tag?.voters?.length || 0);
 }
@@ -178,10 +186,26 @@ export function PlayerProvider({ children }) {
   const [playbackQueue, setPlaybackQueue] = useState([]);
   const [playbackQueueName, setPlaybackQueueName] = useState("Music library");
   const [manualQueue, setManualQueue] = useState([]);
+  const [audioFetchVersion, setAudioFetchVersion] = useState(0);
+  const [audioFetchState, setAudioFetchState] = useState({
+    isCatalogLoading: false,
+    isFetching: false,
+    isComplete: false,
+    total: 0,
+    fetched: 0,
+    failed: 0,
+    currentTrackId: "",
+    priorityTrackId: "",
+    tracks: []
+  });
   const audioRef = useRef(null);
   const audioObjectUrlRef = useRef("");
+  const audioObjectUrlIsCachedRef = useRef(false);
   const libraryCacheRef = useRef(new Map());
   const wasAuthenticatedRef = useRef(false);
+  const prefetchedAudioRef = useRef(new Map());
+  const fetchQueueRef = useRef([]);
+  const audioFetchRunRef = useRef(0);
 
   // KEY FIX for Bug 1:
   // Track the ID of the last track we actually loaded audio for.
@@ -203,6 +227,18 @@ export function PlayerProvider({ children }) {
     setPlaylists([]);
     setError(null);
     loadedTrackIdRef.current = "";
+    fetchQueueRef.current = [];
+    setAudioFetchState({
+      isCatalogLoading: false,
+      isFetching: false,
+      isComplete: false,
+      total: 0,
+      fetched: 0,
+      failed: 0,
+      currentTrackId: "",
+      priorityTrackId: "",
+      tracks: []
+    });
 
     if (audioRef.current) {
       audioRef.current.pause();
@@ -210,10 +246,14 @@ export function PlayerProvider({ children }) {
       audioRef.current.load();
     }
 
-    if (audioObjectUrlRef.current) {
+    if (audioObjectUrlRef.current && !audioObjectUrlIsCachedRef.current) {
       URL.revokeObjectURL(audioObjectUrlRef.current);
       audioObjectUrlRef.current = "";
     }
+    audioObjectUrlIsCachedRef.current = false;
+
+    prefetchedAudioRef.current.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
+    prefetchedAudioRef.current.clear();
   }, []);
 
   const getCacheKey = useCallback((page = 1) => `${searchQuery.trim().toLowerCase()}::${page}`, [searchQuery]);
@@ -301,7 +341,174 @@ export function PlayerProvider({ children }) {
   const refreshLibrary = () => {
     libraryCacheRef.current.clear();
     loadLibraryPage(pagination.page || 1, { force: true });
+    audioFetchRunRef.current += 1;
+    setAudioFetchVersion((version) => version + 1);
   };
+
+  const markFetchTrackStatus = useCallback((trackId, status, extra = {}) => {
+    setAudioFetchState((prev) => {
+      const nextTracks = prev.tracks.map((track) =>
+        getTrackId(track) === trackId
+          ? { ...track, fetchStatus: status, fetchStatusLabel: getTrackStatusLabel(status), ...extra }
+          : track
+      );
+      return {
+        ...prev,
+        tracks: nextTracks,
+        fetched: nextTracks.filter((track) => track.fetchStatus === "fetched").length,
+        failed: nextTracks.filter((track) => track.fetchStatus === "error").length,
+        currentTrackId: status === "fetching" ? trackId : prev.currentTrackId
+      };
+    });
+  }, []);
+
+  const prioritizeAudioFetch = useCallback((track) => {
+    const trackId = typeof track === "string" ? track : getTrackId(track);
+    if (!trackId || prefetchedAudioRef.current.has(trackId)) return;
+
+    fetchQueueRef.current = [
+      trackId,
+      ...fetchQueueRef.current.filter((queuedTrackId) => queuedTrackId !== trackId)
+    ];
+
+    setAudioFetchState((prev) => ({
+      ...prev,
+      priorityTrackId: trackId,
+      tracks: prev.tracks.map((item) =>
+        getTrackId(item) === trackId
+          ? { ...item, fetchStatus: item.fetchStatus === "error" ? "pending" : item.fetchStatus }
+          : item
+      )
+    }));
+  }, []);
+
+  const retryAudioFetch = useCallback((track) => {
+    const trackId = typeof track === "string" ? track : getTrackId(track);
+    if (!trackId) return;
+    prioritizeAudioFetch(trackId);
+    setAudioFetchState((prev) => ({ ...prev, isComplete: false }));
+    setAudioFetchVersion((version) => version + 1);
+  }, [prioritizeAudioFetch]);
+
+  useEffect(() => {
+    let ignore = false;
+    const runId = audioFetchRunRef.current + 1;
+    audioFetchRunRef.current = runId;
+
+    async function loadFullCatalogAndAudio() {
+      if (!isAuthenticated) return;
+
+      setAudioFetchState((prev) => ({
+        ...prev,
+        isCatalogLoading: true,
+        isFetching: false,
+        isComplete: false,
+        total: localTracks.length,
+        fetched: localTracks.length,
+        failed: 0,
+        currentTrackId: "",
+        priorityTrackId: "",
+        tracks: localTracks.map((track) => ({
+          ...track,
+          fetchStatus: "fetched",
+          fetchStatusLabel: "Ready"
+        }))
+      }));
+
+      try {
+        let page = 1;
+        let totalPages = 1;
+        const remoteTracks = [];
+
+        do {
+          const response = await getAudioLibrary({ page, limit: MUSIC_PREFETCH_PAGE_SIZE, search: "" });
+          const tracks = response.data.tracks || [];
+          remoteTracks.push(...tracks);
+          totalPages = Math.max(1, Number(response.data.pagination?.totalPages) || 1);
+          page += 1;
+        } while (!ignore && page <= totalPages);
+
+        if (ignore || audioFetchRunRef.current !== runId) return;
+
+        const mergedRemoteTracks = mergeTracks([], remoteTracks);
+        const fetchedLocalTracks = localTracks.map((track) => ({
+          ...track,
+          fetchStatus: "fetched",
+          fetchStatusLabel: "Ready"
+        }));
+        const queuedRemoteTracks = mergedRemoteTracks.map((track) => {
+          const trackId = getTrackId(track);
+          const isCached = prefetchedAudioRef.current.has(trackId);
+          return {
+            ...track,
+            fetchStatus: isCached ? "fetched" : "pending",
+            fetchStatusLabel: isCached ? "Ready" : "Waiting"
+          };
+        });
+
+        fetchQueueRef.current = queuedRemoteTracks
+          .filter((track) => track.fetchStatus !== "fetched")
+          .map(getTrackId);
+
+        setAudioFetchState({
+          isCatalogLoading: false,
+          isFetching: fetchQueueRef.current.length > 0,
+          isComplete: fetchQueueRef.current.length === 0,
+          total: fetchedLocalTracks.length + queuedRemoteTracks.length,
+          fetched: fetchedLocalTracks.length + queuedRemoteTracks.filter((track) => track.fetchStatus === "fetched").length,
+          failed: 0,
+          currentTrackId: "",
+          priorityTrackId: "",
+          tracks: [...fetchedLocalTracks, ...queuedRemoteTracks]
+        });
+
+        while (!ignore && audioFetchRunRef.current === runId && fetchQueueRef.current.length > 0) {
+          const nextTrackId = fetchQueueRef.current.shift();
+          const nextTrack = queuedRemoteTracks.find((track) => getTrackId(track) === nextTrackId);
+          if (!nextTrack || prefetchedAudioRef.current.has(nextTrackId)) {
+            markFetchTrackStatus(nextTrackId, "fetched");
+            continue;
+          }
+
+          markFetchTrackStatus(nextTrackId, "fetching");
+
+          try {
+            const response = await streamAudioTrack(nextTrackId);
+            if (ignore || audioFetchRunRef.current !== runId) return;
+            const objectUrl = URL.createObjectURL(response.data);
+            prefetchedAudioRef.current.set(nextTrackId, objectUrl);
+            markFetchTrackStatus(nextTrackId, "fetched");
+          } catch (err) {
+            markFetchTrackStatus(nextTrackId, "error", {
+              fetchError: getApiErrorMessage(err, "Unable to fetch this song.")
+            });
+          }
+        }
+
+        if (!ignore && audioFetchRunRef.current === runId) {
+          setAudioFetchState((prev) => ({
+            ...prev,
+            isFetching: false,
+            isComplete: prev.tracks.length > 0 && prev.tracks.every((track) => track.fetchStatus === "fetched"),
+            currentTrackId: ""
+          }));
+        }
+      } catch (err) {
+        if (!ignore) {
+          setAudioFetchState((prev) => ({
+            ...prev,
+            isCatalogLoading: false,
+            isFetching: false,
+            isComplete: false
+          }));
+          setError(getApiErrorMessage(err, "Unable to prepare the full music library."));
+        }
+      }
+    }
+
+    loadFullCatalogAndAudio();
+    return () => { ignore = true; };
+  }, [audioFetchVersion, isAuthenticated, localTracks, markFetchTrackStatus]);
 
   const handleLoadNextPage = () => {
     if (!pagination.hasNext || isLibraryLoading) return;
@@ -412,10 +619,11 @@ export function PlayerProvider({ children }) {
 
     let ignore = false;
 
-    if (audioObjectUrlRef.current) {
+    if (audioObjectUrlRef.current && !audioObjectUrlIsCachedRef.current) {
       URL.revokeObjectURL(audioObjectUrlRef.current);
       audioObjectUrlRef.current = "";
     }
+    audioObjectUrlIsCachedRef.current = false;
 
     setAudioSrc("");
     setDuration(0);
@@ -425,17 +633,22 @@ export function PlayerProvider({ children }) {
       if (!activeTrack?.url) return;
 
       try {
-        const objectUrl = activeTrack.source === "local" && activeTrack.blob
-          ? URL.createObjectURL(activeTrack.blob)
-          : URL.createObjectURL((await streamAudioTrack(getTrackId(activeTrack))).data);
+        const activeTrackId = getTrackId(activeTrack);
+        const cachedObjectUrl = prefetchedAudioRef.current.get(activeTrackId);
+        const objectUrl = cachedObjectUrl || (
+          activeTrack.source === "local" && activeTrack.blob
+            ? URL.createObjectURL(activeTrack.blob)
+            : URL.createObjectURL((await streamAudioTrack(activeTrackId)).data)
+        );
 
         if (ignore) {
-          URL.revokeObjectURL(objectUrl);
+          if (!cachedObjectUrl) URL.revokeObjectURL(objectUrl);
           return;
         }
 
         loadedTrackIdRef.current = incomingId; // mark this ID as loaded
         audioObjectUrlRef.current = objectUrl;
+        audioObjectUrlIsCachedRef.current = Boolean(cachedObjectUrl);
         setAudioSrc(objectUrl);
         setIsPlaying(true);
         setError(null);
@@ -454,7 +667,9 @@ export function PlayerProvider({ children }) {
 
   useEffect(() => {
     return () => {
-      if (audioObjectUrlRef.current) URL.revokeObjectURL(audioObjectUrlRef.current);
+      if (audioObjectUrlRef.current && !audioObjectUrlIsCachedRef.current) URL.revokeObjectURL(audioObjectUrlRef.current);
+      prefetchedAudioRef.current.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
+      prefetchedAudioRef.current.clear();
     };
   }, []);
 
@@ -508,6 +723,7 @@ export function PlayerProvider({ children }) {
   };
 
   const handleSelectTrack = (track, queueOptions = {}) => {
+    prioritizeAudioFetch(track);
     if (queueOptions.tracks?.length) {
       setQueueSource(queueOptions.tracks, queueOptions.name);
     } else if (!effectiveQueue.some((item) => getTrackId(item) === getTrackId(track))) {
@@ -817,6 +1033,7 @@ export function PlayerProvider({ children }) {
       library, localTracks, activeTrack, audioSrc, isPlaying,
       searchQuery, error, position, duration, audioRef,
       filteredLibrary, pagination, isLibraryLoading,
+      audioFetchState,
       playbackQueue: effectiveQueue, playbackQueueName, manualQueue,
       playlists, isPlaylistLoading, isUploadingTracks,
       handleSelectTrack, setSearchQuery, refreshLibrary,
@@ -826,6 +1043,7 @@ export function PlayerProvider({ children }) {
       handleLocalFileChange, updateUploadedTrack, deleteUploadedTrack, deleteLocalTrack,
       handleTogglePlay, handleSkip, submitTrackTag, removeTrackTag,
       queueTrack, removeQueuedTrack, clearManualQueue,
+      prioritizeAudioFetch, retryAudioFetch,
       handleSeek, handleTimeUpdate, handleLoadedMetadata, handleTrackEnded,
       stopPlayback, clearPlayerState, setError
     }}>

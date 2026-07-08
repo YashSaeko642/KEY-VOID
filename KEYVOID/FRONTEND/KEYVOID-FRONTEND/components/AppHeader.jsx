@@ -2,6 +2,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Hash, Search as SearchIcon, UserRound, Video, X } from "lucide-react";
 import { useAuth } from "../src/context/useAuth";
+import { usePlayer } from "../src/context/PlayerContext";
 import { searchProfiles } from "../services/api";
 import EnterVoidModal from "./EnterVoidModal";
 import "./Navbar.css";
@@ -73,6 +74,7 @@ export default function AppHeader() {
   const location = useLocation();
   const navigate = useNavigate();
   const { isAdmin, isAuthenticated, logout, user } = useAuth();
+  const { audioFetchState } = usePlayer();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSearchMode, setSelectedSearchMode] = useState("user");
   const [searchResults, setSearchResults] = useState([]);
@@ -80,6 +82,7 @@ export default function AppHeader() {
   const [searchError, setSearchError] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [showVoidModal, setShowVoidModal] = useState(false);
+  const [voidBlockedNotice, setVoidBlockedNotice] = useState("");
   const searchRef = useRef(null);
 
   const searchIntent = useMemo(
@@ -97,6 +100,22 @@ export default function AppHeader() {
 
   const handleVoidSessionStart = () => {
     setShowVoidModal(false);
+  };
+
+  const handleEnterVoidClick = () => {
+    if (!audioFetchState.isComplete) {
+      const total = audioFetchState.total || 0;
+      const fetched = audioFetchState.fetched || 0;
+      setVoidBlockedNotice(
+        total
+          ? `KeyVoid is preparing music (${fetched}/${total} ready). Enter Void unlocks when fetching completes.`
+          : "KeyVoid is still reading the music library. Enter Void will unlock when the songs are ready."
+      );
+      window.setTimeout(() => setVoidBlockedNotice(""), 4200);
+      return;
+    }
+
+    setShowVoidModal(true);
   };
 
   useEffect(() => {
@@ -320,7 +339,7 @@ export default function AppHeader() {
         {isAuthenticated ? <div className="mobile-app-actions">
           <button
             className="void-nav-btn"
-            onClick={() => setShowVoidModal(true)}
+            onClick={handleEnterVoidClick}
             type="button"
             title="Start a guided music discovery session"
           >
@@ -344,6 +363,12 @@ export default function AppHeader() {
 
       </div>
     </header>
+
+    {voidBlockedNotice ? (
+      <div className="void-blocked-toast" role="status">
+        {voidBlockedNotice}
+      </div>
+    ) : null}
 
     <EnterVoidModal
       isOpen={showVoidModal}
