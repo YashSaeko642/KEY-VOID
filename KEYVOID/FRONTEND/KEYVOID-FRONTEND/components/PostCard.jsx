@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from "react";
 import { Eye, Flag, MessageCircle, Pencil, Send, Share2, Trash2, TrendingUp } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import API, { getApiErrorMessage, reportPost, trackPostView } from "../services/api";
 import { useAuth } from "../src/context/useAuth";
 import { getRelativeTime } from "../src/utils/formatters";
@@ -51,7 +51,8 @@ function renderSlashTags(text = "", onTagClick) {
   });
 }
 
-function PostCard({ post, onPostDeleted, onTagClick, defaultShowComments = false, highlightCommentId = "" }) {
+function PostCard({ post, onPostDeleted, onTagClick, defaultShowComments = false, highlightCommentId = "", linkToDetail = true }) {
+  const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
   const [currentPost, setCurrentPost] = useState(post);
   const activePost = currentPost || post;
@@ -63,6 +64,7 @@ function PostCard({ post, onPostDeleted, onTagClick, defaultShowComments = false
   const postText = decodeStoredText(typeof activePost?.text === "string" ? activePost.text : "");
   const displayTitle = postTitle || (postText.length > 96 ? `${postText.slice(0, 96)}...` : postText);
   const displayBody = postBody || (postTitle ? postText : "");
+  const postDetailPath = postId ? `/feed/${encodeURIComponent(postId)}` : "";
 
   const cardRef = useRef(null);
   const [likes, setLikes] = useState(post.likes?.length || 0);
@@ -232,18 +234,34 @@ function PostCard({ post, onPostDeleted, onTagClick, defaultShowComments = false
       try {
         await navigator.share({
           text: shareText,
-          url: window.location.href
+        url: postDetailPath ? `${window.location.origin}${postDetailPath}` : window.location.href
         });
       } catch (err) {
         console.error("Share failed:", err);
       }
     } else {
       try {
-        await navigator.clipboard.writeText(`${shareText} ${window.location.href}`);
+        await navigator.clipboard.writeText(`${shareText} ${postDetailPath ? `${window.location.origin}${postDetailPath}` : window.location.href}`);
         alert("Link copied to clipboard!");
       } catch {
         alert("Unable to copy link.");
       }
+    }
+  };
+
+  const shouldIgnoreCardNavigation = (event) => {
+    return Boolean(event.target.closest("a, button, input, textarea, select, video, audio, label"));
+  };
+
+  const openPostDetail = (event) => {
+    if (!linkToDetail || !postDetailPath || shouldIgnoreCardNavigation(event)) return;
+    navigate(postDetailPath);
+  };
+
+  const handleCardKeyDown = (event) => {
+    if (!linkToDetail || !postDetailPath || shouldIgnoreCardNavigation(event)) return;
+    if (event.key === "Enter") {
+      navigate(postDetailPath);
     }
   };
 
@@ -346,7 +364,15 @@ function PostCard({ post, onPostDeleted, onTagClick, defaultShowComments = false
   };
 
   return (
-    <div className="post-card" ref={cardRef}>
+    <div
+      className={`post-card${linkToDetail ? " post-card-clickable" : ""}`}
+      ref={cardRef}
+      onClick={openPostDetail}
+      onKeyDown={handleCardKeyDown}
+      role={linkToDetail ? "link" : undefined}
+      tabIndex={linkToDetail ? 0 : undefined}
+      aria-label={linkToDetail ? `Open discussion: ${displayTitle || "post"}` : undefined}
+    >
       {/* DELETE MODAL */}
       {showDeleteModal && (
         <div className="delete-modal-overlay" onClick={() => setShowDeleteModal(false)}>
@@ -452,9 +478,9 @@ function PostCard({ post, onPostDeleted, onTagClick, defaultShowComments = false
 
       {/* HEADER */}
       <div className="post-header">
-        <div className="post-avatar">
+        <Link to={`/u/${encodeURIComponent(authorUsername)}`} className="post-avatar post-avatar-link" aria-label={`Open ${authorUsername}'s profile`}>
           {activePost.author?.username?.[0]?.toUpperCase() || "U"}
-        </div>
+        </Link>
         <div className="post-user-info">
           <Link to={`/u/${encodeURIComponent(authorUsername)}`} className="post-username-link">
             <div className="post-username">
@@ -558,8 +584,14 @@ function PostCard({ post, onPostDeleted, onTagClick, defaultShowComments = false
         {/* COMMENT BUTTON */}
         <button
           className="post-action-btn"
-          onClick={() => setShowComments((current) => !current)}
-          title="View comments"
+          onClick={() => {
+            if (linkToDetail && postDetailPath) {
+              navigate(postDetailPath);
+              return;
+            }
+            setShowComments((current) => !current);
+          }}
+          title={linkToDetail ? "Open discussion" : "View comments"}
         >
           <MessageCircle size={18} />
           <span className="action-count">{comments.length}</span>
@@ -595,7 +627,11 @@ function PostCard({ post, onPostDeleted, onTagClick, defaultShowComments = false
                     </div>
                     <div className="comment-body">
                       <div className="comment-meta">
-                        <span>{comment.author?.username || "unknown"}</span>
+                        {comment.author?.username ? (
+                          <Link to={`/u/${encodeURIComponent(comment.author.username)}`}>{comment.author.username}</Link>
+                        ) : (
+                          <span>unknown</span>
+                        )}
                         <span>{getRelativeTime(new Date(comment.createdAt))}</span>
                       </div>
                       <p>{decodeStoredText(comment.text)}</p>

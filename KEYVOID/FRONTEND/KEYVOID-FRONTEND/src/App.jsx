@@ -22,6 +22,7 @@ import { AuthProvider } from "./context/AuthContext";
 import { PlayerProvider } from "./context/PlayerContext";
 import { EnterVoidProvider } from "./context/EnterVoidContext";
 import Feed from "../pages/Feed";
+import PostDetail from "../pages/PostDetail";
 import "./App.css";
 
 const AUTH_ROUTES = ["/login", "/reset-password"];
@@ -33,7 +34,7 @@ const MotionP = motion.p;
 function AppLayout() {
   const location = useLocation();
   const isAuthRoute = AUTH_ROUTES.includes(location.pathname);
-  const isAppRoute = APP_ROUTES.includes(location.pathname) || location.pathname.startsWith("/u/") || location.pathname.startsWith("/reels/");
+  const isAppRoute = APP_ROUTES.includes(location.pathname) || location.pathname.startsWith("/feed/") || location.pathname.startsWith("/u/") || location.pathname.startsWith("/reels/");
   const isFeedRoute = location.pathname === "/feed";
   const isMusicRoute = location.pathname === "/music";
   const shellClassName = isAuthRoute
@@ -105,6 +106,14 @@ function AppLayout() {
                 element={
                   <ProtectedRoute>
                     <Feed />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/feed/:postId"
+                element={
+                  <ProtectedRoute>
+                    <PostDetail />
                   </ProtectedRoute>
                 }
               />
