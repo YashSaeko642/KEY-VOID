@@ -532,10 +532,11 @@ export function PlayerProvider({ children }) {
     }
   }, []);
 
-  const createUserPlaylist = async ({ name, description = "", cover }) => {
+  const createUserPlaylist = async ({ name, description = "", cover, coverPosition = "center center" }) => {
     const formData = new FormData();
     formData.append("name", name);
     formData.append("description", description);
+    formData.append("coverPosition", coverPosition);
     if (cover) formData.append("cover", cover);
     try {
       const response = await createPlaylist(formData);
@@ -576,11 +577,12 @@ export function PlayerProvider({ children }) {
     }
   };
 
-  const updateUserPlaylist = async ({ playlistId, name, description = "", cover }) => {
+  const updateUserPlaylist = async ({ playlistId, name, description = "", cover, coverPosition = "center center" }) => {
     const formData = new FormData();
     formData.append("playlistId", playlistId);
     formData.append("name", name);
     formData.append("description", description);
+    formData.append("coverPosition", coverPosition);
     if (cover) formData.append("cover", cover);
 
     try {
@@ -666,10 +668,11 @@ export function PlayerProvider({ children }) {
   }, [activeTrack]);
 
   useEffect(() => {
+    const prefetchedAudio = prefetchedAudioRef.current;
     return () => {
       if (audioObjectUrlRef.current && !audioObjectUrlIsCachedRef.current) URL.revokeObjectURL(audioObjectUrlRef.current);
-      prefetchedAudioRef.current.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
-      prefetchedAudioRef.current.clear();
+      prefetchedAudio.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
+      prefetchedAudio.clear();
     };
   }, []);
 

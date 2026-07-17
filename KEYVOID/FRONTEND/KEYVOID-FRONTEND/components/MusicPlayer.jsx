@@ -36,6 +36,20 @@ function formatTime(seconds = 0) {
   return `${minutes}:${secs.toString().padStart(2, "0")}`;
 }
 
+function formatLongTime(seconds = 0) {
+  const value = Math.max(0, Math.round(Number(seconds) || 0));
+  const hours = Math.floor(value / 3600);
+  const minutes = Math.floor((value % 3600) / 60);
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${Math.max(1, minutes)}m`;
+}
+
+function getTrackDurationSeconds(track) {
+  const rawDuration = track?.durationSeconds ?? track?.duration_sec ?? track?.duration ?? track?.lengthSeconds ?? 0;
+  const value = Number(rawDuration) || 0;
+  return value > 10000 ? value / 1000 : value;
+}
+
 function getTrackId(track) {
   return track?._id || track?.id || track?.url || "";
 }
@@ -47,6 +61,23 @@ function getArtistName(track) {
 function getArtistProfilePath(track) {
   const username = track?.uploadedByProfile?.username || track?.creator?.username || track?.profile?.username;
   return username ? `/u/${encodeURIComponent(username)}?tab=artist` : "";
+}
+
+function getPositionPercent(position = "50% 50%") {
+  const normalized = String(position || "50% 50%").toLowerCase();
+  const keywordMap = { left: 0, top: 0, center: 50, right: 100, bottom: 100 };
+  const parts = normalized.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2 && parts.every((part) => part in keywordMap)) {
+    return { x: keywordMap[parts[0]], y: keywordMap[parts[1]] };
+  }
+  const matches = normalized.match(/-?\d+(\.\d+)?%/g);
+  if (matches?.length >= 2) {
+    return {
+      x: Math.min(100, Math.max(0, parseFloat(matches[0]))),
+      y: Math.min(100, Math.max(0, parseFloat(matches[1])))
+    };
+  }
+  return { x: 50, y: 50 };
 }
 
 const DEFAULT_GENRE_TAGS = [
@@ -132,6 +163,60 @@ async function fetchAllTracksForSearch(search) {
   return tracks;
 }
 
+function MusicPageControls({
+  viewSearchQuery,
+  onSearchChange,
+  onClearSearch,
+  selectedPlaylist,
+  isLocalFilesView,
+  refreshLibrary,
+  isLibraryLoading,
+  setShowQueueModal,
+  uploadGenre,
+  setUploadGenre,
+  customUploadGenre,
+  setCustomUploadGenre,
+  handleUploadChange
+}) {
+  return (
+    <div className="music-toolbar-actions music-page-controls" aria-label="Music controls">
+      <div className="search-box music-search">
+        <Search size={15} />
+        <input
+          type="search"
+          value={viewSearchQuery}
+          onChange={onSearchChange}
+          placeholder={selectedPlaylist ? "Search this playlist" : isLocalFilesView ? "Search local files" : "Search songs, artists, playlists"}
+        />
+      </div>
+      {viewSearchQuery.trim() && (
+        <button type="button" className="track-icon-btn" onClick={onClearSearch} aria-label="Clear music search">
+          <X size={15} />
+        </button>
+      )}
+      <button type="button" className="icon-action" onClick={refreshLibrary} disabled={isLibraryLoading} aria-label="Refresh library">
+        <RefreshCw size={16} />
+      </button>
+      <button type="button" className="queue-action-button" onClick={() => setShowQueueModal(true)}>
+        <ListMusic size={15} /> Queue
+      </button>
+      <div className="upload-tag-controls">
+        <select value={uploadGenre} onChange={(e) => setUploadGenre(e.target.value)}>
+          {DEFAULT_GENRE_TAGS.map((t) => <option key={t} value={t}>{t}</option>)}
+          <option value="Custom">Custom</option>
+        </select>
+        {uploadGenre === "Custom" && (
+          <input type="text" value={customUploadGenre} onChange={(e) => setCustomUploadGenre(e.target.value)} placeholder="Custom tag" maxLength={32} />
+        )}
+      </div>
+      <label className="upload-field">
+        <Upload size={15} /><span>Add local files</span>
+        <input type="file" accept="audio/*" multiple onChange={handleUploadChange} />
+      </label>
+    </div>
+  );
+}
+
 export default function MusicPlayer() {
   const {
     library, filteredLibrary, activeTrack, isPlaying, searchQuery, error,
@@ -161,20 +246,23 @@ export default function MusicPlayer() {
   const [playlistDescription, setPlaylistDescription] = useState("");
   const [playlistCover, setPlaylistCover] = useState(null);
   const [playlistCoverPreviewUrl, setPlaylistCoverPreviewUrl] = useState("");
+  const [playlistCoverPosition, setPlaylistCoverPosition] = useState("50% 50%");
+  const [playlistCoverPositions, setPlaylistCoverPositions] = useState({});
   const [selectedPlaylistId, setSelectedPlaylistId] = useState("library");
   const [viewSearchQuery, setViewSearchQuery] = useState(searchQuery);
   const [playlistPickerTrack, setPlaylistPickerTrack] = useState(null);
   const [showQueueModal, setShowQueueModal] = useState(false);
   const [showFetchPanel, setShowFetchPanel] = useState(false);
+  const [searchCategory, setSearchCategory] = useState("all");
   const [showPreferenceModal, setShowPreferenceModal] = useState(false);
-  const [hasPreferenceChoice, setHasPreferenceChoice] = useState(
+  const [, setHasPreferenceChoice] = useState(
     () => localStorage.getItem(PREFERENCE_STORAGE_KEY) !== null
   );
   const [musicPreferences, setMusicPreferences] = useState(readStoredPreferences);
   const [recommendationPool, setRecommendationPool] = useState([]);
   const [isRecommendationLoading, setIsRecommendationLoading] = useState(false);
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
-  const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [rightPanelOpen, setRightPanelOpen] = useState(false);
   // NEW: tab state for right panel — "player" | "artist"
   const [rightTab, setRightTab] = useState("player");
   // artist track to show in artist tab (defaults to activeTrack)
@@ -210,32 +298,27 @@ export default function MusicPlayer() {
     [playlists, selectedPlaylistId]
   );
   const isLocalFilesView = selectedPlaylistId === "local";
-  const isLibraryView = selectedPlaylistId === "library";
+  const isMusicHome = selectedPlaylistId === "library";
 
   const recommendedTracks = useMemo(() => {
-    if (musicPreferences.length === 0) return [];
+    if (musicPreferences.length === 0) return trackList.slice(0, 18);
     const query = searchQuery.trim().toLowerCase();
-    return recommendationPool
+    const rankedTracks = recommendationPool
       .filter((t) => !query || getTrackTextScore(t, query) > 0)
       .map((t) => ({ track: t, score: getPreferenceRank(t) }))
       .filter((i) => i.score > 0)
       .sort((a, b) => b.score - a.score || getTrackTextScore(b.track, query) - getTrackTextScore(a.track, query))
       .map((i) => i.track)
       .slice(0, 30);
-  }, [getPreferenceRank, musicPreferences.length, recommendationPool, searchQuery]);
-
-  const exploreTracks = useMemo(() => {
-    if (musicPreferences.length === 0) return trackList;
-    return trackList.filter((t) => getPreferenceRank(t) === 0);
-  }, [getPreferenceRank, musicPreferences.length, trackList]);
+    return rankedTracks.length ? rankedTracks : trackList.slice(0, 18);
+  }, [getPreferenceRank, musicPreferences.length, recommendationPool, searchQuery, trackList]);
 
   const visibleTracks = useMemo(() => {
-    const query = viewSearchQuery.trim().toLowerCase();
     const baseTracks = isLocalFilesView
       ? localTracks
       : selectedPlaylist
         ? selectedPlaylist.tracks || []
-        : exploreTracks;
+        : trackList;
     const hydratedTracks = baseTracks.map((track) => {
       const knownTrack = knownTracksById.get(getTrackId(track));
       if (!knownTrack) return track;
@@ -247,15 +330,121 @@ export default function MusicPlayer() {
       };
     });
 
-    if (!query) return hydratedTracks;
-    return [...hydratedTracks]
-      .filter((track) => trackMatchesSearch(track, query))
-      .sort((a, b) => getTrackTextScore(b, query) - getTrackTextScore(a, query));
-  }, [exploreTracks, isLocalFilesView, knownTracksById, localTracks, selectedPlaylist, viewSearchQuery]);
+    return hydratedTracks;
+  }, [isLocalFilesView, knownTracksById, localTracks, selectedPlaylist, trackList]);
   const currentQueueName = isLocalFilesView ? "Local files" : selectedPlaylist ? selectedPlaylist.name : "Music library";
   const normalPlaylists = playlists.filter((p) => p.type !== "liked");
   const likedPlaylist = playlists.find((p) => p.type === "liked");
   const likedTrackIds = new Set((likedPlaylist?.tracks || []).map(getTrackId));
+  const displayPool = useMemo(
+    () => mergeUniqueTracks(visibleTracks, recommendedTracks, trackList, library, localTracks),
+    [library, localTracks, recommendedTracks, trackList, visibleTracks]
+  );
+  const libraryTrackTotal = (Number(pagination.total) || library.length || filteredLibrary.length) + localTracks.length;
+  const visibleArtistTotal = useMemo(() => {
+    const names = new Set(visibleTracks.map((track) => getArtistName(track).toLowerCase()));
+    return names.size;
+  }, [visibleTracks]);
+  const visibleDurationSeconds = useMemo(
+    () => visibleTracks.reduce((total, track) => total + getTrackDurationSeconds(track), 0),
+    [visibleTracks]
+  );
+  const artistHighlights = useMemo(() => {
+    const artists = new Map();
+    displayPool.forEach((track) => {
+      const artist = getArtistName(track);
+      const key = artist.toLowerCase();
+      if (!artists.has(key)) artists.set(key, { name: artist, track, count: 0 });
+      artists.get(key).count += 1;
+    });
+    return [...artists.values()]
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+      .slice(0, 6);
+  }, [displayPool]);
+  const heroStats = useMemo(() => {
+    if (selectedPlaylist) {
+      const playlistTrackTotal = selectedPlaylist.tracksCount ?? visibleTracks.length;
+      const hasKnownDuration = visibleDurationSeconds > 0;
+      const durationSeconds = hasKnownDuration ? visibleDurationSeconds : playlistTrackTotal * 210;
+      return [
+        { value: playlistTrackTotal, label: playlistTrackTotal === 1 ? "song" : "songs" },
+        { value: visibleArtistTotal, label: visibleArtistTotal === 1 ? "artist" : "artists" },
+        { value: formatLongTime(durationSeconds), label: "playtime" }
+      ];
+    }
+    if (isLocalFilesView) {
+      const localDuration = visibleDurationSeconds || localTracks.length * 210;
+      return [
+        { value: localTracks.length, label: localTracks.length === 1 ? "file" : "files" },
+        { value: visibleArtistTotal, label: visibleArtistTotal === 1 ? "artist" : "artists" },
+        { value: formatLongTime(localDuration), label: "playtime" }
+      ];
+    }
+    return [
+      { value: libraryTrackTotal, label: "songs on KeyVoid" },
+      { value: artistHighlights.length, label: "artists" },
+      { value: normalPlaylists.length, label: "playlists" }
+    ];
+  }, [artistHighlights.length, isLocalFilesView, libraryTrackTotal, localTracks.length, normalPlaylists.length, selectedPlaylist, visibleArtistTotal, visibleDurationSeconds, visibleTracks.length]);
+  const heroDescription = useMemo(() => {
+    if (selectedPlaylist) {
+      const generatedDescription = /^\d+\s+tracks?\s+available$/i.test(String(selectedPlaylist.description || "").trim());
+      if (selectedPlaylist.description && !generatedDescription) return selectedPlaylist.description;
+      const count = selectedPlaylist.tracksCount ?? visibleTracks.length;
+      return `${count} track${count === 1 ? "" : "s"} in this playlist`;
+    }
+    if (isLocalFilesView) {
+      return `${localTracks.length} browser-saved track${localTracks.length === 1 ? "" : "s"}`;
+    }
+    if (pagination.total || localTracks.length) {
+      return "Recommended songs, trending tracks, artists, and your library in one place.";
+    }
+    return "There is not enough music content to display yet. Add local files or refresh the library to begin.";
+  }, [isLocalFilesView, localTracks.length, pagination.total, selectedPlaylist, visibleTracks.length]);
+  const chartTracks = (trackList.length > 0 ? trackList : displayPool).slice(0, 6);
+  const musicSearchQuery = viewSearchQuery.trim();
+  const isSearchMode = isMusicHome && musicSearchQuery.length > 0;
+  const searchResults = useMemo(() => {
+    const query = musicSearchQuery.toLowerCase();
+    if (!query) return { songs: [], artists: [], playlists: [] };
+
+    const songs = displayPool
+      .filter((track) => trackMatchesSearch(track, query))
+      .sort((a, b) => getTrackTextScore(b, query) - getTrackTextScore(a, query))
+      .slice(0, 24);
+
+    const artists = [...new Map(
+      displayPool
+        .filter((track) => getArtistName(track).toLowerCase().includes(query))
+        .map((track) => [getArtistName(track).toLowerCase(), {
+          name: getArtistName(track),
+          track,
+          count: displayPool.filter((item) => getArtistName(item).toLowerCase() === getArtistName(track).toLowerCase()).length
+        }])
+    ).values()].slice(0, 12);
+
+    const playlistMatches = playlists
+      .filter((playlist) => {
+        const text = `${playlist.name || ""} ${playlist.description || ""}`.toLowerCase();
+        return text.includes(query);
+      })
+      .slice(0, 12);
+
+    return { songs, artists, playlists: playlistMatches };
+  }, [displayPool, musicSearchQuery, playlists]);
+  const shownTracks = useMemo(() => {
+    if (isMusicHome || !musicSearchQuery) return visibleTracks;
+    const query = musicSearchQuery.toLowerCase();
+    return visibleTracks
+      .filter((track) => trackMatchesSearch(track, query))
+      .sort((a, b) => getTrackTextScore(b, query) - getTrackTextScore(a, query));
+  }, [isMusicHome, musicSearchQuery, visibleTracks]);
+  const heroBackground = selectedPlaylist?.coverUrl
+    ? `url("${selectedPlaylist.coverUrl}")`
+    : "url('/assets/music-night-bg.png')";
+  const selectedPlaylistKey = selectedPlaylist ? getTrackId(selectedPlaylist) : "";
+  const heroBackgroundPosition = selectedPlaylist?.coverPosition || playlistCoverPositions[selectedPlaylistKey] || "50% 50%";
+  const coverPositionPoint = getPositionPercent(playlistCoverPosition);
 
   // The track shown in the artist tab
   const artistPanelTrack = pinnedArtistTrack || activeTrack;
@@ -287,10 +476,27 @@ export default function MusicPlayer() {
   };
 
   const handleMusicSearchChange = (e) => {
-    const nextValue = e.target.value;
-    setViewSearchQuery(nextValue);
-    if (isLibraryView) setSearchQuery(nextValue);
+    setViewSearchQuery(e.target.value);
+    setSearchCategory("all");
   };
+
+  const updateCoverPositionFromPointer = useCallback((event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = Math.min(100, Math.max(0, ((event.clientX - rect.left) / rect.width) * 100));
+    const y = Math.min(100, Math.max(0, ((event.clientY - rect.top) / rect.height) * 100));
+    setPlaylistCoverPosition(`${Math.round(x)}% ${Math.round(y)}%`);
+  }, []);
+
+  const handleCoverPositionPointerDown = useCallback((event) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    updateCoverPositionFromPointer(event);
+  }, [updateCoverPositionFromPointer]);
+
+  const handleCoverPositionPointerMove = useCallback((event) => {
+    if (event.buttons !== 1) return;
+    updateCoverPositionFromPointer(event);
+  }, [updateCoverPositionFromPointer]);
 
   const handleUploadChange = async (e) => {
     const nextGenre = uploadGenre === "Custom" ? customUploadGenre.trim() || DEFAULT_GENRE_TAGS[0] : uploadGenre;
@@ -312,12 +518,11 @@ export default function MusicPlayer() {
   }, [playlistCover]);
 
   useEffect(() => {
-    if (!hasPreferenceChoice) {
-      const timer = window.setTimeout(() => setShowPreferenceModal(true), 0);
-      return () => window.clearTimeout(timer);
+    if (activeTrack) {
+      setRightPanelOpen(true);
+      setRightTab("player");
     }
-    return undefined;
-  }, [hasPreferenceChoice]);
+  }, [activeTrack]);
 
   useEffect(() => {
     let ignore = false;
@@ -364,6 +569,7 @@ export default function MusicPlayer() {
     setPlaylistName("");
     setPlaylistDescription("");
     setPlaylistCover(null);
+    setPlaylistCoverPosition("50% 50%");
     setEditingPlaylist(null);
   };
 
@@ -377,6 +583,7 @@ export default function MusicPlayer() {
     setPlaylistName(playlist.name || "");
     setPlaylistDescription(playlist.description || "");
     setPlaylistCover(null);
+    setPlaylistCoverPosition(playlist.coverPosition || playlistCoverPositions[getTrackId(playlist)] || "50% 50%");
     setPlaylistMenuId("");
     setShowCreatePlaylist(true);
   };
@@ -389,20 +596,24 @@ export default function MusicPlayer() {
         playlistId: getTrackId(editingPlaylist),
         name: playlistName.trim(),
         description: playlistDescription.trim(),
-        cover: playlistCover
+        cover: playlistCover,
+        coverPosition: playlistCoverPosition
       });
       if (updated) {
+        setPlaylistCoverPositions((cur) => ({ ...cur, [getTrackId(editingPlaylist)]: playlistCoverPosition }));
         resetPlaylistForm();
         setShowCreatePlaylist(false);
       }
       return;
     }
 
-    const playlist = await createUserPlaylist({ name: playlistName.trim(), description: playlistDescription.trim(), cover: playlistCover });
+    const playlist = await createUserPlaylist({ name: playlistName.trim(), description: playlistDescription.trim(), cover: playlistCover, coverPosition: playlistCoverPosition });
     if (playlist) {
+      const nextPlaylistId = playlist.id || playlist._id;
+      if (nextPlaylistId) setPlaylistCoverPositions((cur) => ({ ...cur, [nextPlaylistId]: playlistCoverPosition }));
       resetPlaylistForm();
       setShowCreatePlaylist(false);
-      setSelectedPlaylistId(playlist.id || playlist._id);
+      setSelectedPlaylistId(nextPlaylistId);
     }
   };
 
@@ -438,6 +649,13 @@ export default function MusicPlayer() {
     handleSelectTrack(track, { tracks: visibleTracks, name: currentQueueName });
   };
 
+  const openMusicHome = () => {
+    setSelectedPlaylistId("library");
+    setViewSearchQuery("");
+    setSearchQuery("");
+    setSearchCategory("all");
+  };
+
   const openTagEditor = (track, e) => {
     e.stopPropagation();
     handleSelectTrack(track, { tracks: visibleTracks, name: currentQueueName });
@@ -465,12 +683,12 @@ export default function MusicPlayer() {
   };
 
   // Open artist tab and pin a track
-  const openArtistTab = (track, e) => {
+  const openArtistTab = useCallback((track, e) => {
     if (e) e.stopPropagation();
     setPinnedArtistTrack(track);
     setRightTab("artist");
     setRightPanelOpen(true);
-  };
+  }, []);
 
   const pageNumbers = useMemo(() => {
     const total = pagination.totalPages || 1;
@@ -479,6 +697,42 @@ export default function MusicPlayer() {
     const end = Math.min(total, start + 4);
     return Array.from({ length: end - start + 1 }, (_, i) => start + i);
   }, [pagination.page, pagination.totalPages]);
+
+  const mixedSearchResults = useMemo(() => {
+    const rows = [
+      ...searchResults.songs.map((track, index) => ({
+        id: `song-${getTrackId(track) || index}`,
+        type: "Song",
+        title: track.title || "Untitled track",
+        subtitle: `${getArtistName(track)}${track.genre ? ` • ${track.genre}` : ""}`,
+        image: track.coverUrl,
+        icon: <Disc3 size={18} />,
+        onOpen: () => handleSelectTrack(track, { tracks: searchResults.songs, name: "Search results" }),
+        onAdd: () => queueTrack(track)
+      })),
+      ...searchResults.artists.map((artist) => ({
+        id: `artist-${artist.name}`,
+        type: "Artist",
+        title: artist.name,
+        subtitle: `${artist.count} track${artist.count === 1 ? "" : "s"}`,
+        image: artist.track?.coverUrl,
+        icon: <UserRound size={18} />,
+        onOpen: (event) => openArtistTab(artist.track, event)
+      })),
+      ...searchResults.playlists.map((playlist) => ({
+        id: `playlist-${getTrackId(playlist)}`,
+        type: "Playlist",
+        title: playlist.name || "Untitled playlist",
+        subtitle: playlist.description || `${playlist.tracksCount || playlist.tracks?.length || 0} songs`,
+        image: playlist.coverUrl,
+        icon: <ListMusic size={18} />,
+        onOpen: () => { setSelectedPlaylistId(getTrackId(playlist)); setViewSearchQuery(""); setSearchCategory("all"); }
+      }))
+    ];
+    if (searchCategory === "all") return rows;
+    const label = searchCategory.slice(0, -1).toLowerCase();
+    return rows.filter((row) => row.type.toLowerCase() === label);
+  }, [handleSelectTrack, openArtistTab, queueTrack, searchCategory, searchResults]);
 
   const PlaylistPickerModal = playlistPickerTrack ? (
     <div className="music-modal-overlay" onMouseDown={() => setPlaylistPickerTrack(null)}>
@@ -553,6 +807,26 @@ export default function MusicPlayer() {
               <span className="cover-upload-button">Browse</span>
               <input type="file" accept="image/*" onChange={(e) => setPlaylistCover(e.target.files?.[0] || null)} />
             </span>
+          </label>
+          <label className="cover-align-label">
+            Banner alignment
+            <span className="cover-align-preview" style={{
+              "--cover-preview-image": playlistCoverPreviewUrl
+                ? `url("${playlistCoverPreviewUrl}")`
+                : editingPlaylist?.coverUrl
+                  ? `url("${editingPlaylist.coverUrl}")`
+                  : "url('/assets/music-night-bg.png')",
+              "--cover-preview-position": playlistCoverPosition,
+              "--cover-marker-x": `${coverPositionPoint.x}%`,
+              "--cover-marker-y": `${coverPositionPoint.y}%`
+            }}
+              onPointerDown={handleCoverPositionPointerDown}
+              onPointerMove={handleCoverPositionPointerMove}
+            >
+              <span className="cover-align-shade" />
+              <span className="cover-align-marker" />
+            </span>
+            <small>Drag inside the preview to choose which part of the image stays centered in the banner.</small>
           </label>
         </div>
         <div className="music-modal-actions">
@@ -764,7 +1038,7 @@ export default function MusicPlayer() {
             <button type="button" className="music-rail-toggle" onClick={() => setLeftPanelOpen(true)} aria-label="Open playlists">
               <ChevronRight size={17} />
             </button>
-            <button type="button" className="music-rail-btn active" onClick={() => setLeftPanelOpen(true)} aria-label="All songs">
+            <button type="button" className="music-rail-btn active" onClick={() => setLeftPanelOpen(true)} aria-label="Explore">
               <Library size={17} />
             </button>
             <button type="button" className="music-rail-btn" onClick={() => { setLeftPanelOpen(true); openCreatePlaylistModal(); }} aria-label="Create playlist">
@@ -811,21 +1085,20 @@ export default function MusicPlayer() {
             </button>
 
             <button type="button" className={`playlist-dock-item ${selectedPlaylistId === "library" ? "active" : ""}`} onClick={() => {
-              setSelectedPlaylistId("library");
-              setSearchQuery(viewSearchQuery);
+              openMusicHome();
             }}>
               <span className="playlist-cover-placeholder"><Library size={17} /></span>
-              <span>All songs<small>{pagination.total + localTracks.length || 0} tracks</small></span>
+              <span>Explore<small>{pagination.total + localTracks.length || 0} tracks</small></span>
             </button>
 
             {isAuthenticated ? (
               <>
-                <button type="button" className={`playlist-dock-item ${selectedPlaylistId === "local" ? "active" : ""}`} onClick={() => setSelectedPlaylistId("local")}>
+                <button type="button" className={`playlist-dock-item ${selectedPlaylistId === "local" ? "active" : ""}`} onClick={() => { setSelectedPlaylistId("local"); setViewSearchQuery(""); }}>
                   <span className="playlist-cover-placeholder"><Upload size={16} /></span>
                   <span>Local files<small>{localTracks.length || 0} saved here</small></span>
                 </button>
                 {likedPlaylist && (
-                  <button type="button" className={`playlist-dock-item ${selectedPlaylistId === getTrackId(likedPlaylist) ? "active" : ""}`} onClick={() => setSelectedPlaylistId(getTrackId(likedPlaylist))}>
+                  <button type="button" className={`playlist-dock-item ${selectedPlaylistId === getTrackId(likedPlaylist) ? "active" : ""}`} onClick={() => { setSelectedPlaylistId(getTrackId(likedPlaylist)); setViewSearchQuery(""); }}>
                     <span className="playlist-cover-placeholder liked"><Heart size={16} /></span>
                     <span>{likedPlaylist.name}<small>{likedPlaylist.tracksCount || 0} songs</small></span>
                   </button>
@@ -835,7 +1108,7 @@ export default function MusicPlayer() {
                   <div className="playlist-dock-row" key={getTrackId(pl)}>
                     <button type="button"
                       className={`playlist-dock-item ${selectedPlaylistId === getTrackId(pl) ? "active" : ""}`}
-                      onClick={() => setSelectedPlaylistId(getTrackId(pl))}
+                      onClick={() => { setSelectedPlaylistId(getTrackId(pl)); setViewSearchQuery(""); }}
                     >
                       {pl.coverUrl
                         ? <img src={pl.coverUrl} alt="" />
@@ -865,84 +1138,170 @@ export default function MusicPlayer() {
         {/* ════ MAIN ════ */}
         <main className="music-main-panel">
           {/* hero */}
-          <section className="music-hero-card" aria-label="Music library controls">
-            <div className="music-title-block">
-              {(selectedPlaylist?.coverUrl || isLocalFilesView) && (
-                <span className="music-context-cover">
-                  {selectedPlaylist?.coverUrl ? <img src={selectedPlaylist.coverUrl} alt="" /> : <Upload size={22} />}
-                </span>
-              )}
-              <div>
+          <section className="music-hero-card" aria-label="Music library header" style={{ "--music-hero-bg": heroBackground, "--music-hero-position": heroBackgroundPosition }}>
+            <div className="music-hero-layout">
+              <div className="music-hero-copy">
+                {!isMusicHome && (
+                  <button type="button" className="music-back-button" onClick={openMusicHome}>
+                    <ChevronLeft size={16} /> Music home
+                  </button>
+                )}
                 <p className="player-kicker">KeyVoid Music</p>
                 <div className="music-title-row">
-                  <h1>{isLocalFilesView ? "Local Files" : selectedPlaylist ? selectedPlaylist.name : "Music Library"}</h1>
-                  {selectedPlaylist && selectedPlaylist.type !== "liked" && (
-                    <span className="playlist-hero-actions">
-                      <button type="button" className="track-icon-btn" onClick={() => openEditPlaylistModal(selectedPlaylist)} aria-label="Edit playlist">
-                        <Pencil size={16} />
-                      </button>
-                      <button type="button" className="track-icon-btn danger" onClick={() => setPlaylistPendingDelete(selectedPlaylist)} aria-label="Delete playlist">
-                        <Trash2 size={16} />
-                      </button>
-                    </span>
-                  )}
+                  <div className="music-title-text">
+                    <h1>{isLocalFilesView ? "Local Files" : selectedPlaylist ? selectedPlaylist.name : "Music Home"}</h1>
+                    {selectedPlaylist && selectedPlaylist.type !== "liked" && (
+                      <span className="playlist-hero-actions">
+                        <button type="button" className="track-icon-btn" onClick={() => openEditPlaylistModal(selectedPlaylist)} aria-label="Edit playlist">
+                          <Pencil size={16} />
+                        </button>
+                        <button type="button" className="track-icon-btn danger" onClick={() => setPlaylistPendingDelete(selectedPlaylist)} aria-label="Delete playlist">
+                          <Trash2 size={16} />
+                        </button>
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <p>{selectedPlaylist?.description
-                  ? selectedPlaylist.description
-                  : isLocalFilesView
-                  ? `${localTracks.length} browser-saved track${localTracks.length === 1 ? "" : "s"}`
-                  : pagination.total || localTracks.length
-                  ? `${pagination.total + localTracks.length} tracks available`
-                  : "Browse songs, search fast, and keep the server cool."}</p>
+                <p className="music-hero-description">{heroDescription}</p>
+
+                <div className="music-hero-stats" aria-label="Library summary">
+                  {heroStats.map((stat) => (
+                    <span key={stat.label}><strong>{stat.value}</strong> {stat.label}</span>
+                  ))}
+                </div>
+
               </div>
-            </div>
-            <div className="music-toolbar-actions">
-              <div className="search-box music-search">
-                <Search size={15} />
-                <input type="search" value={viewSearchQuery} onChange={handleMusicSearchChange} placeholder={selectedPlaylist ? "Search this playlist" : isLocalFilesView ? "Search local files" : "Search songs, artists, genres"} />
-              </div>
-              <button type="button" className="icon-action" onClick={refreshLibrary} disabled={isLibraryLoading} aria-label="Refresh library">
-                <RefreshCw size={16} />
-              </button>
-              <div className="upload-tag-controls">
-                <select value={uploadGenre} onChange={(e) => setUploadGenre(e.target.value)}>
-                  {DEFAULT_GENRE_TAGS.map((t) => <option key={t} value={t}>{t}</option>)}
-                  <option value="Custom">Custom</option>
-                </select>
-                {uploadGenre === "Custom" && (
-                  <input type="text" value={customUploadGenre} onChange={(e) => setCustomUploadGenre(e.target.value)} placeholder="Custom tag" maxLength={32} />
-                )}
-              </div>
-              <label className="upload-field">
-                <Upload size={15} /><span>Add local files</span>
-                <input type="file" accept="audio/*" multiple onChange={handleUploadChange} />
-              </label>
             </div>
           </section>
 
+          <MusicPageControls
+            viewSearchQuery={viewSearchQuery}
+            onSearchChange={handleMusicSearchChange}
+            onClearSearch={() => { setViewSearchQuery(""); setSearchCategory("all"); }}
+            selectedPlaylist={selectedPlaylist}
+            isLocalFilesView={isLocalFilesView}
+            refreshLibrary={refreshLibrary}
+            isLibraryLoading={isLibraryLoading}
+            setShowQueueModal={setShowQueueModal}
+            uploadGenre={uploadGenre}
+            setUploadGenre={setUploadGenre}
+            customUploadGenre={customUploadGenre}
+            setCustomUploadGenre={setCustomUploadGenre}
+            handleUploadChange={handleUploadChange}
+          />
+
+          {isSearchMode && (
+            <section className="music-search-results" aria-label="Music search results">
+              <div className="music-search-heading">
+                <div>
+                  <p className="player-kicker">Search</p>
+                  <h2>Results for "{musicSearchQuery}"</h2>
+                </div>
+                <div className="music-search-tabs" aria-label="Search result filters">
+                  {["all", "songs", "artists", "playlists"].map((category) => (
+                    <button
+                      key={category}
+                      type="button"
+                      className={searchCategory === category ? "active" : ""}
+                      onClick={() => setSearchCategory(category)}
+                    >
+                      {category[0].toUpperCase() + category.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="music-search-grid">
+                {mixedSearchResults.length > 0 ? mixedSearchResults.map((row, index) => (
+                  <button
+                    key={row.id}
+                    type="button"
+                    className={`music-search-row ${index === 0 ? "featured" : ""}`}
+                    onClick={row.onOpen}
+                  >
+                    <span className="music-search-thumb">
+                      {row.image ? <img src={row.image} alt="" /> : row.icon}
+                    </span>
+                    <span className="music-search-copy">
+                      <strong>{row.title}</strong>
+                      <small>{row.subtitle}</small>
+                    </span>
+                    <span className="music-search-type">{row.type}</span>
+                    <span className="music-search-action" onClick={(event) => { event.stopPropagation(); row.onAdd ? row.onAdd() : row.onOpen(event); }}>
+                      {row.type === "Song" ? <Plus size={15} /> : <ChevronRight size={15} />}
+                    </span>
+                  </button>
+                )) : (
+                  <div className="empty-library">No results match this search yet.</div>
+                )}
+              </div>
+            </section>
+          )}
+
+          {isMusicHome && !isSearchMode && (
+          <section className="music-discovery-grid" aria-label="Music discovery">
+            <div className="recommended-card music-showcase-panel artist-showcase-panel">
+              <div className="library-header">
+                <div>
+                  <h2 className="library-title">Top artists</h2>
+                  <p className="library-subtitle">Artists appear as soon as songs are available.</p>
+                </div>
+              </div>
+              {artistHighlights.length > 0 ? (
+                <div className="artist-strip">
+                  {artistHighlights.map((artist) => (
+                    <button key={artist.name} type="button" className="artist-tile" onClick={(e) => openArtistTab(artist.track, e)}>
+                      <span className="artist-tile-art">
+                        {artist.track?.coverUrl ? <img src={artist.track.coverUrl} alt="" /> : <UserRound size={22} />}
+                      </span>
+                      <strong>{artist.name}</strong>
+                      <small>{artist.count} track{artist.count === 1 ? "" : "s"}</small>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="section-empty-note">Not enough artist content to display yet. Add songs or upload local files.</div>
+              )}
+            </div>
+
+            <div className="recommended-card music-showcase-panel music-chart-panel">
+              <div className="library-header">
+                <div>
+                  <h2 className="library-title">Top charts</h2>
+                  <p className="library-subtitle">A quick lane into the current music view.</p>
+                </div>
+              </div>
+              {chartTracks.length > 0 ? (
+                <div className="chart-list">
+                  {chartTracks.map((track, index) => (
+                    <button key={getTrackId(track) || `${track.title}-${index}`} type="button" className="chart-row" onClick={() => handleSelectTrack(track, { tracks: chartTracks, name: "Top charts" })}>
+                      <span>{String(index + 1).padStart(2, "0")}</span>
+                      <strong>{track.title}</strong>
+                      <small>{getArtistName(track)}</small>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="section-empty-note">There are not enough songs to build a chart yet.</div>
+              )}
+            </div>
+          </section>
+          )}
+
           {/* recommended */}
-          {isLibraryView && (
+          {isMusicHome && !isSearchMode && (
             <section className="recommended-card" aria-label="Recommended tracks">
               <div className="library-header">
                 <div>
                   <h2 className="library-title">Recommended for you</h2>
                   <p className="library-subtitle">
-                    {musicPreferences.length ? musicPreferences.join(", ") : "Choose genres so KeyVoid can sort this section."}
+                    KeyVoid picks these automatically from your available songs.
                   </p>
                 </div>
-                <button type="button" className="see-more-button" onClick={() => setShowPreferenceModal(true)}>Tune</button>
-              </div>
-              <div className="preference-chip-grid compact">
-                {DEFAULT_GENRE_TAGS.filter((t) => t !== "Uploads").map((genre) => (
-                  <button key={genre} type="button"
-                    className={musicPreferences.includes(genre) ? "preference-chip active" : "preference-chip"}
-                    onClick={() => togglePreference(genre)}
-                  >{genre}</button>
-                ))}
               </div>
               {isRecommendationLoading ? (
                 <div className="empty-library">Finding songs across the full library...</div>
-              ) : musicPreferences.length > 0 && recommendedTracks.length > 0 ? (
+              ) : recommendedTracks.length > 0 ? (
                 <div className="recommended-track-row">
                   {recommendedTracks.map((track) => {
                     const trackId = getTrackId(track);
@@ -988,24 +1347,21 @@ export default function MusicPlayer() {
                 </div>
               ) : (
                 <div className="empty-library">
-                  {musicPreferences.length
-                    ? "No tracks match those genres yet. Explore has the rest of the library."
-                    : "Pick one or more genres above to build recommendations."}
+                  There is not enough music content to recommend songs yet.
                 </div>
               )}
             </section>
           )}
 
           {/* track list */}
-          <section className="library-card" aria-label="Songs">
+          {!isSearchMode && <section className="library-card" aria-label="Songs">
             <div className="library-header">
               <div>
-                <h2 className="library-title">{isLocalFilesView ? "Local files" : selectedPlaylist ? selectedPlaylist.name : "Explore"}</h2>
+                <h2 className="library-title">{isLocalFilesView ? "Local files" : selectedPlaylist ? selectedPlaylist.name : "Trending tracks"}</h2>
                 <p className="library-subtitle">
                   {viewSearchQuery.trim() ? `Showing matches for "${viewSearchQuery.trim()}"`
                     : isLocalFilesView ? "Audio saved privately in this browser"
                     : selectedPlaylist ? "Playlist songs"
-                    : musicPreferences.length ? "Everything outside your selected genres"
                     : `Page ${pagination.page || 1} of ${pagination.totalPages || 1}`}
                 </p>
               </div>
@@ -1015,7 +1371,7 @@ export default function MusicPlayer() {
             </div>
 
             <div className="track-grid">
-              {visibleTracks.length > 0 ? visibleTracks.map((track) => {
+              {shownTracks.length > 0 ? shownTracks.map((track) => {
                 const active = getTrackId(activeTrack) === getTrackId(track);
                 const trackId = getTrackId(track);
                 const isLocal = track.source === "local";
@@ -1093,7 +1449,7 @@ export default function MusicPlayer() {
               )}
             </div>
 
-            {isLibraryView && (
+            {isMusicHome && (
               <div className="pagination-bar">
                 <button type="button" className="page-arrow" onClick={() => handlePageChange((pagination.page || 1) - 1)} disabled={!pagination.hasPrev || isLibraryLoading}><ChevronLeft size={17} /></button>
                 <div className="page-numbers">
@@ -1110,7 +1466,7 @@ export default function MusicPlayer() {
                 )}
               </div>
             )}
-          </section>
+          </section>}
         </main>
 
         {/* ════ RIGHT PANEL ════ */}
